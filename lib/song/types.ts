@@ -107,6 +107,7 @@ export type Master = {
   eq?: { low: number; mid: number; high: number };
   compThreshold?: number; // dB
   limiter?: number;       // dB ceiling
+  makeup?: number;        // dB after the compressor, default +6
   filter?: { type: "lowpass" | "highpass"; cutoff: number };
   width?: number;
 };

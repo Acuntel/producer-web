@@ -37,7 +37,7 @@ export function hear(channels: Float32Array[], sampleRate: number, opts: HearOpt
   const fine = fineEnvelopes(mono, sr);
   const rhythm = analyzeRhythm(fr, fine, duration, opts.bpmHint);
   const key = findKey(meanChroma(fr));
-  const perBar = chordsPerBar(fr, rhythm.barSec, rhythm.downbeatOffset, duration);
+  const perBar = chordsPerBar(fr, rhythm.barSec, rhythm.downbeatOffset, duration, key);
   const spectrum = analyzeSpectrum(fr, chans.length >= 2 ? chans : undefined);
   const structure = analyzeStructure(fr, loud, rhythm.barSec, rhythm.downbeatOffset, duration, perBar);
   const facts: MusicFacts = {

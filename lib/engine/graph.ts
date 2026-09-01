@@ -16,8 +16,11 @@ export function buildGraph(song: Song, transport: Transport, clips: Clips = new 
   const masterEq = new Tone.EQ3(m.eq?.low ?? 0, m.eq?.mid ?? 0, m.eq?.high ?? 0);
   const masterFilter = new Tone.Filter(m.filter?.cutoff ?? 20000, m.filter?.type ?? "lowpass");
   const comp = new Tone.Compressor(m.compThreshold ?? -20, 3);
+  const makeup = new Tone.Volume(m.makeup ?? 6);
   const limiter = new Tone.Limiter(m.limiter ?? -1);
-  masterVol.connect(masterEq); masterEq.connect(masterFilter); masterFilter.connect(comp); comp.connect(limiter); limiter.toDestination();
+  // Final soft clipper: club-master glue, and a hard guarantee that nothing leaves above 0 dBFS.
+  const clipper = new Tone.WaveShaper((x) => Math.tanh(x * 1.25) / Math.tanh(1.25), 4096);
+  masterVol.connect(masterEq); masterEq.connect(masterFilter); masterFilter.connect(comp); comp.connect(makeup); makeup.connect(limiter); limiter.connect(clipper); clipper.toDestination();
   const master: Tone.ToneAudioNode = masterVol;
   const duck = new Tone.Gain(1).connect(master);
   const reverb = new Tone.Freeverb({ roomSize: 0.82, dampening: 2800 });
@@ -121,6 +124,6 @@ export function buildGraph(song: Song, transport: Transport, clips: Clips = new 
   duckPart.start(0); parts.push(duckPart);
 
   transport.bpm.value = song.bpm;
-  const nodes = [masterVol, masterEq, masterFilter, comp, limiter, duck, reverb, riserSynth, riserHp, riserGain];
+  const nodes = [masterVol, masterEq, masterFilter, comp, makeup, limiter, clipper, duck, reverb, riserSynth, riserHp, riserGain];
   return { parts, voices, nodes, schedule };
 }

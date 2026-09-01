@@ -45,11 +45,14 @@ export function estimateTempo(env: Float32Array, fps: number, bpmHint?: number):
   const maxLag = Math.min(env.length - 2, Math.ceil(fps * 8.2));
   const acf = autocorr(env, maxLag);
   const weights = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.45, 0.4];
+  // Harmonic summation gated by the beat lag itself: a 3:2 impostor (a lag that lands
+  // between beats) is killed by the sqrt(acf(L)) factor, a half-tempo impostor by the
+  // acf(L/2) penalty, and the dance prior settles honest octave ties.
   const raw = (bpm: number) => {
     const L = (fps * 60) / bpm;
     let s = 0;
     for (let k = 1; k <= 8; k++) { const lag = k * L; if (lag > maxLag) break; s += weights[k - 1] * interp(acf, lag); }
-    return s - 0.35 * interp(acf, L / 2);
+    return Math.sqrt(Math.max(0, interp(acf, L))) * s - 0.35 * interp(acf, L / 2);
   };
   const prior = (bpm: number) => {
     const c = bpmHint ?? 128, sigma = bpmHint ? 0.08 : 0.35;
@@ -115,8 +118,20 @@ export function swingFromProfile(prof: Float32Array): number {
   const lo = Math.round(bins * 0.375), hi = Math.round(bins * 0.75);
   let s = 0, w = 0, m = 0;
   for (let i = lo; i < hi; i++) { s += h[i] * ((i + 0.5) / bins); w += h[i]; if (h[i] > m) m = h[i]; }
-  if (peak <= 0 || m < 0.3 * peak || w <= 0) return 0.5;
+  if (peak <= 0 || m < 0.2 * peak || w <= 0) return 0.5;
   return clamp(Math.round((s / w) * 1000) / 1000, 0.5, 0.7);
+}
+
+// Low-band onset envelope gated by an absolute sub level: a pad attack in a quiet breakdown is
+// not a kick, however much it stands out relative to its own section.
+export function kickEnvelope(fr: Frames): Float32Array {
+  const env = onsetEnvelope(fr.lowFlux, Math.round(fr.fps * 0.5));
+  const floor = 0.02 * 0.02 * fr.n; // sub+low RMS of about -34 dBFS within the analysis frame
+  for (let t = 0; t < fr.count; t++) {
+    const lowPower = (fr.bands[t * 6] + fr.bands[t * 6 + 1]) / fr.n;
+    if (lowPower < floor) env[t] = 0;
+  }
+  return env;
 }
 
 export function countPeaks(env: Float32Array, thr: number, minGap: number, from = 0, to = env.length): number {
@@ -135,7 +150,7 @@ export function analyzeRhythm(fr: Frames, fine: Fine, durationSec: number, bpmHi
   const barSec = beatSec * 4;
   const beatOffset = beatPhase(fine, beatSec);
   // Downbeat: the beat phase (0..3) whose bar starts carry the most low-band onset energy.
-  const lowEnv = onsetEnvelope(fr.lowFlux, Math.round(fr.fps * 0.5));
+  const lowEnv = kickEnvelope(fr);
   let bestB = 0, bestS = -Infinity;
   for (let b = 0; b < 4; b++) {
     let s = 0;
@@ -143,7 +158,7 @@ export function analyzeRhythm(fr: Frames, fine: Fine, durationSec: number, bpmHi
     if (s > bestS) { bestS = s; bestB = b; }
   }
   const downbeatOffset = beatOffset + bestB * beatSec;
-  const onsetProf = beatProfile(fine.onsetHp, fine.fps, beatSec, beatOffset, 48);
+  const onsetProf = beatProfile(fine.onsetHi, fine.fps, beatSec, beatOffset, 48);
   const swing = swingFromProfile(onsetProf);
   // Pump = how far the sustained (>200 Hz) mix dips below its typical level each beat.
   const pumpProf = beatProfile(fine.rmsHp, fine.fps, beatSec, beatOffset, 48);
@@ -165,7 +180,7 @@ export function analyzeRhythm(fr: Frames, fine: Fine, durationSec: number, bpmHi
 
 // Kick density inside a time span (kicks per bar).
 export function kickDensityIn(fr: Frames, barSec: number, startSec: number, endSec: number): number {
-  const lowEnv = onsetEnvelope(fr.lowFlux, Math.round(fr.fps * 0.5));
+  const lowEnv = kickEnvelope(fr);
   const kThr = 0.4 * percentile(lowEnv, 0.95);
   const c = countPeaks(lowEnv, kThr, Math.round(fr.fps * 0.12), Math.floor(startSec * fr.fps), Math.floor(endSec * fr.fps));
   return c / Math.max(0.25, (endSec - startSec) / barSec);

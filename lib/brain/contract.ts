@@ -3,7 +3,7 @@ export const CONTRACT = `## YOUR STUDIO (SongDoc v3; the engine plays it live in
 {
  "version": 3, "title": string, "bpm": number, "key": string, "lane": "tech-house"|"hard-house"|"custom",
  "humanize": {"swing": 0.50-0.67, "velVar": 0-0.3, "clapLateMs": -20..30, "seed": int, "pocketMs"?: -25..25},
- "master"?: {"volume"?: dB, "eq"?: {"low","mid","high"}, "compThreshold"?: dB, "limiter"?: dB, "filter"?: {"type":"lowpass"|"highpass","cutoff":Hz}},
+ "master"?: {"volume"?: dB, "eq"?: {"low","mid","high"}, "compThreshold"?: dB, "makeup"?: dB (post-comp gain, default 6), "limiter"?: dB, "filter"?: {"type":"lowpass"|"highpass","cutoff":Hz}},
  "tracks": [{
    "id", "name", "role": "kick"|"clap"|"snare"|"hat"|"openhat"|"perc"|"bass"|"sub"|"chords"|"stab"|"pad"|"lead"|"pluck"|"arp"|"fx"|"audio",
    "volume": dB (0 unity), "duck": bool (sidechained to kick; true for everything but kick/clap), "mute"?, "solo"?,

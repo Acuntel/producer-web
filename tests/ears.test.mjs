@@ -56,9 +56,10 @@ test("compare(): signs and key relations", () => {
   assert.ok(near(c.deltas.tempoRatio, 1, 0.02));
   assert.equal(c.deltas.sameKey, true);
   assert.ok(c.text.includes("louder"));
-  const other = hear([synth({ bpm: 126, seconds: 20, bassMidi: [41, 45, 48], padMidi: [65, 69, 72] })], SR); // F major triad
+  const other = hear([synth({ bpm: 126, seconds: 20, bassMidi: [41, 41, 48, 41], padMidi: [65, 69, 72, 77] })], SR); // F major: root and fifth bass, F A C F pad
   const c2 = compare(other, ref);
-  console.log("relative:", other.key.name, "vs", ref.key.name, "->", c2.deltas);
+  console.log("relative:", other.key.name, "vs", ref.key.name, "->", c2.text);
+  assert.ok(["F major", "D minor"].includes(other.key.name), `expected F major, got ${other.key.name} (alt ${other.key.alt})`);
   assert.ok(c2.deltas.sameKey || c2.deltas.relativeKey, "D minor and F major are relatives");
   const rel = { ...ref, key: { ...ref.key, name: "F major", tonic: "F", mode: "major" } };
   assert.equal(compare(rel, ref).deltas.relativeKey, true);

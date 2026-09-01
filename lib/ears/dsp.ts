@@ -18,6 +18,7 @@ export type Fine = {
   rmsHp: Float32Array;  // same, high-passed at 200 Hz (kick body removed)
   onset: Float32Array;  // log-energy rise, half-wave rectified (full band: kicks dominate)
   onsetHp: Float32Array; // log-energy rise of the high-passed signal (hats, snares, chords)
+  onsetHi: Float32Array; // log-energy rise above ~4 kHz (hats only: the swing lives here)
 };
 
 export const BAND_EDGES = [0, 60, 250, 500, 2000, 6000, Infinity];
@@ -165,10 +166,41 @@ export function computeFrames(mono: Float32Array, sr: number, n = 2048, hop = 51
   return { sr, n, hop, count, fps: sr / hop, rms, energy, flux, lowFlux, centroid, bands, chroma };
 }
 
-// High-resolution chroma (N=8192, hop=2048): spectral peaks between 80 and 3000 Hz, mapped to
-// pitch classes with a mild bell around 400 Hz, weighted by peak salience, then spread onto
-// the main frame grid. Peak picking keeps the note partials and drops the broadband noise
-// that kicks, hats and reverb smear across every pitch class.
+// Constant-Q style chroma (N=8192, hop=2048): pitches from C1 to B7, each summing the FFT
+// magnitude within plus or minus 50 cents of the pitch centre (interpolated where the FFT grid is
+// coarser than a semitone), folded to 12 pitch classes and normalized per frame. The pitch grid is
+// first re-tuned to the track (DJ edits and bootlegs are often pitched off A440), which is what
+// keeps a semitone-off key from winning. This is the chroma shape key profiles were validated on.
+export const chromaConfig = { lowMidi: 24, highMidi: 107, tuning: "auto" as "auto" | number, mode: "cq" as "cq" | "salience" };
+
+export function estimateTuningCents(mags: Float32Array[], binHz: number): number {
+  const hist = new Float64Array(100);
+  const kLo = Math.ceil(80 / binHz), kHi = Math.floor(3000 / binHz);
+  for (const mag of mags) {
+    let top = 0;
+    for (let k = kLo; k <= kHi; k++) if (mag[k] > top) top = mag[k];
+    const floor = top * 0.03;
+    for (let k = kLo; k <= kHi; k++) {
+      const m = mag[k];
+      if (m < floor || m <= mag[k - 1] || m < mag[k + 1]) continue;
+      const a = Math.log(mag[k - 1] + 1e-9), b = Math.log(m + 1e-9), c = Math.log(mag[k + 1] + 1e-9);
+      const den = a - 2 * b + c;
+      const delta = den !== 0 ? (0.5 * (a - c)) / den : 0;
+      const cents = 1200 * Math.log2(((k + delta) * binHz) / 440);
+      let dev = cents - 100 * Math.round(cents / 100);
+      if (dev >= 50) dev -= 100;
+      hist[Math.max(0, Math.min(99, Math.floor(dev + 50)))] += Math.log(1 + m);
+    }
+  }
+  let best = 0, bestV = -1;
+  for (let i = 0; i < 100; i++) {
+    let v = 0;
+    for (let d = -3; d <= 3; d++) v += hist[(i + d + 100) % 100];
+    if (v > bestV) { bestV = v; best = i; }
+  }
+  return best - 50;
+}
+
 function fillChroma(mono: Float32Array, sr: number, mainHop: number, mainCount: number, out: Float32Array): void {
   const n = 8192, hop = 2048;
   const count = Math.max(1, Math.floor((mono.length - n) / hop) + 1);
@@ -176,38 +208,72 @@ function fillChroma(mono: Float32Array, sr: number, mainHop: number, mainCount: 
   const binHz = sr / n;
   const win = new Float32Array(n);
   for (let i = 0; i < n; i++) win[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / n);
-  const pcOf = new Int8Array(bins), pcW = new Float32Array(bins);
-  const kLo = Math.ceil(80 / binHz), kHi = Math.floor(3000 / binHz);
-  for (let k = kLo; k <= kHi; k++) {
-    const f = k * binHz;
-    const cents = 12 * Math.log2(f / 440);
-    const midi = Math.round(cents) + 69;
-    pcOf[k] = ((midi % 12) + 12) % 12;
-    const off = Math.abs(cents - Math.round(cents)); // distance from the pitch centre in semitones
-    const lf = Math.log2(f / 400);
-    pcW[k] = Math.exp(-0.5 * (lf / 1.6) * (lf / 1.6)) * (off < 0.35 ? 1 : 0.35);
-  }
-  const re = new Float32Array(n), im = new Float32Array(n), mag = new Float32Array(bins);
-  const local = new Float32Array(count * 12);
-  for (let t = 0; t < count; t++) {
-    const off = t * hop;
-    for (let i = 0; i < n; i++) { re[i] = mono[off + i] * win[i]; im[i] = 0; }
-    fft(re, im);
-    for (let k = 0; k < bins; k++) mag[k] = Math.sqrt(re[k] * re[k] + im[k] * im[k]);
-    const c0 = t * 12;
-    for (let k = kLo; k <= kHi; k++) {
-      const m = mag[k];
-      if (m <= mag[k - 1] || m < mag[k + 1]) continue; // spectral peaks only
-      local[c0 + pcOf[k]] += Math.log(1 + 20 * m) * pcW[k];
+  const re = new Float32Array(n), im = new Float32Array(n);
+  const spectra = (x: Float32Array, frames: number): Float32Array[] => {
+    const outMags: Float32Array[] = [];
+    for (let t = 0; t < frames; t++) {
+      const off = t * hop;
+      for (let i = 0; i < n; i++) { const idx = off + i; re[i] = idx < x.length ? x[idx] * win[i] : 0; im[i] = 0; }
+      fft(re, im);
+      const mag = new Float32Array(bins);
+      for (let k = 0; k < bins; k++) mag[k] = Math.sqrt(re[k] * re[k] + im[k] * im[k]);
+      outMags.push(mag);
     }
-    let cs = 0;
-    for (let p = 0; p < 12; p++) cs += local[c0 + p];
-    if (cs > 0) for (let p = 0; p < 12; p++) local[c0 + p] /= cs;
+    return outMags;
+  };
+  const mags = spectra(mono, count);
+  // The bass octaves (C1 to B2) need finer bins than 2.7 Hz to separate semitones, so they
+  // come from a four-times decimated copy: same FFT size, four times the frequency resolution,
+  // and the same hop in seconds, so the frames line up one to one.
+  const bass = decimate(mono, sr, sr / 4);
+  const bassHop = hop / 4;
+  const bassMags: Float32Array[] = [];
+  {
+    const bx = bass.y;
+    for (let t = 0; t < count; t++) {
+      const off = t * bassHop;
+      for (let i = 0; i < n; i++) { const idx = off + i; re[i] = idx < bx.length ? bx[idx] * win[i] : 0; im[i] = 0; }
+      fft(re, im);
+      const mag = new Float32Array(bins);
+      for (let k = 0; k < bins; k++) mag[k] = Math.sqrt(re[k] * re[k] + im[k] * im[k]);
+      bassMags.push(mag);
+    }
+  }
+  const bassBinHz = bass.sr / n;
+  const tuning = chromaConfig.tuning === "auto" ? estimateTuningCents(mags, binHz) : chromaConfig.tuning;
+  const shift = Math.pow(2, tuning / 1200);
+  const pitches: { pc: number; kLo: number; kHi: number; center: number; low: boolean }[] = [];
+  for (let midi = chromaConfig.lowMidi; midi <= chromaConfig.highMidi; midi++) {
+    const low = midi < 48;
+    const bh = low ? bassBinHz : binHz;
+    const f = 440 * Math.pow(2, (midi - 69) / 12) * shift;
+    const lo = f * Math.pow(2, -1 / 24), hi = f * Math.pow(2, 1 / 24);
+    const kLo = Math.ceil(lo / bh), kHi = Math.min(bins - 2, Math.floor(hi / bh));
+    pitches.push({ pc: ((midi % 12) + 12) % 12, kLo, kHi, center: f / bh, low });
+  }
+  const local = new Float32Array(count * 12);
+  const HARM = 6, hw = Array.from({ length: HARM }, (_, h) => Math.pow(0.7, h));
+  for (let t = 0; t < count; t++) {
+    const c0 = t * 12;
+    for (const p of pitches) {
+      const mag = p.low ? bassMags[t] : mags[t];
+      let v = 0;
+      if (chromaConfig.mode === "salience") {
+        // Harmonic-sum pitch salience: a partial only counts for a fundamental whose other
+        // harmonics are also there, so a bass note's fifth harmonic stops posing as a third.
+        for (let h = 1; h <= HARM; h++) { const c = p.center * h; if (c >= bins - 2) break; v += hw[h - 1] * interp(mag, c); }
+      } else if (p.kHi >= p.kLo) for (let k = p.kLo; k <= p.kHi; k++) v += mag[k];
+      else v = interp(mag, p.center);
+      local[c0 + p.pc] += v;
+    }
+    let mx = 0;
+    for (let q = 0; q < 12; q++) if (local[c0 + q] > mx) mx = local[c0 + q];
+    if (mx > 0) for (let q = 0; q < 12; q++) local[c0 + q] /= mx;
   }
   const ratio = hop / mainHop;
   for (let t = 0; t < mainCount; t++) {
     const src = Math.min(count - 1, Math.floor(t / ratio));
-    for (let p = 0; p < 12; p++) out[t * 12 + p] = local[src * 12 + p];
+    for (let q = 0; q < 12; q++) out[t * 12 + q] = local[src * 12 + q];
   }
 }
 
@@ -216,25 +282,27 @@ export function fineEnvelopes(mono: Float32Array, sr: number): Fine {
   const hop = Math.max(1, Math.round(sr * 0.0025));
   const win = hop * 4;
   const count = Math.max(1, Math.floor((mono.length - win) / hop) + 1);
-  const rc = 1 / (2 * Math.PI * 200);
-  const a = rc / (rc + 1 / sr);
-  const hp = new Float32Array(mono.length);
-  let prevX = 0, prevY = 0;
-  for (let i = 0; i < mono.length; i++) { const y = a * (prevY + mono[i] - prevX); hp[i] = y; prevX = mono[i]; prevY = y; }
-  const rms = new Float32Array(count), rmsHp = new Float32Array(count), onset = new Float32Array(count), onsetHp = new Float32Array(count);
+  const onePoleHp = (x: Float32Array, fc: number) => {
+    const rc = 1 / (2 * Math.PI * fc);
+    const a = rc / (rc + 1 / sr);
+    const y = new Float32Array(x.length);
+    let prevX = 0, prevY = 0;
+    for (let i = 0; i < x.length; i++) { const v = a * (prevY + x[i] - prevX); y[i] = v; prevX = x[i]; prevY = v; }
+    return y;
+  };
+  const hp = onePoleHp(mono, 200);
+  const hi = onePoleHp(onePoleHp(hp, 4000), 4000);
+  const rms = new Float32Array(count), rmsHp = new Float32Array(count), rmsHi = new Float32Array(count);
+  const onset = new Float32Array(count), onsetHp = new Float32Array(count), onsetHi = new Float32Array(count);
   for (let t = 0; t < count; t++) {
     const off = t * hop;
-    let s = 0, sh = 0;
-    for (let i = off; i < off + win; i++) { s += mono[i] * mono[i]; sh += hp[i] * hp[i]; }
-    rms[t] = Math.sqrt(s / win); rmsHp[t] = Math.sqrt(sh / win);
+    let s = 0, sh = 0, si = 0;
+    for (let i = off; i < off + win; i++) { s += mono[i] * mono[i]; sh += hp[i] * hp[i]; si += hi[i] * hi[i]; }
+    rms[t] = Math.sqrt(s / win); rmsHp[t] = Math.sqrt(sh / win); rmsHi[t] = Math.sqrt(si / win);
   }
-  for (let t = 3; t < count; t++) {
-    const d = Math.log(rms[t] + 1e-5) - Math.log(rms[t - 3] + 1e-5);
-    onset[t] = d > 0 ? d : 0;
-    const dh = Math.log(rmsHp[t] + 1e-5) - Math.log(rmsHp[t - 3] + 1e-5);
-    onsetHp[t] = dh > 0 ? dh : 0;
-  }
-  return { hop, fps: sr / hop, count, rms, rmsHp, onset, onsetHp };
+  const rise = (a: Float32Array, t: number) => { const d = Math.log(a[t] + 1e-5) - Math.log(a[t - 3] + 1e-5); return d > 0 ? d : 0; };
+  for (let t = 3; t < count; t++) { onset[t] = rise(rms, t); onsetHp[t] = rise(rmsHp, t); onsetHi[t] = rise(rmsHi, t); }
+  return { hop, fps: sr / hop, count, rms, rmsHp, onset, onsetHp, onsetHi };
 }
 
 export const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);

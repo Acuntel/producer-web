@@ -117,3 +117,20 @@ test("schedule: variants, solo, mute, transpose, swing determinism", () => {
   assert.ok(Math.abs((offbeat.beat % 0.25) - 0.06) < 1e-6, "offbeat 16th pushed by (0.62-0.5)*0.5 = 0.06 beats");
   assert.deepEqual(scheduleEvents(s).perTrack.get("hat").map((e) => e.note[3]), sch1.perTrack.get("hat").map((e) => e.note[3]), "same seed, same velocities");
 });
+
+test("harmony: key parsing and exact chords per bar from the notes", async () => {
+  const { parseKey, chordsForSection, condense, chordName } = await import("../lib/song/harmony.ts");
+  assert.deepEqual(parseKey("D minor"), { tonic: "D", mode: "minor", pc: 2 });
+  assert.deepEqual(parseKey("F# major"), { tonic: "F#", mode: "major", pc: 6 });
+  assert.equal(parseKey("Bb min").tonic, "Bb"); assert.equal(parseKey("Am").mode, "minor"); assert.equal(parseKey("nope"), null);
+  const s = seed();
+  const drop = s.sections.find((x) => x.id === "drop");
+  const chords = chordsForSection(s, drop, 8);
+  assert.equal(chords.length, 8);
+  assert.ok(chords.every((c) => c.startsWith("D") || c.startsWith("Bb") || c.startsWith("F")), `chords in D minor land: ${chords}`);
+  const prof = new Float64Array(12); prof[2] = 3; prof[5] = 2; prof[9] = 2;
+  assert.equal(chordName(prof), "Dm");
+  const prof2 = new Float64Array(12); prof2[10] = 3; prof2[2] = 2; prof2[5] = 2;
+  assert.equal(chordName(prof2), "Bb");
+  assert.deepEqual(condense(["Dm", "Dm", "-", "Bb", "Bb", "Dm"]), ["Dm", "Bb", "Dm"]);
+});
