@@ -153,6 +153,9 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
         body: JSON.stringify({ messages: next, song: cur, facts: factsCompact, reference: referenceRef.current ? { name: referenceRef.current.name, facts: refFacts } : null, deltas, nowPlaying, taste: tasteSummary(cur.title), clips }),
       });
       const data = (await r.json()) as Reply;
+      if (typeof window !== "undefined" && window.location.search.includes("e2e")) {
+        const w = window as unknown as { __brain?: unknown[] }; (w.__brain ??= []).push(data);
+      }
       setMessages((m) => [...m, { role: "assistant", content: data.say }]);
       let ns: Song | null = null;
       if (data.ops && Array.isArray(data.ops)) {

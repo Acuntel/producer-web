@@ -44,7 +44,9 @@ export function buildGraph(song: Song, transport: Transport, clips: Clips = new 
     const voice = makeVoice(tr, buses, buf);
     voices.push(voice); voiceByTrack.set(tr.id, voice);
     if (evs && evs.length) {
-      const part = new Tone.Part((time, ev: Ev) => voice.trigger(ev.note, time, song.bpm), evs.map((e) => [tick(e.beat), e] as [string, Ev]));
+      // Tone sources demand strictly increasing start times per voice: nudge exact collisions by 1 ms.
+      let lastTime = -1;
+      const part = new Tone.Part((time, ev: Ev) => { const t = time <= lastTime ? lastTime + 0.001 : time; lastTime = t; voice.trigger(ev.note, t, song.bpm); }, evs.map((e) => [tick(e.beat), e] as [string, Ev]));
       part.start(0); parts.push(part);
     }
     // Warped audio loops: a GrainPlayer per active span, stretched to the song tempo.

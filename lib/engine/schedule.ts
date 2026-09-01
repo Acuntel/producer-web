@@ -103,7 +103,12 @@ export function scheduleEvents(song: Song): Schedule {
         ?? song.tracks.find((t) => t.role === "clap" && audible.has(t.id));
       if (clap) {
         const list = perTrack.get(clap.id) ?? [];
-        for (let i = 0; i < 8; i++) list.push({ beat: cursor + secBeats - 2 + i * 0.25, note: [39, 0, 0.1, 70 + i * 8] });
+        for (let i = 0; i < 8; i++) {
+          const beat = cursor + secBeats - 2 + i * 0.25;
+          if (list.some((e) => Math.abs(e.beat - beat) < 0.02)) continue; // the regular clap already lands here
+          list.push({ beat, note: [39, 0, 0.1, 70 + i * 8] });
+        }
+        list.sort((a, b) => a.beat - b.beat);
         perTrack.set(clap.id, list);
       }
     }

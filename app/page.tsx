@@ -108,7 +108,7 @@ export default function Studio() {
           <div className="flex items-center gap-2">
             <span className={`shrink-0 text-lg ${voice.listening ? "" : "opacity-30"}`} title={voice.listening ? "listening" : "mic idle"}>🎙</span>
             <input value={input} onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && input.trim()) { void studio.send(input); setInput(""); } }}
+              onKeyDown={(e) => { const v = e.currentTarget.value; if (e.key === "Enter" && v.trim()) { void studio.send(v); setInput(""); } }}
               placeholder={voice.listening ? "talk, or type here…" : "type here…"}
               className="w-full rounded-full bg-zinc-900 px-5 py-3 text-[15px] outline-none ring-1 ring-zinc-800 focus:ring-zinc-600" />
           </div>

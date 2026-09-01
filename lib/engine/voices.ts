@@ -75,22 +75,33 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer): Voice
       break;
     }
     case "clap": {
-      const s = new Tone.NoiseSynth({ noise: { type: "pink" }, envelope: { attack: 0.001, decay: p.drumDecay ?? 0.14, sustain: 0 } });
-      const bp = new Tone.Filter(1600, "bandpass"); bp.Q.value = 0.8; s.connect(bp); bp.connect(head); disp.push(s, bp);
-      trigger = (n, t) => { s.triggerAttackRelease(0.12, t, vel(n)); s.triggerAttackRelease(0.1, t + 0.012, vel(n) * 0.7); };
+      const s = new Tone.NoiseSynth({ noise: { type: "pink" }, envelope: { attack: 0.001, decay: p.drumDecay ?? 0.16, sustain: 0 } });
+      const bp = new Tone.Filter(1900, "bandpass"); bp.Q.value = 0.6;
+      const air = new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.08, sustain: 0 } });
+      const airHp = new Tone.Filter(5000, "highpass");
+      s.connect(bp); bp.connect(head); air.connect(airHp); airHp.connect(head); disp.push(s, bp, air, airHp);
+      trigger = (n, t) => { s.triggerAttackRelease(0.14, t, vel(n)); s.triggerAttackRelease(0.1, t + 0.012, vel(n) * 0.7); air.triggerAttackRelease(0.08, t + 0.004, vel(n) * 0.35); };
       break;
     }
     case "snare": case "perc": {
-      const s = new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: p.drumDecay ?? (role === "perc" ? 0.09 : 0.18), sustain: 0 } });
-      const bp = new Tone.Filter(role === "perc" ? 5200 : 2200, "bandpass"); s.connect(bp); bp.connect(head); disp.push(s, bp);
-      trigger = (n, t) => s.triggerAttackRelease(role === "perc" ? 0.08 : 0.15, t, vel(n));
+      const dec = p.drumDecay ?? (role === "perc" ? 0.09 : 0.18);
+      const s = new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: dec, sustain: 0 } });
+      const bp = new Tone.Filter(role === "perc" ? 4200 : 2400, "bandpass"); bp.Q.value = role === "perc" ? 1.2 : 0.7;
+      const tone = new Tone.Synth({ oscillator: { type: "triangle" }, envelope: { attack: 0.001, decay: dec * 0.7, sustain: 0, release: 0.01 } });
+      s.connect(bp); bp.connect(head); tone.connect(head); disp.push(s, bp, tone);
+      trigger = (n, t) => { s.triggerAttackRelease(dec, t, vel(n)); tone.triggerAttackRelease(role === "perc" ? 1400 : 190, dec * 0.7, t, vel(n) * (role === "perc" ? 0.25 : 0.4)); };
       break;
     }
     case "hat": case "openhat": {
-      const dec = p.drumDecay ?? (role === "hat" ? 0.04 : 0.28);
-      const s = new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: dec, sustain: 0 } });
-      const hp = new Tone.Filter(9000, "highpass"); s.connect(hp); hp.connect(head); disp.push(s, hp);
-      trigger = (n, t) => s.triggerAttackRelease(dec, t, vel(n));
+      // Two noise layers: a sizzle above 7 kHz and a resonant metallic ring, so hats read as hats, not static.
+      const dec = p.drumDecay ?? (role === "hat" ? 0.07 : 0.32);
+      const sizzle = new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: dec, sustain: 0, release: 0.02 } });
+      const hp = new Tone.Filter(7000, "highpass");
+      const ring = new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: dec * 0.8, sustain: 0, release: 0.02 } });
+      const bp = new Tone.Filter(8200 * Math.pow(2, (p.drumTune ?? 0) / 12), "bandpass"); bp.Q.value = 5;
+      const ringVol = new Tone.Volume(3);
+      sizzle.connect(hp); hp.connect(head); ring.connect(bp); bp.connect(ringVol); ringVol.connect(head); disp.push(sizzle, hp, ring, bp, ringVol);
+      trigger = (n, t) => { sizzle.triggerAttackRelease(dec, t, vel(n)); ring.triggerAttackRelease(dec * 0.8, t, vel(n)); };
       break;
     }
     case "bass": {
