@@ -72,8 +72,14 @@ async function main() {
   console.log(`[e2e] ${BASE}/`);
   await call("Page.navigate", { url: `${BASE}/?e2e=1` });
   await waitFor(`!!document.querySelector('button[aria-label="Start"]')`, 30000, "orb");
-  await evalJs(`document.querySelector('button[aria-label="Start"]').click(); true`);
-  await waitFor(`!!document.querySelector('button[aria-label="Pause"]') || !!document.querySelector('button[aria-label="Play"]')`, 30000, "session start");
+  // Tap until the session actually starts: on a CDN load the first tap can land before hydration.
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 45000) {
+    await evalJs(`document.querySelector('button[aria-label="Start"]')?.click(); true`);
+    await sleep(2500);
+    if (await evalJs(`!!document.querySelector('button[aria-label="Pause"]') || !!document.querySelector('button[aria-label="Play"]')`)) break;
+  }
+  await waitFor(`!!document.querySelector('button[aria-label="Pause"]') || !!document.querySelector('button[aria-label="Play"]')`, 5000, "session start");
   await waitFor(`document.body.innerText.includes('We are live') || document.body.innerText.includes('We are back')`, 15000, "greeting");
   console.log("[e2e] session started, greeting shown");
   const before = await evalJs(`localStorage.getItem('producer.song.v4')`);

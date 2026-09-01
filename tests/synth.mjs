@@ -4,7 +4,7 @@ const NOTE = (midi) => 440 * Math.pow(2, (midi - 69) / 12);
 // Deterministic noise.
 function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
-export function synth({ bpm = 126, sr = 22050, seconds = 30, bassMidi = [38, 41, 45], padMidi = [62, 65, 69], duck = false, kickFrom = 0, hats = true, gain = 1, quietUntil = 0 } = {}) {
+export function synth({ bpm = 126, sr = 22050, seconds = 30, bassMidi = [38, 41, 45], padMidi = [62, 65, 69], duck = false, kickFrom = 0, hats = true, gain = 1, quietUntil = 0, bright = false } = {}) {
   const n = Math.floor(sr * seconds);
   const out = new Float32Array(n);
   const beat = 60 / bpm;
@@ -28,10 +28,15 @@ export function synth({ bpm = 126, sr = 22050, seconds = 30, bassMidi = [38, 41,
     const bm = bassMidi[beatIdx % bassMidi.length];
     const fb = NOTE(bm);
     let bass = 0;
-    for (let k = 1; k <= 6; k++) bass += Math.sin(2 * Math.PI * fb * k * t) / k;
+    const nh = bright ? 24 : 6;
+    for (let k = 1; k <= nh; k++) bass += Math.sin(2 * Math.PI * fb * k * t) / k;
+    if (bright) bass = Math.tanh(bass * 2.5) * 0.5; // fat saw through a distortion stage
     bass *= 0.22 * (1 - Math.min(1, inBeat / beat) * 0.3);
     let pad = 0;
-    for (const m of padMidi) pad += Math.sin(2 * Math.PI * NOTE(m) * t) + 0.3 * Math.sin(2 * Math.PI * NOTE(m) * 2 * t);
+    for (const m of padMidi) {
+      if (bright) for (let k = 1; k <= 12; k++) pad += Math.sin(2 * Math.PI * NOTE(m) * k * t) / (k * 1.5);
+      else pad += Math.sin(2 * Math.PI * NOTE(m) * t) + 0.3 * Math.sin(2 * Math.PI * NOTE(m) * 2 * t);
+    }
     pad *= 0.06;
     let g = 1;
     if (duck && t >= kickFrom) g = 1 - 0.8 * Math.max(0, 1 - inBeat / 0.26);

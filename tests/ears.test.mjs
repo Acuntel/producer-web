@@ -33,6 +33,16 @@ test("142 BPM F minor variant", () => {
   assert.equal(f.key.tonic, "F");
 });
 
+test("bright fat-saw timbre still reads D minor (the app's own synth voices)", () => {
+  const f = hear([synth({ bpm: 126, seconds: 24, bright: true })], SR, { bpmHint: 126 });
+  console.log("bright:", f.key.name, "alt", f.key.alt, "chords", f.chords.progression.join(" "));
+  assert.ok(["D minor", "F major"].includes(f.key.name), `key ${f.key.name} (alt ${f.key.alt})`);
+  assert.ok(f.chords.progression.length > 0, "chords must not come back empty on a clear Dm groove");
+  const g = hear([synth({ bpm: 142, seconds: 24, bright: true, bassMidi: [41, 44, 48], padMidi: [65, 68, 72] })], SR, { bpmHint: 142 });
+  console.log("bright F:", g.key.name, "alt", g.key.alt);
+  assert.ok(["F minor", "Ab major"].includes(g.key.name), `key ${g.key.name} (alt ${g.key.alt})`);
+});
+
 test("bpmHint locks the grid without lying", () => {
   const f = hear([synth({ bpm: 126, seconds: 20 })], SR, { bpmHint: 126 });
   assert.ok(near(f.tempo.bpm, 126, 1), `bpm ${f.tempo.bpm}`);

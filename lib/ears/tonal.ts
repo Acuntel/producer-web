@@ -21,23 +21,27 @@ function pearson(a: number[], b: number[]): number {
 }
 
 // Mean of the max-normalized frame chroma over a frame range (the shape key profiles expect).
-export function meanChroma(fr: Frames, from = 0, to = fr.count): number[] {
+export function meanChroma(fr: Frames, from = 0, to = fr.count, source: Float32Array = fr.chroma): number[] {
   const c = new Array(12).fill(0);
   let w = 0;
   for (let t = Math.max(0, from); t < Math.min(fr.count, to); t++) {
-    for (let p = 0; p < 12; p++) c[p] += fr.chroma[t * 12 + p];
+    for (let p = 0; p < 12; p++) c[p] += source[t * 12 + p];
     w++;
   }
   if (w > 0) for (let p = 0; p < 12; p++) c[p] /= w;
   return c;
 }
 
-export function findKey(chroma: number[]): KeyResult {
+// Key from the constant-Q chroma and the harmonic-salience chroma together (each votes with
+// its own profile correlation); the chroma field reports the constant-Q one.
+export function findKey(chroma: number[], salience?: number[]): KeyResult {
   const scores: { name: string; tonic: string; mode: "major" | "minor"; r: number }[] = [];
   for (let tonic = 0; tonic < 12; tonic++) {
     const rot = (prof: number[]) => prof.map((_, i) => prof[((i - tonic) % 12 + 12) % 12]);
     for (const mode of ["major", "minor"] as const) {
-      scores.push({ name: `${NOTE_NAMES[tonic]} ${mode}`, tonic: NOTE_NAMES[tonic], mode, r: pearson(chroma, rot(mode === "major" ? MAJOR : MINOR)) });
+      const prof = rot(mode === "major" ? MAJOR : MINOR);
+      const r = pearson(chroma, prof) + (salience ? pearson(salience, prof) : 0);
+      scores.push({ name: `${NOTE_NAMES[tonic]} ${mode}`, tonic: NOTE_NAMES[tonic], mode, r });
     }
   }
   scores.sort((a, b) => b.r - a.r);

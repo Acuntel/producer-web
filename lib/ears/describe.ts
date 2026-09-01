@@ -10,11 +10,13 @@ export function describe(f: MusicFacts): string {
   out.push(`${Math.round(f.tempo.bpm)} BPM, ${f.key.name}, integrated ${lufs} LUFS with a ${f.loudness.range.toFixed(1)} dB loudness range.`);
   const b = f.spectrum.bands;
   const lowShare = pct(b.sub + b.low);
+  // Typical mastered club track (perceptual shares): lowMid+mid about 0.30, mud about 0.25,
+  // highMid about 0.10, air about 0.05. Only call out clear departures.
   const notes: string[] = [];
-  if (b.lowMid + b.mid < 0.18) notes.push("the mids are thin");
-  if (f.spectrum.mud > 0.42) notes.push("the low mids are muddy");
+  if (b.lowMid + b.mid < 0.15) notes.push("the mids are thin");
+  if (f.spectrum.mud > 0.45) notes.push("the low mids are muddy");
   if (f.spectrum.harshness > 0.2) notes.push("the top end is harsh");
-  if (b.air < 0.01) notes.push("there is almost no air above 6 kHz");
+  if (b.air < 0.02) notes.push("there is almost no air above 6 kHz");
   out.push(`Sub and low carry ${lowShare} percent of the energy${notes.length ? ", " + notes.join(", ") : ""}.`);
   const kick = f.groove.kickDensity >= 3.4 ? "the kick runs four to the floor" : f.groove.kickDensity >= 1.5 ? "the kick pattern is broken up" : "there is little kick";
   const pump = f.groove.pump >= 0.55 ? "the mix pumps hard on every kick" : f.groove.pump >= 0.3 ? "there is a clear sidechain breath" : "there is little pumping";
