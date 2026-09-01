@@ -1,0 +1,56 @@
+// Robust parsing of the brain's reply. The model is asked for strict JSON, but
+// we survive fences, prose, and missing fields.
+import type { Song } from "../song/types";
+import { migrateSong } from "../song/migrate";
+
+export type BrainAction = { type: "play" | "pause" | "goto" | "loop" | "unloop" | "recordHum" | "none"; section?: string; bar?: number; beats?: number; track?: string };
+export type BrainReply = { say: string; ops: unknown[] | null; song: Song | null; action: BrainAction | null; listen: string | null; raw?: string };
+
+export function parseBrain(text: string): BrainReply {
+  const fallback: BrainReply = { say: text.trim().slice(0, 500), ops: null, song: null, action: null, listen: null, raw: text };
+  const obj = extractJson(text);
+  if (!obj) return fallback;
+  const say = typeof obj.say === "string" && obj.say.trim() ? obj.say.trim() : fallback.say;
+  const ops = Array.isArray(obj.ops) && obj.ops.length ? obj.ops : null;
+  const song = ops ? null : migrateSong(obj.song);
+  return { say, ops, song, action: normalizeAction(obj.action), listen: typeof obj.listen === "string" ? obj.listen : null, raw: text };
+}
+
+export function normalizeAction(a: unknown): BrainAction | null {
+  if (!a) return null;
+  if (typeof a === "string") {
+    const s = a.toLowerCase();
+    if (s === "pause" || s === "stop") return { type: "pause" };
+    if (s === "play" || s === "resume") return { type: "play" };
+    return null;
+  }
+  if (typeof a !== "object") return null;
+  const o = a as Record<string, unknown>;
+  const type = typeof o.type === "string" ? o.type : "";
+  if (!["play", "pause", "goto", "loop", "unloop", "recordHum", "none"].includes(type)) return null;
+  return {
+    type: type as BrainAction["type"],
+    section: typeof o.section === "string" ? o.section : undefined,
+    bar: typeof o.bar === "number" ? o.bar : undefined,
+    beats: typeof o.beats === "number" ? o.beats : undefined,
+    track: typeof o.track === "string" ? o.track : undefined,
+  };
+}
+
+// Find the outermost JSON object in a blob of text (handles ```json fences).
+export function extractJson(text: string): Record<string, unknown> | null {
+  const cleaned = text.replace(/```(?:json)?/gi, "");
+  const start = cleaned.indexOf("{");
+  if (start < 0) return null;
+  // Walk to the matching close brace so trailing prose does not break parsing.
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; continue; }
+    if (ch === '"') inStr = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") { depth--; if (depth === 0) { try { return JSON.parse(cleaned.slice(start, i + 1)); } catch { break; } } }
+  }
+  const end = cleaned.lastIndexOf("}");
+  try { return JSON.parse(cleaned.slice(start, end + 1)); } catch { return null; }
+}

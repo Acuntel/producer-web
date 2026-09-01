@@ -1,0 +1,20 @@
+// The producer's voice: ElevenLabs low-latency TTS, streamed back as MP3.
+// No key = 503, and the client falls back to the browser voice.
+export const maxDuration = 30;
+
+const VOICE = () => process.env.ELEVENLABS_VOICE_ID || "CwhRBWXzGAHq8TQ4Fs17";
+
+export async function POST(req: Request) {
+  const key = process.env.ELEVENLABS_API_KEY;
+  if (!key) return new Response("no voice configured", { status: 503 });
+  const { text } = (await req.json()) as { text?: string };
+  const clean = (text ?? "").toString().slice(0, 600).trim();
+  if (!clean) return new Response("empty", { status: 400 });
+  const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE()}/stream?output_format=mp3_22050_32&optimize_streaming_latency=3`, {
+    method: "POST",
+    headers: { "xi-api-key": key, "Content-Type": "application/json" },
+    body: JSON.stringify({ text: clean, model_id: "eleven_flash_v2_5", voice_settings: { stability: 0.45, similarity_boost: 0.8, style: 0.35, use_speaker_boost: true } }),
+  });
+  if (!r.ok || !r.body) return new Response(`voice error ${r.status}`, { status: 502 });
+  return new Response(r.body, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store" } });
+}
