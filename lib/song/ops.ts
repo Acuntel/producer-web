@@ -24,6 +24,7 @@ export type Op =
   | { op: "loop"; loop: LoopRegion }
   | { op: "shift"; track: string; beats: number; pattern?: string }
   | { op: "velocity"; track: string; scale?: number; add?: number; pattern?: string }
+  | { op: "sectionNotes"; section: string; track: string; notes: Note[]; loopBeats?: number }   // notes for ONE section only (auto pattern variant)
   | { op: "note"; note: string };
 
 export type ApplyResult = { song: Song; applied: number; skipped: string[] };
@@ -180,6 +181,16 @@ function applyOne(s: Song, o: Op): boolean {
     case "tempo": { if (typeof o.bpm !== "number" || o.bpm < 60 || o.bpm > 200) return false; s.bpm = Math.round(o.bpm * 10) / 10; return true; }
     case "key": { if (typeof o.key !== "string") return false; s.key = o.key; return true; }
     case "title": { if (typeof o.title !== "string") return false; s.title = o.title.slice(0, 60); return true; }
+    case "sectionNotes": {
+      const sec = section(s, o.section); const t = track(s, o.track);
+      if (!sec || !t || !Array.isArray(o.notes)) return false;
+      const name = `sec:${sec.id}`;
+      (t.patterns ??= {})[name] = o.notes.filter(isNote).map(cleanNote);
+      (sec.variants ??= {})[t.id] = name;
+      if (!sec.active.includes(t.id)) sec.active.push(t.id);
+      if (o.loopBeats && o.loopBeats > 0 && o.loopBeats !== t.loopBeats) t.loopBeats = o.loopBeats;
+      return true;
+    }
     case "note": { if (typeof o.note !== "string") return false; s.notes = o.note.slice(0, 600); return true; }
     case "humanize": {
       const h = s.humanize;

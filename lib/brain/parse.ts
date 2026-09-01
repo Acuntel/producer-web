@@ -3,17 +3,20 @@
 import type { Song } from "../song/types";
 import { migrateSong } from "../song/migrate";
 
-export type BrainAction = { type: "play" | "pause" | "goto" | "loop" | "unloop" | "recordHum" | "none"; section?: string; bar?: number; beats?: number; track?: string };
-export type BrainReply = { say: string; ops: unknown[] | null; song: Song | null; action: BrainAction | null; listen: string | null; raw?: string };
+export type BrainAction = { type: "play" | "pause" | "goto" | "loop" | "unloop" | "recordHum" | "rollout" | "hear" | "none"; section?: string; bar?: number; beats?: number; track?: string; kind?: string };
+export type Expectation = { section?: string; metric: string; dir: "up" | "down" };
+export type BrainReply = { say: string; ops: unknown[] | null; song: Song | null; action: BrainAction | null; listen: string | null; expect: Expectation[] | null; alternative: unknown[] | null; raw?: string };
 
 export function parseBrain(text: string): BrainReply {
-  const fallback: BrainReply = { say: text.trim().slice(0, 500), ops: null, song: null, action: null, listen: null, raw: text };
+  const fallback: BrainReply = { say: text.trim().slice(0, 500), ops: null, song: null, action: null, listen: null, expect: null, alternative: null, raw: text };
   const obj = extractJson(text);
   if (!obj) return fallback;
   const say = typeof obj.say === "string" && obj.say.trim() ? obj.say.trim() : fallback.say;
   const ops = Array.isArray(obj.ops) && obj.ops.length ? obj.ops : null;
   const song = ops ? null : migrateSong(obj.song);
-  return { say, ops, song, action: normalizeAction(obj.action), listen: typeof obj.listen === "string" ? obj.listen : null, raw: text };
+  const expect = Array.isArray(obj.expect) ? (obj.expect as unknown[]).filter((e): e is Expectation => !!e && typeof e === "object" && typeof (e as Expectation).metric === "string" && ((e as Expectation).dir === "up" || (e as Expectation).dir === "down")) : null;
+  const alternative = Array.isArray(obj.alternative) && obj.alternative.length ? obj.alternative : null;
+  return { say, ops, song, action: normalizeAction(obj.action), listen: typeof obj.listen === "string" ? obj.listen : null, expect: expect && expect.length ? expect : null, alternative, raw: text };
 }
 
 export function normalizeAction(a: unknown): BrainAction | null {
@@ -27,13 +30,14 @@ export function normalizeAction(a: unknown): BrainAction | null {
   if (typeof a !== "object") return null;
   const o = a as Record<string, unknown>;
   const type = typeof o.type === "string" ? o.type : "";
-  if (!["play", "pause", "goto", "loop", "unloop", "recordHum", "none"].includes(type)) return null;
+  if (!["play", "pause", "goto", "loop", "unloop", "recordHum", "rollout", "hear", "none"].includes(type)) return null;
   return {
     type: type as BrainAction["type"],
     section: typeof o.section === "string" ? o.section : undefined,
     bar: typeof o.bar === "number" ? o.bar : undefined,
     beats: typeof o.beats === "number" ? o.beats : undefined,
     track: typeof o.track === "string" ? o.track : undefined,
+    kind: typeof o.kind === "string" ? o.kind : undefined,
   };
 }
 

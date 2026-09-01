@@ -1,0 +1,3728 @@
+{
+ "builtAt": "2026-09-01T22:27:30.758Z",
+ "tracks": 273,
+ "tiers": {
+  "slop": 25,
+  "djpool": 248
+ },
+ "validation": {
+  "tagged": 270,
+  "tempoRate": 0.974,
+  "keyRate": 0.526,
+  "tally": {
+   "tempoN": 270,
+   "tempoExact": 262,
+   "tempoOctave": 1,
+   "keyN": 270,
+   "keyExact": 121,
+   "keyRelative": 21,
+   "keyAlt": 20
+  },
+  "byTier": {
+   "slop": {
+    "tempoN": 22,
+    "tempoHit": 22,
+    "keyN": 22,
+    "keyHit": 12
+   },
+   "djpool": {
+    "tempoN": 248,
+    "tempoHit": 241,
+    "keyN": 248,
+    "keyHit": 130
+   }
+  }
+ },
+ "laneRule": "measured BPM: tech-house 120-131, hard-house 136-148, melodic 110-119, dnb-or-halftime 160-180; the alternate tempo (half or double) is tried when the primary lands nowhere; else other",
+ "notes": [
+  "Facts come from lib/ears hear() on the first 240 s of each track, mono 22050 Hz, with the filename BPM tag passed as bpmHint.",
+  "dropFraction divides the first drop start by the full track duration, not the analysed 240 s.",
+  "Progressions are the track's condensed chords.progression rewritten as Roman numerals relative to the detected key (case follows chord quality; flats are relative to the major scale, so natural minor reads i, bIII, iv, v, bVI, bVII). ngrams count each distinct run once per track.",
+  "Lanes are tempo bands only: a hip-hop edit at 126 BPM lands in tech-house. Use tier and fourOnFloorShare to filter when that matters."
+ ],
+ "all": {
+  "n": 273,
+  "tempo": {
+   "p10": 110,
+   "p50": 131.1,
+   "p90": 166.7,
+   "laneBpm": {
+    "p10": 113,
+    "p50": 135,
+    "p90": 168.1
+   },
+   "confidence": {
+    "p50": 0.508
+   }
+  },
+  "keys": {
+   "top": [
+    {
+     "key": "G major",
+     "n": 24,
+     "share": 0.088
+    },
+    {
+     "key": "D major",
+     "n": 22,
+     "share": 0.081
+    },
+    {
+     "key": "E minor",
+     "n": 21,
+     "share": 0.077
+    },
+    {
+     "key": "F minor",
+     "n": 17,
+     "share": 0.062
+    },
+    {
+     "key": "A minor",
+     "n": 15,
+     "share": 0.055
+    },
+    {
+     "key": "B minor",
+     "n": 13,
+     "share": 0.048
+    },
+    {
+     "key": "Eb minor",
+     "n": 13,
+     "share": 0.048
+    },
+    {
+     "key": "Db minor",
+     "n": 11,
+     "share": 0.04
+    }
+   ],
+   "topCamelot": [
+    {
+     "camelot": "9B",
+     "n": 24,
+     "share": 0.088
+    },
+    {
+     "camelot": "10B",
+     "n": 22,
+     "share": 0.081
+    },
+    {
+     "camelot": "9A",
+     "n": 21,
+     "share": 0.077
+    },
+    {
+     "camelot": "4A",
+     "n": 17,
+     "share": 0.062
+    },
+    {
+     "camelot": "8A",
+     "n": 15,
+     "share": 0.055
+    },
+    {
+     "camelot": "10A",
+     "n": 13,
+     "share": 0.048
+    },
+    {
+     "camelot": "2A",
+     "n": 13,
+     "share": 0.048
+    },
+    {
+     "camelot": "12A",
+     "n": 11,
+     "share": 0.04
+    }
+   ],
+   "minorShare": 0.535,
+   "confidence": {
+    "p50": 0.122
+   },
+   "confident": {
+    "n": 160,
+    "minConfidence": 0.1,
+    "top": [
+     {
+      "key": "D major",
+      "n": 15,
+      "share": 0.094
+     },
+     {
+      "key": "G major",
+      "n": 14,
+      "share": 0.088
+     },
+     {
+      "key": "E minor",
+      "n": 12,
+      "share": 0.075
+     },
+     {
+      "key": "F minor",
+      "n": 11,
+      "share": 0.069
+     },
+     {
+      "key": "A minor",
+      "n": 9,
+      "share": 0.056
+     },
+     {
+      "key": "B minor",
+      "n": 8,
+      "share": 0.05
+     },
+     {
+      "key": "Bb major",
+      "n": 8,
+      "share": 0.05
+     },
+     {
+      "key": "E major",
+      "n": 8,
+      "share": 0.05
+     }
+    ],
+    "minorShare": 0.519
+   }
+  },
+  "loudness": {
+   "integrated": {
+    "p10": -11.5,
+    "p50": -9,
+    "p90": -7.5
+   },
+   "shortTermMax": {
+    "p50": -6.9
+   },
+   "range": {
+    "p50": 4.5
+   },
+   "crest": {
+    "p50": 11.1
+   },
+   "peak": {
+    "p50": 3.6
+   }
+  },
+  "spectrum": {
+   "bands": {
+    "sub": {
+     "p25": 0.159,
+     "p50": 0.284,
+     "p75": 0.414
+    },
+    "low": {
+     "p25": 0.209,
+     "p50": 0.279,
+     "p75": 0.353
+    },
+    "lowMid": {
+     "p25": 0.082,
+     "p50": 0.117,
+     "p75": 0.176
+    },
+    "mid": {
+     "p25": 0.09,
+     "p50": 0.126,
+     "p75": 0.187
+    },
+    "highMid": {
+     "p25": 0.052,
+     "p50": 0.08,
+     "p75": 0.117
+    },
+    "air": {
+     "p25": 0.021,
+     "p50": 0.036,
+     "p75": 0.056
+    }
+   },
+   "subPlusLow": {
+    "p25": 0.466,
+    "p50": 0.594,
+    "p75": 0.716
+   },
+   "centroidHz": {
+    "p25": 2001,
+    "p50": 2355,
+    "p75": 2645
+   },
+   "mud": {
+    "p50": 0.221
+   },
+   "harshness": {
+    "p50": 0.08
+   },
+   "width": {
+    "p50": 0
+   }
+  },
+  "groove": {
+   "swing": {
+    "p25": 0.5,
+    "p50": 0.522,
+    "p75": 0.617
+   },
+   "pump": {
+    "p25": 0.066,
+    "p50": 0.115,
+    "p75": 0.218
+   },
+   "kickDensity": {
+    "p50": 4.85
+   },
+   "transientsPerBeat": {
+    "p50": 6.32
+   },
+   "fourOnFloorShare": 0.894
+  },
+  "structure": {
+   "dropFoundShare": 1,
+   "dropAtSec": {
+    "p50": 31
+   },
+   "dropFraction": {
+    "p50": 0.154
+   },
+   "firstDropBars": {
+    "p50": 32
+   },
+   "sections": {
+    "p50": 5
+   },
+   "barsAnalysed": {
+    "p50": 112
+   },
+   "durationSec": {
+    "p50": 208
+   }
+  },
+  "energyContour": {
+   "bins": 16,
+   "mean": [
+    0.546,
+    0.654,
+    0.695,
+    0.713,
+    0.745,
+    0.764,
+    0.771,
+    0.77,
+    0.754,
+    0.764,
+    0.754,
+    0.771,
+    0.785,
+    0.806,
+    0.765,
+    0.64
+   ],
+   "p25": [
+    0.339,
+    0.52,
+    0.574,
+    0.581,
+    0.67,
+    0.655,
+    0.69,
+    0.694,
+    0.665,
+    0.682,
+    0.67,
+    0.677,
+    0.688,
+    0.753,
+    0.685,
+    0.476
+   ],
+   "p75": [
+    0.744,
+    0.804,
+    0.851,
+    0.855,
+    0.878,
+    0.89,
+    0.9,
+    0.89,
+    0.884,
+    0.893,
+    0.88,
+    0.899,
+    0.911,
+    0.905,
+    0.895,
+    0.835
+   ]
+  },
+  "progressions": {
+   "top": [
+    {
+     "progression": "i",
+     "n": 5,
+     "share": 0.018,
+     "examples": [
+      "Stephen Marley - Chase Dem (Clean)",
+      "DJ Oggy & Malibu Joe ft Amflo, Neari & Ebene - All Together (Clean Extended)",
+      "Offset - Swing My Way (Dirty)"
+     ]
+    },
+    {
+     "progression": "bIII-bVI-iv-bIII-bVI-bIII-iv-bVI",
+     "n": 2,
+     "share": 0.007,
+     "examples": [
+      "JUSTBEfeatJustinTimberl 2",
+      "JUSTBEfeatJustinTimberl"
+     ]
+    },
+    {
+     "progression": "bIII-i-bIII-i-bIII-bVII-i-bIII",
+     "n": 2,
+     "share": 0.007,
+     "examples": [
+      "Benson Boone - Mystical Magical (Clean)",
+      "Benson Boone - Mystical Magical (DJ Bruce Acapella Break) (Clean Extended)"
+     ]
+    },
+    {
+     "progression": "bIII-i-bIII-i-bIII-i-bIII-i",
+     "n": 2,
+     "share": 0.007,
+     "examples": [
+      "Bob Marley & The Wailers & Robin Schulz - Sun Is Shining (Clean Radio Edit)",
+      "Mac Miller - The Spins (Clean)"
+     ]
+    },
+    {
+     "progression": "I-bIII-bV-I-bIII-bii-I-bIII",
+     "n": 2,
+     "share": 0.007,
+     "examples": [
+      "GloRilla ft Sexyy Red vs T.I. - WHATCHU KNO ABOUT ME (Anthem Kingz WorPlay Transition",
+      "GloRilla ft Sexyy Red - WHATCHU KNO ABOUT ME (Clean)"
+     ]
+    },
+    {
+     "progression": "I-ii-I-#iv-V-I-#iv-I",
+     "n": 2,
+     "share": 0.007,
+     "examples": [
+      "Missy Elliott - Cool Off (Intro Dirty)",
+      "Missy Elliott - Cool Off (R-You Acapella In) (Dirty Extended)"
+     ]
+    },
+    {
+     "progression": "I-iii-IV-I-iii-IV-I-iii",
+     "n": 2,
+     "share": 0.007,
+     "examples": [
+      "DON'T WORRY NEW YORK (DJANT EDIT) V4 FINAL",
+      "Ziggy Marley ft Ben Harper - Play With Sky (Clean)"
+     ]
+    },
+    {
+     "progression": "I-iii-vi-I-iii-vi-I-iii",
+     "n": 2,
+     "share": 0.007,
+     "examples": [
+      "Drake ft Sexyy Red & SZA - Rich Baby Daddy (Intro Dirty)",
+      "A Boogie Wit Da Hoodie ft 6IX9INE - Swervin (Clean)"
+     ]
+    },
+    {
+     "progression": "i-iv-bVII-i-iv-bVII-i-iv",
+     "n": 2,
+     "share": 0.007,
+     "examples": [
+      "Steve Miller Band - Abracadabra (Clean)",
+      "UnchangingLovebyMavado"
+     ]
+    },
+    {
+     "progression": "iii-I-V-iii-I-ii-iii-I",
+     "n": 2,
+     "share": 0.007,
+     "examples": [
+      "USHERATownGirlfeatLatto",
+      "USHERATownGirlfeatLatto 2"
+     ]
+    },
+    {
+     "progression": "iii-ii-iii-IV-vi-iii-ii-iii",
+     "n": 2,
+     "share": 0.007,
+     "examples": [
+      "Missy Elliot - I'm Really Hot (Intro Clean)",
+      "Missy Elliot - I'm Really Hot (Clean)"
+     ]
+    },
+    {
+     "progression": "IV-iv-IV-vi-IV-iv-IV-iv",
+     "n": 2,
+     "share": 0.007,
+     "examples": [
+      "Chainz ft Lil Wayne - Presha (Intro Clean)",
+      "Chainz ft Lil Wayne - Presha (Clean)"
+     ]
+    }
+   ],
+   "ngrams": {
+    "2": [
+     {
+      "progression": "bIII-i",
+      "n": 40,
+      "share": 0.147
+     },
+     {
+      "progression": "I-iii",
+      "n": 37,
+      "share": 0.136
+     },
+     {
+      "progression": "i-bIII",
+      "n": 36,
+      "share": 0.132
+     },
+     {
+      "progression": "I-vi",
+      "n": 34,
+      "share": 0.125
+     },
+     {
+      "progression": "vi-I",
+      "n": 34,
+      "share": 0.125
+     },
+     {
+      "progression": "I-V",
+      "n": 30,
+      "share": 0.11
+     },
+     {
+      "progression": "bVI-i",
+      "n": 28,
+      "share": 0.103
+     },
+     {
+      "progression": "I-i",
+      "n": 28,
+      "share": 0.103
+     },
+     {
+      "progression": "i-iv",
+      "n": 28,
+      "share": 0.103
+     },
+     {
+      "progression": "iii-I",
+      "n": 28,
+      "share": 0.103
+     },
+     {
+      "progression": "iv-i",
+      "n": 28,
+      "share": 0.103
+     },
+     {
+      "progression": "IV-I",
+      "n": 28,
+      "share": 0.103
+     }
+    ],
+    "3": [
+     {
+      "progression": "bIII-i-bIII",
+      "n": 20,
+      "share": 0.073
+     },
+     {
+      "progression": "I-vi-I",
+      "n": 16,
+      "share": 0.059
+     },
+     {
+      "progression": "i-bIII-i",
+      "n": 15,
+      "share": 0.055
+     },
+     {
+      "progression": "I-iii-I",
+      "n": 14,
+      "share": 0.051
+     },
+     {
+      "progression": "i-iv-i",
+      "n": 14,
+      "share": 0.051
+     },
+     {
+      "progression": "vi-I-vi",
+      "n": 14,
+      "share": 0.051
+     },
+     {
+      "progression": "bIII-bVII-i",
+      "n": 11,
+      "share": 0.04
+     },
+     {
+      "progression": "bVI-i-bVI",
+      "n": 11,
+      "share": 0.04
+     },
+     {
+      "progression": "i-bIII-bVII",
+      "n": 11,
+      "share": 0.04
+     },
+     {
+      "progression": "i-bVI-i",
+      "n": 11,
+      "share": 0.04
+     },
+     {
+      "progression": "I-i-I",
+      "n": 11,
+      "share": 0.04
+     },
+     {
+      "progression": "I-V-I",
+      "n": 11,
+      "share": 0.04
+     }
+    ],
+    "4": [
+     {
+      "progression": "i-bIII-i-bIII",
+      "n": 11,
+      "share": 0.04
+     },
+     {
+      "progression": "bIII-i-bIII-i",
+      "n": 10,
+      "share": 0.037
+     },
+     {
+      "progression": "i-bIII-bVII-i",
+      "n": 8,
+      "share": 0.029
+     },
+     {
+      "progression": "i-bVI-i-bVI",
+      "n": 8,
+      "share": 0.029
+     },
+     {
+      "progression": "i-iv-i-iv",
+      "n": 8,
+      "share": 0.029
+     },
+     {
+      "progression": "I-vi-I-vi",
+      "n": 8,
+      "share": 0.029
+     },
+     {
+      "progression": "bVI-i-bVI-i",
+      "n": 7,
+      "share": 0.026
+     },
+     {
+      "progression": "i-bVI-bIII-i",
+      "n": 7,
+      "share": 0.026
+     },
+     {
+      "progression": "I-iii-vi-I",
+      "n": 7,
+      "share": 0.026
+     },
+     {
+      "progression": "vi-I-vi-I",
+      "n": 7,
+      "share": 0.026
+     },
+     {
+      "progression": "bIII-i-bIII-bVII",
+      "n": 6,
+      "share": 0.022
+     },
+     {
+      "progression": "i-bVII-bIII-i",
+      "n": 6,
+      "share": 0.022
+     }
+    ]
+   }
+  }
+ },
+ "lanes": {
+  "tech-house": {
+   "n": 82,
+   "tempo": {
+    "p10": 120.2,
+    "p50": 126.1,
+    "p90": 129.9,
+    "laneBpm": {
+     "p10": 120.2,
+     "p50": 126.1,
+     "p90": 129.9
+    },
+    "confidence": {
+     "p50": 0.58
+    }
+   },
+   "keys": {
+    "top": [
+     {
+      "key": "A minor",
+      "n": 8,
+      "share": 0.098
+     },
+     {
+      "key": "E minor",
+      "n": 7,
+      "share": 0.085
+     },
+     {
+      "key": "F# major",
+      "n": 7,
+      "share": 0.085
+     },
+     {
+      "key": "G major",
+      "n": 7,
+      "share": 0.085
+     },
+     {
+      "key": "Ab minor",
+      "n": 6,
+      "share": 0.073
+     },
+     {
+      "key": "B minor",
+      "n": 5,
+      "share": 0.061
+     },
+     {
+      "key": "C minor",
+      "n": 4,
+      "share": 0.049
+     },
+     {
+      "key": "D major",
+      "n": 4,
+      "share": 0.049
+     }
+    ],
+    "topCamelot": [
+     {
+      "camelot": "8A",
+      "n": 8,
+      "share": 0.098
+     },
+     {
+      "camelot": "2B",
+      "n": 7,
+      "share": 0.085
+     },
+     {
+      "camelot": "9A",
+      "n": 7,
+      "share": 0.085
+     },
+     {
+      "camelot": "9B",
+      "n": 7,
+      "share": 0.085
+     },
+     {
+      "camelot": "1A",
+      "n": 6,
+      "share": 0.073
+     },
+     {
+      "camelot": "10A",
+      "n": 5,
+      "share": 0.061
+     },
+     {
+      "camelot": "10B",
+      "n": 4,
+      "share": 0.049
+     },
+     {
+      "camelot": "5A",
+      "n": 4,
+      "share": 0.049
+     }
+    ],
+    "minorShare": 0.585,
+    "confidence": {
+     "p50": 0.13
+    },
+    "confident": {
+     "n": 50,
+     "minConfidence": 0.1,
+     "top": [
+      {
+       "key": "A minor",
+       "n": 6,
+       "share": 0.12
+      },
+      {
+       "key": "F# major",
+       "n": 5,
+       "share": 0.1
+      },
+      {
+       "key": "Ab minor",
+       "n": 4,
+       "share": 0.08
+      },
+      {
+       "key": "B minor",
+       "n": 4,
+       "share": 0.08
+      },
+      {
+       "key": "E minor",
+       "n": 4,
+       "share": 0.08
+      },
+      {
+       "key": "G major",
+       "n": 4,
+       "share": 0.08
+      },
+      {
+       "key": "G minor",
+       "n": 3,
+       "share": 0.06
+      },
+      {
+       "key": "Ab major",
+       "n": 2,
+       "share": 0.04
+      }
+     ],
+     "minorShare": 0.58
+    }
+   },
+   "loudness": {
+    "integrated": {
+     "p10": -10.8,
+     "p50": -8.8,
+     "p90": -7.5
+    },
+    "shortTermMax": {
+     "p50": -6.6
+    },
+    "range": {
+     "p50": 4.8
+    },
+    "crest": {
+     "p50": 11.1
+    },
+    "peak": {
+     "p50": 3.7
+    }
+   },
+   "spectrum": {
+    "bands": {
+     "sub": {
+      "p25": 0.139,
+      "p50": 0.246,
+      "p75": 0.334
+     },
+     "low": {
+      "p25": 0.244,
+      "p50": 0.298,
+      "p75": 0.365
+     },
+     "lowMid": {
+      "p25": 0.09,
+      "p50": 0.129,
+      "p75": 0.188
+     },
+     "mid": {
+      "p25": 0.098,
+      "p50": 0.14,
+      "p75": 0.189
+     },
+     "highMid": {
+      "p25": 0.062,
+      "p50": 0.089,
+      "p75": 0.125
+     },
+     "air": {
+      "p25": 0.024,
+      "p50": 0.045,
+      "p75": 0.064
+     }
+    },
+    "subPlusLow": {
+     "p25": 0.429,
+     "p50": 0.574,
+     "p75": 0.683
+    },
+    "centroidHz": {
+     "p25": 2108,
+     "p50": 2484,
+     "p75": 2678
+    },
+    "mud": {
+     "p50": 0.223
+    },
+    "harshness": {
+     "p50": 0.089
+    },
+    "width": {
+     "p50": 0
+    }
+   },
+   "groove": {
+    "swing": {
+     "p25": 0.5,
+     "p50": 0.5,
+     "p75": 0.556
+    },
+    "pump": {
+     "p25": 0.095,
+     "p50": 0.143,
+     "p75": 0.249
+    },
+    "kickDensity": {
+     "p50": 5.46
+    },
+    "transientsPerBeat": {
+     "p50": 6.24
+    },
+    "fourOnFloorShare": 0.963
+   },
+   "structure": {
+    "dropFoundShare": 1,
+    "dropAtSec": {
+     "p50": 32.6
+    },
+    "dropFraction": {
+     "p50": 0.151
+    },
+    "firstDropBars": {
+     "p50": 27.5
+    },
+    "sections": {
+     "p50": 5
+    },
+    "barsAnalysed": {
+     "p50": 106
+    },
+    "durationSec": {
+     "p50": 205
+    }
+   },
+   "energyContour": {
+    "bins": 16,
+    "mean": [
+     0.559,
+     0.652,
+     0.675,
+     0.681,
+     0.726,
+     0.769,
+     0.782,
+     0.785,
+     0.721,
+     0.751,
+     0.74,
+     0.769,
+     0.785,
+     0.8,
+     0.775,
+     0.61
+    ],
+    "p25": [
+     0.342,
+     0.561,
+     0.558,
+     0.523,
+     0.566,
+     0.66,
+     0.654,
+     0.685,
+     0.591,
+     0.655,
+     0.611,
+     0.672,
+     0.665,
+     0.754,
+     0.691,
+     0.438
+    ],
+    "p75": [
+     0.732,
+     0.796,
+     0.829,
+     0.842,
+     0.882,
+     0.912,
+     0.92,
+     0.91,
+     0.863,
+     0.893,
+     0.887,
+     0.92,
+     0.939,
+     0.926,
+     0.923,
+     0.791
+    ]
+   },
+   "progressions": {
+    "top": [
+     {
+      "progression": "bIII-i-bIII-i-bIII-bVII-i-bIII",
+      "n": 2,
+      "share": 0.024,
+      "examples": [
+       "Benson Boone - Mystical Magical (Clean)",
+       "Benson Boone - Mystical Magical (DJ Bruce Acapella Break) (Clean Extended)"
+      ]
+     },
+     {
+      "progression": "bIII-i-bIII-i-bIII-i-bIII-i",
+      "n": 2,
+      "share": 0.024,
+      "examples": [
+       "Bob Marley & The Wailers & Robin Schulz - Sun Is Shining (Clean Radio Edit)",
+       "Mac Miller - The Spins (Clean)"
+      ]
+     },
+     {
+      "progression": "#iv-vi-#iv-iv-vi-#iv-bvi-#iv",
+      "n": 1,
+      "share": 0.012,
+      "examples": [
+       "Endor - Pump It Up (Jax Jones Midnight Snacks Remix) (Clean Radio Edit)"
+      ]
+     },
+     {
+      "progression": "bII-iv-bIII-bII-iv-i-bII-iv",
+      "n": 1,
+      "share": 0.012,
+      "examples": [
+       "Lady Gaga - Bloody Mary (Disco Fries & Clinton Sparks Remix) (Clean Extended)"
+      ]
+     },
+     {
+      "progression": "bIII-bVII-bIII-bv-iv-bv-iv-bv",
+      "n": 1,
+      "share": 0.012,
+      "examples": [
+       "Diamond-Fergalicious 1"
+      ]
+     },
+     {
+      "progression": "bIII-i-bIII-bVII-i-bIII-bVII-i",
+      "n": 1,
+      "share": 0.012,
+      "examples": [
+       "BobSinclarWorldHoldOnFi"
+      ]
+     },
+     {
+      "progression": "bvi-i-V-VII-bvi-i-V-bvi",
+      "n": 1,
+      "share": 0.012,
+      "examples": [
+       "Kid Cudi ft Ratatat & MGMT - Pursuit Of Happiness (Steve Aoki Remix) (Clean Extended)"
+      ]
+     },
+     {
+      "progression": "bVI-v-V-i-v-bVI-v-bVI",
+      "n": 1,
+      "share": 0.012,
+      "examples": [
+       "Drake - NOKIA (Intro Clean)"
+      ]
+     },
+     {
+      "progression": "bVII-i-bVI-bIII-i-bIII-bVII-i",
+      "n": 1,
+      "share": 0.012,
+      "examples": [
+       "Selena Gomez ft Marshmello - Wolves (Intro Clean)"
+      ]
+     },
+     {
+      "progression": "bVII-i-bVII-i-bVII-I-i-V",
+      "n": 1,
+      "share": 0.012,
+      "examples": [
+       "Kanye West vs FISHER (OZ) - Love Lockdown (R-You Bootleg) (Clean Extended)"
+      ]
+     },
+     {
+      "progression": "bVII-v-bIII-i-v-bVII-bIII-bVII",
+      "n": 1,
+      "share": 0.012,
+      "examples": [
+       "Willem De Roo ft Taleen - Vamos A La Playa (Clean) (Extended)"
+      ]
+     },
+     {
+      "progression": "i-bii-I-i-bvii-I-bii-i",
+      "n": 1,
+      "share": 0.012,
+      "examples": [
+       "Natascha Polke & PDE - Alelele (Clean Extended)"
+      ]
+     }
+    ],
+    "ngrams": {
+     "2": [
+      {
+       "progression": "bIII-i",
+       "n": 16,
+       "share": 0.195
+      },
+      {
+       "progression": "i-bIII",
+       "n": 15,
+       "share": 0.183
+      },
+      {
+       "progression": "bIII-bVII",
+       "n": 13,
+       "share": 0.159
+      },
+      {
+       "progression": "vi-I",
+       "n": 12,
+       "share": 0.146
+      },
+      {
+       "progression": "bVII-i",
+       "n": 11,
+       "share": 0.134
+      },
+      {
+       "progression": "I-vi",
+       "n": 11,
+       "share": 0.134
+      },
+      {
+       "progression": "I-i",
+       "n": 10,
+       "share": 0.122
+      },
+      {
+       "progression": "IV-I",
+       "n": 10,
+       "share": 0.122
+      },
+      {
+       "progression": "I-iii",
+       "n": 9,
+       "share": 0.11
+      },
+      {
+       "progression": "iv-i",
+       "n": 9,
+       "share": 0.11
+      },
+      {
+       "progression": "bVI-i",
+       "n": 7,
+       "share": 0.085
+      },
+      {
+       "progression": "i-iv",
+       "n": 7,
+       "share": 0.085
+      }
+     ],
+     "3": [
+      {
+       "progression": "bIII-i-bIII",
+       "n": 10,
+       "share": 0.122
+      },
+      {
+       "progression": "i-bIII-bVII",
+       "n": 8,
+       "share": 0.098
+      },
+      {
+       "progression": "i-bIII-i",
+       "n": 7,
+       "share": 0.085
+      },
+      {
+       "progression": "bIII-bVII-i",
+       "n": 6,
+       "share": 0.073
+      },
+      {
+       "progression": "I-vi-I",
+       "n": 5,
+       "share": 0.061
+      },
+      {
+       "progression": "vi-I-vi",
+       "n": 5,
+       "share": 0.061
+      },
+      {
+       "progression": "bVII-i-bIII",
+       "n": 4,
+       "share": 0.049
+      },
+      {
+       "progression": "i-iv-i",
+       "n": 4,
+       "share": 0.049
+      },
+      {
+       "progression": "iii-I-iii",
+       "n": 4,
+       "share": 0.049
+      },
+      {
+       "progression": "IV-I-vi",
+       "n": 4,
+       "share": 0.049
+      },
+      {
+       "progression": "v-bIII-i",
+       "n": 4,
+       "share": 0.049
+      },
+      {
+       "progression": "bVI-i-bVI",
+       "n": 3,
+       "share": 0.037
+      }
+     ],
+     "4": [
+      {
+       "progression": "i-bIII-i-bIII",
+       "n": 7,
+       "share": 0.085
+      },
+      {
+       "progression": "bIII-i-bIII-i",
+       "n": 6,
+       "share": 0.073
+      },
+      {
+       "progression": "bIII-i-bIII-bVII",
+       "n": 5,
+       "share": 0.061
+      },
+      {
+       "progression": "i-bIII-bVII-i",
+       "n": 5,
+       "share": 0.061
+      },
+      {
+       "progression": "bIII-bVII-i-bIII",
+       "n": 3,
+       "share": 0.037
+      },
+      {
+       "progression": "bVI-i-bVI-i",
+       "n": 3,
+       "share": 0.037
+      },
+      {
+       "progression": "i-bVI-i-bVI",
+       "n": 3,
+       "share": 0.037
+      },
+      {
+       "progression": "I-vi-I-vi",
+       "n": 3,
+       "share": 0.037
+      },
+      {
+       "progression": "I-vi-IV-I",
+       "n": 3,
+       "share": 0.037
+      },
+      {
+       "progression": "iii-I-iii-I",
+       "n": 3,
+       "share": 0.037
+      },
+      {
+       "progression": "vi-IV-I-vi",
+       "n": 3,
+       "share": 0.037
+      },
+      {
+       "progression": "bVII-bIII-i-bIII",
+       "n": 2,
+       "share": 0.024
+      }
+     ]
+    }
+   }
+  },
+  "hard-house": {
+   "n": 53,
+   "tempo": {
+    "p10": 85.8,
+    "p50": 139.7,
+    "p90": 145.9,
+    "laneBpm": {
+     "p10": 137.8,
+     "p50": 139.7,
+     "p90": 146.5
+    },
+    "confidence": {
+     "p50": 0.489
+    }
+   },
+   "keys": {
+    "top": [
+     {
+      "key": "E minor",
+      "n": 8,
+      "share": 0.151
+     },
+     {
+      "key": "Bb major",
+      "n": 5,
+      "share": 0.094
+     },
+     {
+      "key": "D major",
+      "n": 5,
+      "share": 0.094
+     },
+     {
+      "key": "B major",
+      "n": 4,
+      "share": 0.075
+     },
+     {
+      "key": "Eb minor",
+      "n": 4,
+      "share": 0.075
+     },
+     {
+      "key": "Ab minor",
+      "n": 3,
+      "share": 0.057
+     },
+     {
+      "key": "D minor",
+      "n": 3,
+      "share": 0.057
+     },
+     {
+      "key": "E major",
+      "n": 3,
+      "share": 0.057
+     }
+    ],
+    "topCamelot": [
+     {
+      "camelot": "9A",
+      "n": 8,
+      "share": 0.151
+     },
+     {
+      "camelot": "10B",
+      "n": 5,
+      "share": 0.094
+     },
+     {
+      "camelot": "6B",
+      "n": 5,
+      "share": 0.094
+     },
+     {
+      "camelot": "1B",
+      "n": 4,
+      "share": 0.075
+     },
+     {
+      "camelot": "2A",
+      "n": 4,
+      "share": 0.075
+     },
+     {
+      "camelot": "12B",
+      "n": 3,
+      "share": 0.057
+     },
+     {
+      "camelot": "1A",
+      "n": 3,
+      "share": 0.057
+     },
+     {
+      "camelot": "7A",
+      "n": 3,
+      "share": 0.057
+     }
+    ],
+    "minorShare": 0.472,
+    "confidence": {
+     "p50": 0.17
+    },
+    "confident": {
+     "n": 33,
+     "minConfidence": 0.1,
+     "top": [
+      {
+       "key": "Bb major",
+       "n": 5,
+       "share": 0.152
+      },
+      {
+       "key": "E minor",
+       "n": 4,
+       "share": 0.121
+      },
+      {
+       "key": "D major",
+       "n": 3,
+       "share": 0.091
+      },
+      {
+       "key": "D minor",
+       "n": 3,
+       "share": 0.091
+      },
+      {
+       "key": "E major",
+       "n": 3,
+       "share": 0.091
+      },
+      {
+       "key": "Eb minor",
+       "n": 3,
+       "share": 0.091
+      },
+      {
+       "key": "G major",
+       "n": 3,
+       "share": 0.091
+      },
+      {
+       "key": "B major",
+       "n": 2,
+       "share": 0.061
+      }
+     ],
+     "minorShare": 0.424
+    }
+   },
+   "loudness": {
+    "integrated": {
+     "p10": -10.1,
+     "p50": -8.8,
+     "p90": -7.3
+    },
+    "shortTermMax": {
+     "p50": -7.1
+    },
+    "range": {
+     "p50": 3.8
+    },
+    "crest": {
+     "p50": 10.7
+    },
+    "peak": {
+     "p50": 3.5
+    }
+   },
+   "spectrum": {
+    "bands": {
+     "sub": {
+      "p25": 0.207,
+      "p50": 0.347,
+      "p75": 0.464
+     },
+     "low": {
+      "p25": 0.187,
+      "p50": 0.254,
+      "p75": 0.325
+     },
+     "lowMid": {
+      "p25": 0.062,
+      "p50": 0.121,
+      "p75": 0.188
+     },
+     "mid": {
+      "p25": 0.085,
+      "p50": 0.117,
+      "p75": 0.177
+     },
+     "highMid": {
+      "p25": 0.039,
+      "p50": 0.081,
+      "p75": 0.116
+     },
+     "air": {
+      "p25": 0.021,
+      "p50": 0.037,
+      "p75": 0.047
+     }
+    },
+    "subPlusLow": {
+     "p25": 0.461,
+     "p50": 0.591,
+     "p75": 0.756
+    },
+    "centroidHz": {
+     "p25": 2007,
+     "p50": 2357,
+     "p75": 2620
+    },
+    "mud": {
+     "p50": 0.25
+    },
+    "harshness": {
+     "p50": 0.081
+    },
+    "width": {
+     "p50": 0
+    }
+   },
+   "groove": {
+    "swing": {
+     "p25": 0.516,
+     "p50": 0.579,
+     "p75": 0.643
+    },
+    "pump": {
+     "p25": 0.049,
+     "p50": 0.078,
+     "p75": 0.119
+    },
+    "kickDensity": {
+     "p50": 4.44
+    },
+    "transientsPerBeat": {
+     "p50": 6.74
+    },
+    "fourOnFloorShare": 0.868
+   },
+   "structure": {
+    "dropFoundShare": 1,
+    "dropAtSec": {
+     "p50": 27.1
+    },
+    "dropFraction": {
+     "p50": 0.124
+    },
+    "firstDropBars": {
+     "p50": 40
+    },
+    "sections": {
+     "p50": 5
+    },
+    "barsAnalysed": {
+     "p50": 116
+    },
+    "durationSec": {
+     "p50": 210
+    }
+   },
+   "energyContour": {
+    "bins": 16,
+    "mean": [
+     0.529,
+     0.693,
+     0.727,
+     0.752,
+     0.774,
+     0.791,
+     0.788,
+     0.764,
+     0.735,
+     0.768,
+     0.766,
+     0.762,
+     0.778,
+     0.804,
+     0.799,
+     0.666
+    ],
+    "p25": [
+     0.311,
+     0.555,
+     0.622,
+     0.662,
+     0.701,
+     0.738,
+     0.714,
+     0.694,
+     0.648,
+     0.702,
+     0.695,
+     0.664,
+     0.721,
+     0.771,
+     0.753,
+     0.523
+    ],
+    "p75": [
+     0.779,
+     0.816,
+     0.865,
+     0.884,
+     0.882,
+     0.884,
+     0.901,
+     0.876,
+     0.888,
+     0.896,
+     0.871,
+     0.878,
+     0.894,
+     0.884,
+     0.877,
+     0.874
+    ]
+   },
+   "progressions": {
+    "top": [
+     {
+      "progression": "bIII-bVI-iv-bIII-bVI-bIII-iv-bVI",
+      "n": 2,
+      "share": 0.038,
+      "examples": [
+       "JUSTBEfeatJustinTimberl 2",
+       "JUSTBEfeatJustinTimberl"
+      ]
+     },
+     {
+      "progression": "i",
+      "n": 2,
+      "share": 0.038,
+      "examples": [
+       "Offset - Swing My Way (Dirty)",
+       "Nicki Minaj ft Lil Baby - Bussin (Intro Clean)"
+      ]
+     },
+     {
+      "progression": "I-ii-I-#iv-V-I-#iv-I",
+      "n": 2,
+      "share": 0.038,
+      "examples": [
+       "Missy Elliott - Cool Off (Intro Dirty)",
+       "Missy Elliott - Cool Off (R-You Acapella In) (Dirty Extended)"
+      ]
+     },
+     {
+      "progression": "iii-I-V-iii-I-ii-iii-I",
+      "n": 2,
+      "share": 0.038,
+      "examples": [
+       "USHERATownGirlfeatLatto",
+       "USHERATownGirlfeatLatto 2"
+      ]
+     },
+     {
+      "progression": "bii-I-iii-vi-I",
+      "n": 1,
+      "share": 0.019,
+      "examples": [
+       "Ladii Rose ft Zoey Brinxx - DIP (Intro Clean)"
+      ]
+     },
+     {
+      "progression": "bii-I-V-I-bii-ii-I-V",
+      "n": 1,
+      "share": 0.019,
+      "examples": [
+       "Bobby Borris Pickett - Monster Mash (Clean) (Radio Edit)"
+      ]
+     },
+     {
+      "progression": "bIII-bVII-bVI-iv-bVI-bVII-bIII-iv",
+      "n": 1,
+      "share": 0.019,
+      "examples": [
+       "lightyears"
+      ]
+     },
+     {
+      "progression": "bIII-i-bVII-bIII-i-bIII-i-bVII",
+      "n": 1,
+      "share": 0.019,
+      "examples": [
+       "Ella Eyre - If I Go (Audio)"
+      ]
+     },
+     {
+      "progression": "bVI-bIII-v-bVI-bIII-v-bVII-bVI",
+      "n": 1,
+      "share": 0.019,
+      "examples": [
+       "Art Of Noise - Moments In Love (Clean)"
+      ]
+     },
+     {
+      "progression": "bVI-i-bVI",
+      "n": 1,
+      "share": 0.019,
+      "examples": [
+       "DaBaby - PHAT (Clean)"
+      ]
+     },
+     {
+      "progression": "bVI-i-v-bVI-bVII-i-bIII-v",
+      "n": 1,
+      "share": 0.019,
+      "examples": [
+       "Thundercat - Funny Thing"
+      ]
+     },
+     {
+      "progression": "bVII-i-iv-i-iv-bVII-i-bVII",
+      "n": 1,
+      "share": 0.019,
+      "examples": [
+       "EssencefeatTemsbyWizKid"
+      ]
+     }
+    ],
+    "ngrams": {
+     "2": [
+      {
+       "progression": "I-iii",
+       "n": 10,
+       "share": 0.189
+      },
+      {
+       "progression": "I-vi",
+       "n": 8,
+       "share": 0.151
+      },
+      {
+       "progression": "iii-I",
+       "n": 8,
+       "share": 0.151
+      },
+      {
+       "progression": "i-v",
+       "n": 7,
+       "share": 0.132
+      },
+      {
+       "progression": "I-V",
+       "n": 7,
+       "share": 0.132
+      },
+      {
+       "progression": "v-i",
+       "n": 7,
+       "share": 0.132
+      },
+      {
+       "progression": "V-I",
+       "n": 7,
+       "share": 0.132
+      },
+      {
+       "progression": "vi-I",
+       "n": 7,
+       "share": 0.132
+      },
+      {
+       "progression": "i-bVII",
+       "n": 6,
+       "share": 0.113
+      },
+      {
+       "progression": "i-I",
+       "n": 6,
+       "share": 0.113
+      },
+      {
+       "progression": "i-iv",
+       "n": 6,
+       "share": 0.113
+      },
+      {
+       "progression": "bIII-i",
+       "n": 5,
+       "share": 0.094
+      }
+     ],
+     "3": [
+      {
+       "progression": "i-iv-i",
+       "n": 4,
+       "share": 0.075
+      },
+      {
+       "progression": "I-V-I",
+       "n": 4,
+       "share": 0.075
+      },
+      {
+       "progression": "I-vi-I",
+       "n": 4,
+       "share": 0.075
+      },
+      {
+       "progression": "V-iii-I",
+       "n": 4,
+       "share": 0.075
+      },
+      {
+       "progression": "bIII-i-bVII",
+       "n": 3,
+       "share": 0.057
+      },
+      {
+       "progression": "bVI-i-v",
+       "n": 3,
+       "share": 0.057
+      },
+      {
+       "progression": "bVII-bIII-i",
+       "n": 3,
+       "share": 0.057
+      },
+      {
+       "progression": "I-#iv-I",
+       "n": 3,
+       "share": 0.057
+      },
+      {
+       "progression": "i-bVII-bIII",
+       "n": 3,
+       "share": 0.057
+      },
+      {
+       "progression": "I-i-I",
+       "n": 3,
+       "share": 0.057
+      },
+      {
+       "progression": "I-iii-I",
+       "n": 3,
+       "share": 0.057
+      },
+      {
+       "progression": "I-iii-vi",
+       "n": 3,
+       "share": 0.057
+      }
+     ],
+     "4": [
+      {
+       "progression": "bIII-i-bVII-bIII",
+       "n": 3,
+       "share": 0.057
+      },
+      {
+       "progression": "bVI-i-v-bVI",
+       "n": 3,
+       "share": 0.057
+      },
+      {
+       "progression": "I-iii-vi-I",
+       "n": 3,
+       "share": 0.057
+      },
+      {
+       "progression": "I-V-iii-I",
+       "n": 3,
+       "share": 0.057
+      },
+      {
+       "progression": "iii-I-V-iii",
+       "n": 3,
+       "share": 0.057
+      },
+      {
+       "progression": "V-I-#iv-I",
+       "n": 3,
+       "share": 0.057
+      },
+      {
+       "progression": "v-I-i-I",
+       "n": 3,
+       "share": 0.057
+      },
+      {
+       "progression": "vi-I-vi-I",
+       "n": 3,
+       "share": 0.057
+      },
+      {
+       "progression": "#iv-V-I-#iv",
+       "n": 2,
+       "share": 0.038
+      },
+      {
+       "progression": "bIII-bVI-bIII-iv",
+       "n": 2,
+       "share": 0.038
+      },
+      {
+       "progression": "bIII-bVI-iv-bIII",
+       "n": 2,
+       "share": 0.038
+      },
+      {
+       "progression": "bIII-i-bIII-i",
+       "n": 2,
+       "share": 0.038
+      }
+     ]
+    }
+   }
+  },
+  "melodic": {
+   "n": 21,
+   "tempo": {
+    "p10": 111.4,
+    "p50": 114,
+    "p90": 118.1,
+    "laneBpm": {
+     "p10": 111.4,
+     "p50": 114,
+     "p90": 118.1
+    },
+    "confidence": {
+     "p50": 0.396
+    }
+   },
+   "keys": {
+    "top": [
+     {
+      "key": "D major",
+      "n": 3,
+      "share": 0.143
+     },
+     {
+      "key": "G major",
+      "n": 3,
+      "share": 0.143
+     },
+     {
+      "key": "A major",
+      "n": 2,
+      "share": 0.095
+     },
+     {
+      "key": "Db minor",
+      "n": 2,
+      "share": 0.095
+     },
+     {
+      "key": "F minor",
+      "n": 2,
+      "share": 0.095
+     },
+     {
+      "key": "F# minor",
+      "n": 2,
+      "share": 0.095
+     },
+     {
+      "key": "A minor",
+      "n": 1,
+      "share": 0.048
+     },
+     {
+      "key": "B minor",
+      "n": 1,
+      "share": 0.048
+     }
+    ],
+    "topCamelot": [
+     {
+      "camelot": "10B",
+      "n": 3,
+      "share": 0.143
+     },
+     {
+      "camelot": "9B",
+      "n": 3,
+      "share": 0.143
+     },
+     {
+      "camelot": "11A",
+      "n": 2,
+      "share": 0.095
+     },
+     {
+      "camelot": "11B",
+      "n": 2,
+      "share": 0.095
+     },
+     {
+      "camelot": "12A",
+      "n": 2,
+      "share": 0.095
+     },
+     {
+      "camelot": "4A",
+      "n": 2,
+      "share": 0.095
+     },
+     {
+      "camelot": "10A",
+      "n": 1,
+      "share": 0.048
+     },
+     {
+      "camelot": "2A",
+      "n": 1,
+      "share": 0.048
+     }
+    ],
+    "minorShare": 0.524,
+    "confidence": {
+     "p50": 0.13
+    },
+    "confident": {
+     "n": 14,
+     "minConfidence": 0.1,
+     "top": [
+      {
+       "key": "D major",
+       "n": 3,
+       "share": 0.214
+      },
+      {
+       "key": "F minor",
+       "n": 2,
+       "share": 0.143
+      },
+      {
+       "key": "G major",
+       "n": 2,
+       "share": 0.143
+      },
+      {
+       "key": "A major",
+       "n": 1,
+       "share": 0.071
+      },
+      {
+       "key": "A minor",
+       "n": 1,
+       "share": 0.071
+      },
+      {
+       "key": "B minor",
+       "n": 1,
+       "share": 0.071
+      },
+      {
+       "key": "Bb major",
+       "n": 1,
+       "share": 0.071
+      },
+      {
+       "key": "C minor",
+       "n": 1,
+       "share": 0.071
+      }
+     ],
+     "minorShare": 0.5
+    }
+   },
+   "loudness": {
+    "integrated": {
+     "p10": -12.4,
+     "p50": -9.6,
+     "p90": -7.4
+    },
+    "shortTermMax": {
+     "p50": -6.9
+    },
+    "range": {
+     "p50": 4
+    },
+    "crest": {
+     "p50": 10.6
+    },
+    "peak": {
+     "p50": 3.4
+    }
+   },
+   "spectrum": {
+    "bands": {
+     "sub": {
+      "p25": 0.173,
+      "p50": 0.342,
+      "p75": 0.501
+     },
+     "low": {
+      "p25": 0.17,
+      "p50": 0.222,
+      "p75": 0.351
+     },
+     "lowMid": {
+      "p25": 0.071,
+      "p50": 0.108,
+      "p75": 0.166
+     },
+     "mid": {
+      "p25": 0.087,
+      "p50": 0.138,
+      "p75": 0.188
+     },
+     "highMid": {
+      "p25": 0.051,
+      "p50": 0.056,
+      "p75": 0.082
+     },
+     "air": {
+      "p25": 0.013,
+      "p50": 0.017,
+      "p75": 0.045
+     }
+    },
+    "subPlusLow": {
+     "p25": 0.549,
+     "p50": 0.648,
+     "p75": 0.707
+    },
+    "centroidHz": {
+     "p25": 1761,
+     "p50": 2124,
+     "p75": 2667
+    },
+    "mud": {
+     "p50": 0.194
+    },
+    "harshness": {
+     "p50": 0.056
+    },
+    "width": {
+     "p50": 0
+    }
+   },
+   "groove": {
+    "swing": {
+     "p25": 0.5,
+     "p50": 0.594,
+     "p75": 0.654
+    },
+    "pump": {
+     "p25": 0.049,
+     "p50": 0.11,
+     "p75": 0.228
+    },
+    "kickDensity": {
+     "p50": 5.71
+    },
+    "transientsPerBeat": {
+     "p50": 7.31
+    },
+    "fourOnFloorShare": 0.952
+   },
+   "structure": {
+    "dropFoundShare": 1,
+    "dropAtSec": {
+     "p50": 23.7
+    },
+    "dropFraction": {
+     "p50": 0.19
+    },
+    "firstDropBars": {
+     "p50": 34
+    },
+    "sections": {
+     "p50": 5
+    },
+    "barsAnalysed": {
+     "p50": 102
+    },
+    "durationSec": {
+     "p50": 217
+    }
+   },
+   "energyContour": {
+    "bins": 16,
+    "mean": [
+     0.523,
+     0.599,
+     0.647,
+     0.647,
+     0.724,
+     0.743,
+     0.726,
+     0.759,
+     0.806,
+     0.768,
+     0.801,
+     0.85,
+     0.824,
+     0.81,
+     0.75,
+     0.639
+    ],
+    "p25": [
+     0.28,
+     0.46,
+     0.53,
+     0.499,
+     0.674,
+     0.649,
+     0.705,
+     0.705,
+     0.696,
+     0.703,
+     0.799,
+     0.809,
+     0.774,
+     0.758,
+     0.701,
+     0.487
+    ],
+    "p75": [
+     0.777,
+     0.842,
+     0.828,
+     0.806,
+     0.863,
+     0.901,
+     0.823,
+     0.87,
+     0.897,
+     0.879,
+     0.89,
+     0.916,
+     0.925,
+     0.876,
+     0.875,
+     0.835
+    ]
+   },
+   "progressions": {
+    "top": [
+     {
+      "progression": "iii-ii-iii-IV-vi-iii-ii-iii",
+      "n": 2,
+      "share": 0.095,
+      "examples": [
+       "Missy Elliot - I'm Really Hot (Intro Clean)",
+       "Missy Elliot - I'm Really Hot (Clean)"
+      ]
+     },
+     {
+      "progression": "bVII-iv-bIII-bVII-bIII-iv-bVII-bIII",
+      "n": 1,
+      "share": 0.048,
+      "examples": [
+       "Ziggy Marley & The Melody Makers - Give A Little Love (Clean)"
+      ]
+     },
+     {
+      "progression": "bvii-iv-bvii-bVI-iv-i-bVI-bvii",
+      "n": 1,
+      "share": 0.048,
+      "examples": [
+       "Offcial The Breaking Program Mix"
+      ]
+     },
+     {
+      "progression": "i",
+      "n": 1,
+      "share": 0.048,
+      "examples": [
+       "DJ Oggy & Malibu Joe ft Amflo, Neari & Ebene - All Together (Clean Extended)"
+      ]
+     },
+     {
+      "progression": "I-bii-V-I-bii-V-I-V",
+      "n": 1,
+      "share": 0.048,
+      "examples": [
+       "Missy Elliott - Pass That Dutch (Clean)"
+      ]
+     },
+     {
+      "progression": "i-bIII-I-v-I-i-bIII-i",
+      "n": 1,
+      "share": 0.048,
+      "examples": [
+       "Rae Sremmurd ft Juicy J - Powerglide (Intro Clean)"
+      ]
+     },
+     {
+      "progression": "i-bV-I-i-I-i-bvii-I",
+      "n": 1,
+      "share": 0.048,
+      "examples": [
+       "GloRilla ft Sexyy Red vs Lil Boosie ft Webbie & Foxx - WHATCHU KNO ABOUT ME vs Wipe Me"
+      ]
+     },
+     {
+      "progression": "i-bVII-bVI-v-i-I-v-i",
+      "n": 1,
+      "share": 0.048,
+      "examples": [
+       "Kanye West ft Baby Keem & Travis Scott - Praise God (Clean)"
+      ]
+     },
+     {
+      "progression": "i-bVII-iv-i-bIII-bVII-i-bIII",
+      "n": 1,
+      "share": 0.048,
+      "examples": [
+       "Diplo & Julia Michaels ft Morgan Wallen - Heartless (Intro Clean)"
+      ]
+     },
+     {
+      "progression": "I-i-bV-I-i-bii-I-i",
+      "n": 1,
+      "share": 0.048,
+      "examples": [
+       "GloRilla ft Sexyy Red vs Lil Boosie ft Webbie & Foxx - WHATCHU KNO ABOUT ME vs Wipe Me (2)"
+      ]
+     },
+     {
+      "progression": "I-i-I-bVII-iii-I-i-I",
+      "n": 1,
+      "share": 0.048,
+      "examples": [
+       "Go To Work (feat. Chef Boy) (Radio Edit) 1"
+      ]
+     },
+     {
+      "progression": "i-v-bVI-iv-i-bIII-v-i",
+      "n": 1,
+      "share": 0.048,
+      "examples": [
+       "Adele - Rolling In The Deep (DJ Kash Amapiano Remix) (Clean Extended)"
+      ]
+     }
+    ],
+    "ngrams": {
+     "2": [
+      {
+       "progression": "i-I",
+       "n": 5,
+       "share": 0.238
+      },
+      {
+       "progression": "I-i",
+       "n": 5,
+       "share": 0.238
+      },
+      {
+       "progression": "iii-I",
+       "n": 4,
+       "share": 0.19
+      },
+      {
+       "progression": "iv-i",
+       "n": 4,
+       "share": 0.19
+      },
+      {
+       "progression": "bVI-iv",
+       "n": 3,
+       "share": 0.143
+      },
+      {
+       "progression": "i-bIII",
+       "n": 3,
+       "share": 0.143
+      },
+      {
+       "progression": "I-V",
+       "n": 3,
+       "share": 0.143
+      },
+      {
+       "progression": "V-I",
+       "n": 3,
+       "share": 0.143
+      },
+      {
+       "progression": "vi-iii",
+       "n": 3,
+       "share": 0.143
+      },
+      {
+       "progression": "bIII-bVII",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "bV-I",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "bvii-I",
+       "n": 2,
+       "share": 0.095
+      }
+     ],
+     "3": [
+      {
+       "progression": "bVI-iv-i",
+       "n": 3,
+       "share": 0.143
+      },
+      {
+       "progression": "I-i-I",
+       "n": 3,
+       "share": 0.143
+      },
+      {
+       "progression": "bV-I-i",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "i-bV-I",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "i-I-i",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "ii-iii-IV",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "iii-ii-iii",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "iii-IV-vi",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "iii-V-I",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "iv-i-bIII",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "iv-i-bVI",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "IV-vi-iii",
+       "n": 2,
+       "share": 0.095
+      }
+     ],
+     "4": [
+      {
+       "progression": "bVI-iv-i-bVI",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "i-bV-I-i",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "I-i-I-i",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "ii-iii-IV-vi",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "iii-ii-iii-IV",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "iii-IV-vi-iii",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "IV-vi-iii-ii",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "vi-iii-ii-iii",
+       "n": 2,
+       "share": 0.095
+      },
+      {
+       "progression": "bii-iii-bii-vii",
+       "n": 1,
+       "share": 0.048
+      },
+      {
+       "progression": "bii-V-I-bii",
+       "n": 1,
+       "share": 0.048
+      },
+      {
+       "progression": "bii-V-I-V",
+       "n": 1,
+       "share": 0.048
+      },
+      {
+       "progression": "bIII-bVII-bIII-iv",
+       "n": 1,
+       "share": 0.048
+      }
+     ]
+    }
+   }
+  },
+  "dnb-or-halftime": {
+   "n": 45,
+   "tempo": {
+    "p10": 86.1,
+    "p50": 164.9,
+    "p90": 175.8,
+    "laneBpm": {
+     "p10": 160.1,
+     "p50": 167.5,
+     "p90": 177.4
+    },
+    "confidence": {
+     "p50": 0.497
+    }
+   },
+   "keys": {
+    "top": [
+     {
+      "key": "F minor",
+      "n": 9,
+      "share": 0.2
+     },
+     {
+      "key": "D major",
+      "n": 5,
+      "share": 0.111
+     },
+     {
+      "key": "G major",
+      "n": 5,
+      "share": 0.111
+     },
+     {
+      "key": "A major",
+      "n": 4,
+      "share": 0.089
+     },
+     {
+      "key": "Eb major",
+      "n": 3,
+      "share": 0.067
+     },
+     {
+      "key": "B minor",
+      "n": 2,
+      "share": 0.044
+     },
+     {
+      "key": "Bb minor",
+      "n": 2,
+      "share": 0.044
+     },
+     {
+      "key": "D minor",
+      "n": 2,
+      "share": 0.044
+     }
+    ],
+    "topCamelot": [
+     {
+      "camelot": "4A",
+      "n": 9,
+      "share": 0.2
+     },
+     {
+      "camelot": "10B",
+      "n": 5,
+      "share": 0.111
+     },
+     {
+      "camelot": "9B",
+      "n": 5,
+      "share": 0.111
+     },
+     {
+      "camelot": "11B",
+      "n": 4,
+      "share": 0.089
+     },
+     {
+      "camelot": "5B",
+      "n": 3,
+      "share": 0.067
+     },
+     {
+      "camelot": "10A",
+      "n": 2,
+      "share": 0.044
+     },
+     {
+      "camelot": "2B",
+      "n": 2,
+      "share": 0.044
+     },
+     {
+      "camelot": "3A",
+      "n": 2,
+      "share": 0.044
+     }
+    ],
+    "minorShare": 0.489,
+    "confidence": {
+     "p50": 0.102
+    },
+    "confident": {
+     "n": 24,
+     "minConfidence": 0.1,
+     "top": [
+      {
+       "key": "F minor",
+       "n": 6,
+       "share": 0.25
+      },
+      {
+       "key": "D major",
+       "n": 3,
+       "share": 0.125
+      },
+      {
+       "key": "Eb major",
+       "n": 3,
+       "share": 0.125
+      },
+      {
+       "key": "D minor",
+       "n": 2,
+       "share": 0.083
+      },
+      {
+       "key": "G major",
+       "n": 2,
+       "share": 0.083
+      },
+      {
+       "key": "A major",
+       "n": 1,
+       "share": 0.042
+      },
+      {
+       "key": "B major",
+       "n": 1,
+       "share": 0.042
+      },
+      {
+       "key": "Bb minor",
+       "n": 1,
+       "share": 0.042
+      }
+     ],
+     "minorShare": 0.5
+    }
+   },
+   "loudness": {
+    "integrated": {
+     "p10": -11.1,
+     "p50": -9.1,
+     "p90": -7.2
+    },
+    "shortTermMax": {
+     "p50": -7
+    },
+    "range": {
+     "p50": 4.1
+    },
+    "crest": {
+     "p50": 11.6
+    },
+    "peak": {
+     "p50": 3.7
+    }
+   },
+   "spectrum": {
+    "bands": {
+     "sub": {
+      "p25": 0.148,
+      "p50": 0.27,
+      "p75": 0.388
+     },
+     "low": {
+      "p25": 0.229,
+      "p50": 0.293,
+      "p75": 0.36
+     },
+     "lowMid": {
+      "p25": 0.083,
+      "p50": 0.104,
+      "p75": 0.148
+     },
+     "mid": {
+      "p25": 0.092,
+      "p50": 0.118,
+      "p75": 0.166
+     },
+     "highMid": {
+      "p25": 0.055,
+      "p50": 0.078,
+      "p75": 0.117
+     },
+     "air": {
+      "p25": 0.024,
+      "p50": 0.042,
+      "p75": 0.062
+     }
+    },
+    "subPlusLow": {
+     "p25": 0.482,
+     "p50": 0.59,
+     "p75": 0.722
+    },
+    "centroidHz": {
+     "p25": 2027,
+     "p50": 2534,
+     "p75": 2761
+    },
+    "mud": {
+     "p50": 0.201
+    },
+    "harshness": {
+     "p50": 0.078
+    },
+    "width": {
+     "p50": 0
+    }
+   },
+   "groove": {
+    "swing": {
+     "p25": 0.5,
+     "p50": 0.567,
+     "p75": 0.626
+    },
+    "pump": {
+     "p25": 0.06,
+     "p50": 0.11,
+     "p75": 0.203
+    },
+    "kickDensity": {
+     "p50": 4.68
+    },
+    "transientsPerBeat": {
+     "p50": 5.54
+    },
+    "fourOnFloorShare": 0.844
+   },
+   "structure": {
+    "dropFoundShare": 1,
+    "dropAtSec": {
+     "p50": 24.2
+    },
+    "dropFraction": {
+     "p50": 0.151
+    },
+    "firstDropBars": {
+     "p50": 24
+    },
+    "sections": {
+     "p50": 5
+    },
+    "barsAnalysed": {
+     "p50": 125
+    },
+    "durationSec": {
+     "p50": 193
+    }
+   },
+   "energyContour": {
+    "bins": 16,
+    "mean": [
+     0.551,
+     0.66,
+     0.697,
+     0.73,
+     0.765,
+     0.772,
+     0.773,
+     0.773,
+     0.772,
+     0.775,
+     0.772,
+     0.757,
+     0.774,
+     0.801,
+     0.786,
+     0.692
+    ],
+    "p25": [
+     0.361,
+     0.555,
+     0.624,
+     0.646,
+     0.682,
+     0.636,
+     0.723,
+     0.706,
+     0.672,
+     0.665,
+     0.734,
+     0.635,
+     0.659,
+     0.786,
+     0.701,
+     0.572
+    ],
+    "p75": [
+     0.741,
+     0.783,
+     0.814,
+     0.854,
+     0.887,
+     0.885,
+     0.883,
+     0.891,
+     0.899,
+     0.889,
+     0.888,
+     0.905,
+     0.898,
+     0.892,
+     0.913,
+     0.845
+    ]
+   },
+   "progressions": {
+    "top": [
+     {
+      "progression": "I-bIII-bV-I-bIII-bii-I-bIII",
+      "n": 2,
+      "share": 0.044,
+      "examples": [
+       "GloRilla ft Sexyy Red vs T.I. - WHATCHU KNO ABOUT ME (Anthem Kingz WorPlay Transition",
+       "GloRilla ft Sexyy Red - WHATCHU KNO ABOUT ME (Clean)"
+      ]
+     },
+     {
+      "progression": "bII-iii-bII-iii-bII-iii-bII-V",
+      "n": 1,
+      "share": 0.022,
+      "examples": [
+       "Pogohm-RunwithPollux"
+      ]
+     },
+     {
+      "progression": "bIII-i-bIII-bVII-i-bIII-i-bIII",
+      "n": 1,
+      "share": 0.022,
+      "examples": [
+       "Thomas Rhett - Life Changes (Clean)"
+      ]
+     },
+     {
+      "progression": "bIII-i-bvii-bVI-I-bvii-bIII-bvii",
+      "n": 1,
+      "share": 0.022,
+      "examples": [
+       "Just [The Tip] [Dirty]"
+      ]
+     },
+     {
+      "progression": "bVI-i-bVI-i-bVI-i-bVI-i",
+      "n": 1,
+      "share": 0.022,
+      "examples": [
+       "Lil Boosie ft Webbie & Foxx vs GloRilla ft Sexyy Red - Wipe Me Down vs WHATCHU KNO ABO"
+      ]
+     },
+     {
+      "progression": "bVI-i-bVI-vi-i-bVI-i-bVI",
+      "n": 1,
+      "share": 0.022,
+      "examples": [
+       "Lil Boosie ft Webbie & Foxx vs GloRilla ft Sexyy Red - Wipe Me Down vs WHATCHU KNO ABO (2)"
+      ]
+     },
+     {
+      "progression": "bVI-V-bVI-i-bVI-bIII-i-bVI",
+      "n": 1,
+      "share": 0.022,
+      "examples": [
+       "Saturday 11AM HH Ooh My Business Is To Pose (1)"
+      ]
+     },
+     {
+      "progression": "bVI-V-i-bVI-V-IV-bVI-i",
+      "n": 1,
+      "share": 0.022,
+      "examples": [
+       "BLP Kosher - Dreidel Bop Official (getmp3.pro)"
+      ]
+     },
+     {
+      "progression": "I-bIII-bii-I-bIII-bii-I-bIII",
+      "n": 1,
+      "share": 0.022,
+      "examples": [
+       "GloRilla ft Sexyy Red - WHATCHU KNO ABOUT ME (Dirty)"
+      ]
+     },
+     {
+      "progression": "i-bIII-i-bIII-i",
+      "n": 1,
+      "share": 0.022,
+      "examples": [
+       "GYALftChrisMarshallbyTr"
+      ]
+     },
+     {
+      "progression": "i-bVI-i-bVI-i-bVI-vi-i",
+      "n": 1,
+      "share": 0.022,
+      "examples": [
+       "Lil Boosie ft Webbie & Foxx - Wipe Me Down (Clean)"
+      ]
+     },
+     {
+      "progression": "i-bVI-i-bVI-i-iv-i-iv",
+      "n": 1,
+      "share": 0.022,
+      "examples": [
+       "T.I. - 24's (Intro Clean)"
+      ]
+     }
+    ],
+    "ngrams": {
+     "2": [
+      {
+       "progression": "bVI-i",
+       "n": 9,
+       "share": 0.2
+      },
+      {
+       "progression": "i-bVI",
+       "n": 8,
+       "share": 0.178
+      },
+      {
+       "progression": "I-V",
+       "n": 7,
+       "share": 0.156
+      },
+      {
+       "progression": "vi-I",
+       "n": 7,
+       "share": 0.156
+      },
+      {
+       "progression": "I-vi",
+       "n": 6,
+       "share": 0.133
+      },
+      {
+       "progression": "IV-I",
+       "n": 6,
+       "share": 0.133
+      },
+      {
+       "progression": "bIII-i",
+       "n": 5,
+       "share": 0.111
+      },
+      {
+       "progression": "I-IV",
+       "n": 5,
+       "share": 0.111
+      },
+      {
+       "progression": "V-I",
+       "n": 5,
+       "share": 0.111
+      },
+      {
+       "progression": "V-vi",
+       "n": 5,
+       "share": 0.111
+      },
+      {
+       "progression": "iii-I",
+       "n": 4,
+       "share": 0.089
+      },
+      {
+       "progression": "iv-i",
+       "n": 4,
+       "share": 0.089
+      }
+     ],
+     "3": [
+      {
+       "progression": "bVI-i-bVI",
+       "n": 6,
+       "share": 0.133
+      },
+      {
+       "progression": "i-bVI-i",
+       "n": 6,
+       "share": 0.133
+      },
+      {
+       "progression": "I-IV-I",
+       "n": 4,
+       "share": 0.089
+      },
+      {
+       "progression": "I-V-vi",
+       "n": 4,
+       "share": 0.089
+      },
+      {
+       "progression": "V-vi-I",
+       "n": 4,
+       "share": 0.089
+      },
+      {
+       "progression": "bii-I-bIII",
+       "n": 3,
+       "share": 0.067
+      },
+      {
+       "progression": "bIII-bii-I",
+       "n": 3,
+       "share": 0.067
+      },
+      {
+       "progression": "bIII-i-bIII",
+       "n": 3,
+       "share": 0.067
+      },
+      {
+       "progression": "I-bIII-bii",
+       "n": 3,
+       "share": 0.067
+      },
+      {
+       "progression": "I-V-I",
+       "n": 3,
+       "share": 0.067
+      },
+      {
+       "progression": "I-vi-I",
+       "n": 3,
+       "share": 0.067
+      },
+      {
+       "progression": "iii-I-iii",
+       "n": 3,
+       "share": 0.067
+      }
+     ],
+     "4": [
+      {
+       "progression": "i-bVI-i-bVI",
+       "n": 5,
+       "share": 0.111
+      },
+      {
+       "progression": "bVI-i-bVI-i",
+       "n": 4,
+       "share": 0.089
+      },
+      {
+       "progression": "bIII-bii-I-bIII",
+       "n": 3,
+       "share": 0.067
+      },
+      {
+       "progression": "I-bIII-bii-I",
+       "n": 3,
+       "share": 0.067
+      },
+      {
+       "progression": "I-IV-I-IV",
+       "n": 3,
+       "share": 0.067
+      },
+      {
+       "progression": "I-V-vi-I",
+       "n": 3,
+       "share": 0.067
+      },
+      {
+       "progression": "V-vi-I-vi",
+       "n": 3,
+       "share": 0.067
+      },
+      {
+       "progression": "bIII-bV-I-bIII",
+       "n": 2,
+       "share": 0.044
+      },
+      {
+       "progression": "bV-I-bIII-bii",
+       "n": 2,
+       "share": 0.044
+      },
+      {
+       "progression": "bVI-i-bVI-vi",
+       "n": 2,
+       "share": 0.044
+      },
+      {
+       "progression": "I-bIII-bV-I",
+       "n": 2,
+       "share": 0.044
+      },
+      {
+       "progression": "i-bIII-i-bIII",
+       "n": 2,
+       "share": 0.044
+      }
+     ]
+    }
+   }
+  },
+  "other": {
+   "n": 72,
+   "tempo": {
+    "p10": 96.8,
+    "p50": 135.1,
+    "p90": 159.5,
+    "laneBpm": {
+     "p10": 96.8,
+     "p50": 135.1,
+     "p90": 159.5
+    },
+    "confidence": {
+     "p50": 0.503
+    }
+   },
+   "keys": {
+    "top": [
+     {
+      "key": "G major",
+      "n": 6,
+      "share": 0.083
+     },
+     {
+      "key": "B minor",
+      "n": 5,
+      "share": 0.069
+     },
+     {
+      "key": "D major",
+      "n": 5,
+      "share": 0.069
+     },
+     {
+      "key": "Db minor",
+      "n": 5,
+      "share": 0.069
+     },
+     {
+      "key": "E major",
+      "n": 5,
+      "share": 0.069
+     },
+     {
+      "key": "E minor",
+      "n": 5,
+      "share": 0.069
+     },
+     {
+      "key": "G minor",
+      "n": 5,
+      "share": 0.069
+     },
+     {
+      "key": "A minor",
+      "n": 4,
+      "share": 0.056
+     }
+    ],
+    "topCamelot": [
+     {
+      "camelot": "9B",
+      "n": 6,
+      "share": 0.083
+     },
+     {
+      "camelot": "10A",
+      "n": 5,
+      "share": 0.069
+     },
+     {
+      "camelot": "10B",
+      "n": 5,
+      "share": 0.069
+     },
+     {
+      "camelot": "12A",
+      "n": 5,
+      "share": 0.069
+     },
+     {
+      "camelot": "12B",
+      "n": 5,
+      "share": 0.069
+     },
+     {
+      "camelot": "6A",
+      "n": 5,
+      "share": 0.069
+     },
+     {
+      "camelot": "9A",
+      "n": 5,
+      "share": 0.069
+     },
+     {
+      "camelot": "2A",
+      "n": 4,
+      "share": 0.056
+     }
+    ],
+    "minorShare": 0.556,
+    "confidence": {
+     "p50": 0.104
+    },
+    "confident": {
+     "n": 39,
+     "minConfidence": 0.1,
+     "top": [
+      {
+       "key": "D major",
+       "n": 5,
+       "share": 0.128
+      },
+      {
+       "key": "B minor",
+       "n": 3,
+       "share": 0.077
+      },
+      {
+       "key": "Db minor",
+       "n": 3,
+       "share": 0.077
+      },
+      {
+       "key": "E major",
+       "n": 3,
+       "share": 0.077
+      },
+      {
+       "key": "E minor",
+       "n": 3,
+       "share": 0.077
+      },
+      {
+       "key": "Eb minor",
+       "n": 3,
+       "share": 0.077
+      },
+      {
+       "key": "G major",
+       "n": 3,
+       "share": 0.077
+      },
+      {
+       "key": "G minor",
+       "n": 3,
+       "share": 0.077
+      }
+     ],
+     "minorShare": 0.538
+    }
+   },
+   "loudness": {
+    "integrated": {
+     "p10": -12.1,
+     "p50": -9,
+     "p90": -7.8
+    },
+    "shortTermMax": {
+     "p50": -7.1
+    },
+    "range": {
+     "p50": 4.7
+    },
+    "crest": {
+     "p50": 11
+    },
+    "peak": {
+     "p50": 3.6
+    }
+   },
+   "spectrum": {
+    "bands": {
+     "sub": {
+      "p25": 0.154,
+      "p50": 0.306,
+      "p75": 0.418
+     },
+     "low": {
+      "p25": 0.217,
+      "p50": 0.27,
+      "p75": 0.378
+     },
+     "lowMid": {
+      "p25": 0.084,
+      "p50": 0.111,
+      "p75": 0.173
+     },
+     "mid": {
+      "p25": 0.078,
+      "p50": 0.126,
+      "p75": 0.187
+     },
+     "highMid": {
+      "p25": 0.053,
+      "p50": 0.072,
+      "p75": 0.115
+     },
+     "air": {
+      "p25": 0.02,
+      "p50": 0.032,
+      "p75": 0.051
+     }
+    },
+    "subPlusLow": {
+     "p25": 0.465,
+     "p50": 0.641,
+     "p75": 0.72
+    },
+    "centroidHz": {
+     "p25": 1998,
+     "p50": 2217,
+     "p75": 2617
+    },
+    "mud": {
+     "p50": 0.225
+    },
+    "harshness": {
+     "p50": 0.072
+    },
+    "width": {
+     "p50": 0
+    }
+   },
+   "groove": {
+    "swing": {
+     "p25": 0.5,
+     "p50": 0.5,
+     "p75": 0.584
+    },
+    "pump": {
+     "p25": 0.088,
+     "p50": 0.146,
+     "p75": 0.224
+    },
+    "kickDensity": {
+     "p50": 4.4
+    },
+    "transientsPerBeat": {
+     "p50": 6.2
+    },
+    "fourOnFloorShare": 0.847
+   },
+   "structure": {
+    "dropFoundShare": 1,
+    "dropAtSec": {
+     "p50": 35.3
+    },
+    "dropFraction": {
+     "p50": 0.182
+    },
+    "firstDropBars": {
+     "p50": 29
+    },
+    "sections": {
+     "p50": 5
+    },
+    "barsAnalysed": {
+     "p50": 119
+    },
+    "durationSec": {
+     "p50": 213
+    }
+   },
+   "energyContour": {
+    "bins": 16,
+    "mean": [
+     0.546,
+     0.64,
+     0.708,
+     0.729,
+     0.739,
+     0.739,
+     0.759,
+     0.759,
+     0.778,
+     0.768,
+     0.737,
+     0.767,
+     0.784,
+     0.818,
+     0.718,
+     0.625
+    ],
+    "p25": [
+     0.307,
+     0.466,
+     0.548,
+     0.624,
+     0.667,
+     0.642,
+     0.674,
+     0.696,
+     0.719,
+     0.68,
+     0.668,
+     0.684,
+     0.69,
+     0.743,
+     0.601,
+     0.456
+    ],
+    "p75": [
+     0.766,
+     0.811,
+     0.866,
+     0.871,
+     0.864,
+     0.867,
+     0.885,
+     0.876,
+     0.88,
+     0.895,
+     0.852,
+     0.883,
+     0.895,
+     0.896,
+     0.877,
+     0.81
+    ]
+   },
+   "progressions": {
+    "top": [
+     {
+      "progression": "i",
+      "n": 2,
+      "share": 0.028,
+      "examples": [
+       "Stephen Marley - Chase Dem (Clean)",
+       "Jay-Z - Hard Knock Life (Ghetto Anthem) (Instrumental)"
+      ]
+     },
+     {
+      "progression": "IV-iv-IV-vi-IV-iv-IV-iv",
+      "n": 2,
+      "share": 0.028,
+      "examples": [
+       "Chainz ft Lil Wayne - Presha (Intro Clean)",
+       "Chainz ft Lil Wayne - Presha (Clean)"
+      ]
+     },
+     {
+      "progression": "#iv-iii-VII-#iv",
+      "n": 1,
+      "share": 0.014,
+      "examples": [
+       "Nicki Minaj - Super Freaky Girl (Muzik Junkies Remix) (Dirty Extended)"
+      ]
+     },
+     {
+      "progression": "biii-bIII-i-bIII-biii-bIII-v-biii",
+      "n": 1,
+      "share": 0.014,
+      "examples": [
+       "Swim Good - Just Wanna Rock With You (AceMula X Stimulus Remix) Lil Uzi Vert & Michael"
+      ]
+     },
+     {
+      "progression": "biii-bVI-bIII-IV-bIII-IV-biii-IV",
+      "n": 1,
+      "share": 0.014,
+      "examples": [
+       "Cardi B ft Megan Thee Stallion - WAP (Intro Clean)"
+      ]
+     },
+     {
+      "progression": "bIII-bVII-iv-bIII-bVII-iv-bVII-bIII",
+      "n": 1,
+      "share": 0.014,
+      "examples": [
+       "Taylor Swift - Who's Afraid of Little Old Me (Official Lyric Video)"
+      ]
+     },
+     {
+      "progression": "bIII-i-bIII-I-i-I-i-bIII",
+      "n": 1,
+      "share": 0.014,
+      "examples": [
+       "Jessie J ft Ariana Grande & Nicki Minaj - Bang Bang (Intro Clean)"
+      ]
+     },
+     {
+      "progression": "bIII-i-bIII-v-bIII-i-bvii-bIII",
+      "n": 1,
+      "share": 0.014,
+      "examples": [
+       "Playboi Carti ft Lil Uzi Vert - Shoota (Intro Clean)"
+      ]
+     },
+     {
+      "progression": "bIII-i-bVII-bIII-bVI-bIII-i-bIII",
+      "n": 1,
+      "share": 0.014,
+      "examples": [
+       "NEIKED ft MAE MULLER & POLO G - Better Days (Clean)"
+      ]
+     },
+     {
+      "progression": "bIII-i-bVII-bIII-i-bVI-bIII-i",
+      "n": 1,
+      "share": 0.014,
+      "examples": [
+       "NEIKED ft MAE MULLER & POLO G - Better Days (Intro Clean)"
+      ]
+     },
+     {
+      "progression": "bIII-i-iv-bVI-bIII-i-bVI-bIII",
+      "n": 1,
+      "share": 0.014,
+      "examples": [
+       "The Weeknd ft Tyler, The Creator - Here We Go...Again (Intro Clean)"
+      ]
+     },
+     {
+      "progression": "bVI-biii-bVI-biii-bVI-biii-bVI-biii",
+      "n": 1,
+      "share": 0.014,
+      "examples": [
+       "DjBron - 69 Boyz Tootsie Roll Set It Off Mix"
+      ]
+     }
+    ],
+    "ngrams": {
+     "2": [
+      {
+       "progression": "I-iii",
+       "n": 14,
+       "share": 0.194
+      },
+      {
+       "progression": "bIII-i",
+       "n": 13,
+       "share": 0.181
+      },
+      {
+       "progression": "i-iv",
+       "n": 12,
+       "share": 0.167
+      },
+      {
+       "progression": "i-bIII",
+       "n": 11,
+       "share": 0.153
+      },
+      {
+       "progression": "i-bVII",
+       "n": 9,
+       "share": 0.125
+      },
+      {
+       "progression": "bIII-v",
+       "n": 8,
+       "share": 0.111
+      },
+      {
+       "progression": "bVI-i",
+       "n": 8,
+       "share": 0.111
+      },
+      {
+       "progression": "i-bVI",
+       "n": 8,
+       "share": 0.111
+      },
+      {
+       "progression": "I-i",
+       "n": 8,
+       "share": 0.111
+      },
+      {
+       "progression": "IV-I",
+       "n": 8,
+       "share": 0.111
+      },
+      {
+       "progression": "bVI-bIII",
+       "n": 7,
+       "share": 0.097
+      },
+      {
+       "progression": "I-vi",
+       "n": 7,
+       "share": 0.097
+      }
+     ],
+     "3": [
+      {
+       "progression": "bVI-bIII-i",
+       "n": 6,
+       "share": 0.083
+      },
+      {
+       "progression": "I-iii-I",
+       "n": 6,
+       "share": 0.083
+      },
+      {
+       "progression": "bIII-i-bIII",
+       "n": 5,
+       "share": 0.069
+      },
+      {
+       "progression": "i-bVI-bIII",
+       "n": 5,
+       "share": 0.069
+      },
+      {
+       "progression": "i-I-i",
+       "n": 5,
+       "share": 0.069
+      },
+      {
+       "progression": "I-iii-vi",
+       "n": 5,
+       "share": 0.069
+      },
+      {
+       "progression": "i-iv-bVII",
+       "n": 5,
+       "share": 0.069
+      },
+      {
+       "progression": "IV-I-iii",
+       "n": 5,
+       "share": 0.069
+      },
+      {
+       "progression": "i-bIII-v",
+       "n": 4,
+       "share": 0.056
+      },
+      {
+       "progression": "i-iv-i",
+       "n": 4,
+       "share": 0.056
+      },
+      {
+       "progression": "bIII-i-bVII",
+       "n": 3,
+       "share": 0.042
+      },
+      {
+       "progression": "bIII-v-i",
+       "n": 3,
+       "share": 0.042
+      }
+     ],
+     "4": [
+      {
+       "progression": "i-bVI-bIII-i",
+       "n": 4,
+       "share": 0.056
+      },
+      {
+       "progression": "bVII-i-iv-bVII",
+       "n": 3,
+       "share": 0.042
+      },
+      {
+       "progression": "i-bIII-v-i",
+       "n": 3,
+       "share": 0.042
+      },
+      {
+       "progression": "I-iii-IV-I",
+       "n": 3,
+       "share": 0.042
+      },
+      {
+       "progression": "#iv-I-iii-I",
+       "n": 2,
+       "share": 0.028
+      },
+      {
+       "progression": "bIII-i-bIII-v",
+       "n": 2,
+       "share": 0.028
+      },
+      {
+       "progression": "bIII-i-bVI-bIII",
+       "n": 2,
+       "share": 0.028
+      },
+      {
+       "progression": "bIII-i-bVII-bIII",
+       "n": 2,
+       "share": 0.028
+      },
+      {
+       "progression": "bIII-i-I-i",
+       "n": 2,
+       "share": 0.028
+      },
+      {
+       "progression": "bVII-bVI-i-bVII",
+       "n": 2,
+       "share": 0.028
+      },
+      {
+       "progression": "i-bIII-iv-i",
+       "n": 2,
+       "share": 0.028
+      },
+      {
+       "progression": "i-bVII-bIII-i",
+       "n": 2,
+       "share": 0.028
+      }
+     ]
+    }
+   }
+  }
+ }
+}

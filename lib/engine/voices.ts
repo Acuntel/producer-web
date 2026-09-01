@@ -2,6 +2,7 @@
 // automation surface. Ableton's device chain, radically simplified.
 import * as Tone from "tone";
 import type { Track, Note, Role, AutoParam, SynthParams, Wave } from "../song/types";
+import type { Kit, KitSound } from "./kits";
 
 export type Voice = {
   trigger: (n: Note, time: number, bpm: number) => void;
@@ -24,7 +25,7 @@ function oscOf(p: SynthParams | undefined, fallback: Wave): Tone.OmniOscillatorO
   return base as unknown as Tone.OmniOscillatorOptions;
 }
 
-export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer): Voice {
+export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: Kit): Voice {
   const { role } = track;
   const p = track.synth ?? {};
   const fx = track.fx ?? {};
@@ -64,6 +65,22 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer): Voice
   });
 
   let trigger: Voice["trigger"];
+  const kitSound: KitSound | null = ["kick", "clap", "snare", "hat", "openhat", "perc"].includes(role) ? (role as KitSound) : null;
+  if (kit && kitSound && !p.wave) {
+    // Sampled drums: one Player per voice, velocity to gain, tune to rate, optional decay shaping.
+    const player = new Tone.Player(kit[kitSound]);
+    const decayGain = new Tone.Gain(1);
+    player.connect(decayGain); decayGain.connect(head); disp.push(player, decayGain);
+    const rate = Math.pow(2, (p.drumTune ?? 0) / 12);
+    const dec = p.drumDecay;
+    trigger = (n, t) => {
+      player.playbackRate = rate;
+      player.volume.value = 20 * Math.log10(Math.max(0.03, vel(n)));
+      if (dec) { decayGain.gain.cancelScheduledValues(t); decayGain.gain.setValueAtTime(1, t); decayGain.gain.exponentialRampToValueAtTime(0.001, t + dec); }
+      try { player.start(t); } catch { /* overlapping start */ }
+    };
+    return { trigger, automate: makeAutomate(), gate, dispose: () => disp.forEach((d) => d.dispose()) };
+  }
   switch (role) {
     case "kick": {
       const tune = 48 * Math.pow(2, (p.drumTune ?? 0) / 12);
@@ -149,6 +166,7 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer): Voice
     }
   }
 
+  function makeAutomate(): Voice["automate"] { return automate; }
   const automate: Voice["automate"] = (param, from, to, t0, t1, curve) => {
     const ramp = (sig: Tone.Signal<"frequency"> | Tone.Signal<"decibels"> | Tone.Signal<"audioRange"> | Tone.Signal<"normalRange"> | Tone.Signal<"positive">, exp: boolean) => {
       sig.cancelScheduledValues(t0);

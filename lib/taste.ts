@@ -45,3 +45,9 @@ export function tasteSummary(title?: string, max = 14): string {
   const pick = (mine.length ? mine : all).slice(-max);
   return pick.map((e) => `${e.verdict === "liked" ? "LIKED" : "KILLED"}: ${e.move}${e.factsSummary ? ` (${e.factsSummary})` : ""}`).join("\n");
 }
+
+// Pairwise preferences from A/B auditions: the training set for a preference model later.
+export type Pair = { at: number; title: string; label: string; chosen: "a" | "b"; aDiff: string; bDiff: string };
+const PAIRS = "producer.pairs.v1";
+export function loadPairs(): Pair[] { try { return JSON.parse(localStorage.getItem(PAIRS) ?? "[]"); } catch { return []; } }
+export function logPair(p: Omit<Pair, "at">) { try { localStorage.setItem(PAIRS, JSON.stringify([...loadPairs(), { ...p, at: Date.now() }].slice(-300))); } catch {} }

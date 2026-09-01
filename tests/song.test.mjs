@@ -134,3 +134,48 @@ test("harmony: key parsing and exact chords per bar from the notes", async () =>
   assert.equal(chordName(prof2), "Bb");
   assert.deepEqual(condense(["Dm", "Dm", "-", "Bb", "Bb", "Dm"]), ["Dm", "Bb", "Dm"]);
 });
+
+test("history: undo/redo and diffs", async () => {
+  const { History, diffSongs } = await import("../lib/song/history.ts");
+  const h = new History(3);
+  const a = seed(); const b = applyOps(a, [{ op: "tempo", bpm: 130 }]).song; const c = applyOps(b, [{ op: "mute", track: "pad" }]).song;
+  h.push(a, "start"); h.push(b, "tempo");
+  assert.ok(h.canUndo && !h.canRedo);
+  const u = h.undo(c); assert.equal(u.song.bpm, 130); assert.ok(h.canRedo);
+  const r = h.redo(u.song); assert.equal(r.song.tracks.find((t) => t.id === "pad").mute, true);
+  const d = diffSongs(a, c);
+  assert.ok(d.includes("tempo 126→130") && d.some((x) => x.startsWith("pad: muted")), d.join(" | "));
+});
+
+test("sectionNotes scopes notes to one section via a variant; skeleton songs migrate", async () => {
+  const s = seed();
+  const { song, skipped } = applyOps(s, [{ op: "sectionNotes", section: "drop2", track: "bass", notes: [[38, 0, 0.5, 120], [45, 1, 0.5, 100]] }]);
+  assert.equal(skipped.length, 0);
+  const bass = song.tracks.find((t) => t.id === "bass");
+  assert.deepEqual(bass.patterns["sec:drop2"].map((n) => n[0]), [38, 45]);
+  assert.equal(song.sections.find((x) => x.id === "drop2").variants.bass, "sec:drop2");
+  assert.equal(song.tracks.find((t) => t.id === "bass").notes.length, s.tracks.find((t) => t.id === "bass").notes.length, "the main pattern is untouched");
+  const skel = migrateSong({ title: "Skeleton", bpm: 128, key: "G minor", tracks: [], sections: [{ id: "intro", name: "Intro", bars: 8, active: [] }, { id: "drop", name: "Drop", bars: 16, active: [] }], arrangement: ["intro", "drop"] });
+  assert.equal(skel.tracks.length, 0); assert.equal(skel.sections.length, 2);
+  assert.equal(scheduleEvents(skel).totalBeats, 96);
+});
+
+test("rollout checks read the song and the facts", async () => {
+  const { ROLLOUTS } = await import("../lib/brain/rollouts.ts");
+  const s = seed();
+  const facts = (drop) => ({ structure: { sections: [{ label: "drop", lufs: drop.lufs ?? -9, bands: drop.bands ?? { sub: 0.55, low: 0.3, lowMid: 0.05, mid: 0.05, highMid: 0.03, air: 0.02 }, kickDensity: drop.kickDensity ?? 4, peak: drop.peak ?? 0 }] } });
+  const step = (id) => ROLLOUTS.newSong.find((x) => x.id === id);
+  assert.equal(step("blueprint").check({ song: s, facts: null, reference: null, lane: "tech-house" }), null);
+  assert.ok(step("blueprint").check({ song: { ...s, sections: s.sections.slice(0, 2) }, facts: null, reference: null, lane: "tech-house" }));
+  assert.equal(step("drums").check({ song: s, facts: facts({}), reference: null, lane: "tech-house" }), null);
+  assert.ok(step("drums").check({ song: s, facts: facts({ kickDensity: 1 }), reference: null, lane: "tech-house" }).includes("kick density"));
+  assert.equal(step("bass").check({ song: s, facts: facts({}), reference: null, lane: "tech-house" }), null);
+  const offKey = applyOps(s, [{ op: "notes", track: "bass", notes: [[37, 0, 0.5, 100], [39, 1, 0.5, 100], [42, 2, 0.5, 100], [44, 3, 0.5, 100]] }, { op: "notes", track: "sub", notes: [[25, 0, 0.5, 100], [27, 2, 0.5, 100]] }]).song;
+  assert.ok(step("bass").check({ song: offKey, facts: null, reference: null, lane: "tech-house" }).includes("key"));
+  assert.equal(step("craft").check({ song: s, facts: null, reference: null, lane: "tech-house" }), null);
+  assert.ok(step("mix").check({ song: s, facts: facts({ peak: 1.5 }), reference: null, lane: "tech-house" }).includes("clipping"));
+  assert.ok(step("mix").check({ song: s, facts: facts({ bands: { sub: 0.7, low: 0.28, lowMid: 0.01, mid: 0.01, highMid: 0, air: 0 } }), reference: null, lane: "tech-house" }).includes("top end"));
+  const { referenceDelta } = await import("../lib/scorecard.ts");
+  assert.ok(referenceDelta({ lufs: 0, bands: { sub: 0, low: 0 }, tempoRatio: 1, pump: 0 }) === 0);
+  assert.ok(referenceDelta({ lufs: 5, bands: { sub: 0.1, low: -0.1 }, tempoRatio: 1.02, pump: 0.1 }) > 0.5);
+});

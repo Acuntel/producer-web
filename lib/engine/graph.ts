@@ -4,13 +4,14 @@ import * as Tone from "tone";
 import type { Song, AutoParam } from "../song/types";
 import { scheduleEvents, type Ev, type Schedule } from "./schedule";
 import { makeVoice, type Voice } from "./voices";
+import type { Kit } from "./kits";
 
 export type Clips = Map<string, AudioBuffer>;
 export type Graph = { parts: Tone.Part[]; voices: Voice[]; nodes: { dispose: () => void }[]; schedule: Schedule };
 
 type Transport = ReturnType<typeof Tone.getTransport>;
 
-export function buildGraph(song: Song, transport: Transport, clips: Clips = new Map()): Graph {
+export function buildGraph(song: Song, transport: Transport, clips: Clips = new Map(), kit?: Kit): Graph {
   const m = song.master ?? {};
   const masterVol = new Tone.Volume(m.volume ?? 0);
   const masterEq = new Tone.EQ3(m.eq?.low ?? 0, m.eq?.mid ?? 0, m.eq?.high ?? 0);
@@ -41,7 +42,7 @@ export function buildGraph(song: Song, transport: Transport, clips: Clips = new 
     const spans = clipSpans.filter((c) => c.trackId === tr.id);
     if ((!evs || evs.length === 0) && spans.length === 0) continue;
     const buf = tr.clip ? clips.get(tr.clip.clipId) : undefined;
-    const voice = makeVoice(tr, buses, buf);
+    const voice = makeVoice(tr, buses, buf, kit);
     voices.push(voice); voiceByTrack.set(tr.id, voice);
     if (evs && evs.length) {
       // Tone sources demand strictly increasing start times per voice: nudge exact collisions by 1 ms.

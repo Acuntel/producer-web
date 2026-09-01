@@ -6,6 +6,8 @@ import { PERSONA } from "@/lib/brain/persona";
 import { CONTRACT } from "@/lib/brain/contract";
 import { parseBrain } from "@/lib/brain/parse";
 import { buildUserBlock, type ExchangeInput } from "@/lib/brain/context";
+import { PROCESS } from "@/lib/brain/process";
+import { dnaForBrain, findReference } from "@/lib/brain/dna";
 
 export const maxDuration = 60;
 
@@ -21,6 +23,8 @@ export async function POST(req: Request) {
   });
   const convo = (input.messages ?? []).slice(-24);
   const last = convo.pop();
+  input.dna = dnaForBrain(input.song?.lane ?? "tech-house");
+  input.namedRefs = findReference(last?.content ?? "");
   const finalUser = buildUserBlock(input, last?.content ?? "");
 
   try {
@@ -32,6 +36,7 @@ export async function POST(req: Request) {
       system: [
         { type: "text" as const, text: PERSONA },
         { type: "text" as const, text: CONTRACT },
+        { type: "text" as const, text: PROCESS },
         { type: "text" as const, text: `YOUR MIND (compiled producer knowledge: laws, numbers, grammars, song DNA, taste):\n\n${MIND}`, cache_control: { type: "ephemeral" as const } },
       ],
     };
@@ -46,7 +51,7 @@ export async function POST(req: Request) {
     }
     const text = resp.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("");
     const reply = parseBrain(text);
-    return Response.json({ say: reply.say, ops: reply.ops, song: reply.song, action: reply.action, listen: reply.listen, usage: resp.usage });
+    return Response.json({ say: reply.say, ops: reply.ops, song: reply.song, action: reply.action, listen: reply.listen, expect: reply.expect, alternative: reply.alternative, usage: resp.usage });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "unknown error";
     let say = "One second, my brain hiccuped. Say that again?";

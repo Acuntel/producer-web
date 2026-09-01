@@ -11,6 +11,11 @@ export type ExchangeInput = {
   nowPlaying?: unknown;
   taste?: string;           // ledger summary
   clips?: { clipId: string; name: string; bpm?: number; key?: string; durationSec?: number }[];
+  localMoves?: string[];    // what the studio did instantly since the last brain turn
+  verify?: string | null;   // a contradiction the ears found in the last move
+  dna?: string | null;      // measured lane DNA (server adds)
+  namedRefs?: unknown[];    // measured facts for tracks the user named (server adds)
+  score?: string;           // scorecard line
 };
 
 // Strip the song to what the brain needs; notes stay (they are the music).
@@ -44,6 +49,11 @@ export function buildUserBlock(x: ExchangeInput, lastUser: string): string {
   if (x.deltas) parts.push(`DELTAS (render minus reference): ${JSON.stringify(x.deltas)}`);
   if (x.clips && x.clips.length) parts.push(`AUDIO CLIPS IN THE LIBRARY (usable as role "audio" tracks): ${JSON.stringify(x.clips)}`);
   if (x.nowPlaying) parts.push(`NOW PLAYING when they spoke: ${JSON.stringify(x.nowPlaying)}`);
+  if (x.localMoves && x.localMoves.length) parts.push(`LOCAL MOVES since your last turn (already done, acknowledge, do not redo): ${x.localMoves.join("; ")}`);
+  if (x.verify) parts.push(`VERIFY (your ears contradict your last move): ${x.verify}`);
+  if (x.dna) parts.push(`LANE DNA (measured from the user's own collection): ${x.dna}`);
+  if (x.namedRefs && x.namedRefs.length) parts.push(`NAMED REFERENCES the user mentioned (measured from their collection): ${JSON.stringify(x.namedRefs)}`);
+  if (x.score) parts.push(`SESSION SCORECARD: ${x.score}`);
   if (x.taste) parts.push(`TASTE LEDGER:\n${x.taste}`);
   parts.push(`USER SAYS: ${lastUser}`);
   return parts.join("\n\n");

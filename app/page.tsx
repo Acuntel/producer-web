@@ -45,6 +45,8 @@ export default function Studio() {
         <div className="flex items-center gap-1.5">
           <button onClick={() => refInput.current?.click()} className="rounded-full bg-zinc-800 px-3 py-2 text-xs font-semibold" title="Upload a reference track for the producer to hear">🎧 Reference</button>
           <button onClick={() => clipInput.current?.click()} className="rounded-full bg-zinc-800 px-3 py-2 text-xs font-semibold" title="Add a sample or vocal as an audio track">🎤 Sample</button>
+          <button onClick={studio.undo} disabled={!studio.canUndo} className="rounded-full bg-zinc-800 px-2.5 py-2 text-xs font-semibold disabled:opacity-40" title="Undo">↶</button>
+          <button onClick={studio.redo} disabled={!studio.canRedo} className="rounded-full bg-zinc-800 px-2.5 py-2 text-xs font-semibold disabled:opacity-40" title="Redo">↷</button>
           <button onClick={() => setShowSongs(true)} className="rounded-full bg-zinc-800 px-3 py-2 text-xs font-semibold">Songs</button>
           <button onClick={() => void studio.download()} disabled={studio.rendering} className="rounded-full bg-zinc-800 px-3 py-2 text-xs font-semibold disabled:opacity-50">{studio.rendering ? "…" : "⬇"}</button>
         </div>
@@ -58,6 +60,9 @@ export default function Studio() {
             <div className="text-base font-bold">{song.title}</div>
             <div className="text-xs text-zinc-500">{song.bpm} BPM · {song.key} · {song.tracks.length} tracks{song.loop ? " · looping" : ""}{status ? ` · ${status}` : ""}</div>
             {studio.listenHint && <div className="mt-0.5 text-[11px] text-amber-300">👂 {studio.listenHint}</div>}
+            {studio.rollout && <div className="mt-0.5 text-[11px] text-sky-300">🛠 {studio.rollout.title} ({studio.rollout.index + 1}/{studio.rollout.total}) · {studio.rollout.status} <button onClick={studio.cancelRollout} className="ml-1 rounded bg-zinc-800 px-1.5 text-[10px]">stop</button></div>}
+            {studio.ab && <div className="mt-0.5 flex items-center gap-1 text-[11px] text-violet-300">A/B: <button onClick={() => studio.pickAb("a")} className={`rounded px-1.5 ${studio.ab.playing === "a" ? "bg-violet-500 text-black" : "bg-zinc-800"}`}>A</button><button onClick={() => studio.pickAb("b")} className={`rounded px-1.5 ${studio.ab.playing === "b" ? "bg-violet-500 text-black" : "bg-zinc-800"}`}>B</button><button onClick={() => studio.pickAb(studio.ab!.playing === "a" ? "keepA" : "keepB")} className="rounded bg-zinc-800 px-1.5">keep {studio.ab.playing.toUpperCase()}</button></div>}
+            {studio.score && <div className="mt-0.5 text-[10px] text-zinc-500">{studio.score}</div>}
           </div>
           <button onClick={orb} disabled={starting} aria-label={!started ? "Start" : paused ? "Play" : "Pause"}
             className={`grid h-20 w-20 place-items-center rounded-full text-3xl font-black text-black shadow-xl transition-transform active:scale-95 ${!started || paused ? "bg-amber-500" : "bg-emerald-500"}`}

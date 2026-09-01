@@ -111,6 +111,22 @@ async function main() {
   assert.ok(changed, "the brain should have changed the song");
   const facts = await waitFor(`(() => { const t = document.body.innerText; return /LUFS/.test(t) ? t.match(/(\\d+) BPM[^\\n]*LUFS[^\\n]*/)?.[0] ?? '' : ''; })()`, 60000, "ears panel");
   console.log(`[e2e] ears panel: ${facts}`);
+  if (process.env.E2E_ROLLOUT) {
+    console.log("[e2e] rollout: new song via the process engine");
+    const titleBefore = await evalJs(`JSON.parse(localStorage.getItem('producer.song.v4')).title`);
+    await evalJs(`(() => { const i = document.querySelector('footer input'); const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(i, "new song, KETTAMA style, surprise me"); i.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+    await sleep(400);
+    await evalJs(`(() => { const i = document.querySelector('footer input'); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; })()`);
+    await waitFor(`document.body.innerText.includes('🛠')`, 60000, "rollout to start");
+    const t1 = Date.now();
+    while (Date.now() - t1 < 420000) { await sleep(5000); const line = await evalJs(`(document.body.innerText.match(/🛠[^\n]*/) || [''])[0]`); if (line) console.log(`[e2e]   ${line}`); else break; }
+    const doc = JSON.parse(await evalJs(`localStorage.getItem('producer.song.v4')`));
+    console.log(`[e2e] rollout result: "${doc.title}" ${doc.bpm} BPM ${doc.key} ${doc.lane} · ${doc.tracks.length} tracks · ${doc.sections.length} sections · autos ${doc.sections.reduce((a, s) => a + (s.automation?.length ?? 0), 0)}`);
+    assert.ok(doc.title !== titleBefore || doc.tracks.length >= 6, "rollout should have produced a new song");
+    assert.ok(doc.tracks.length >= 6 && doc.sections.length >= 5, "new song needs tracks and sections");
+    const brain = await evalJs(`JSON.stringify((window.__brain ?? []).map((c) => ({ say: c.say, action: c.action })))`);
+    console.log(`[e2e] replies: ${brain.slice(0, 400)}`);
+  }
   const health = await (await fetch(`${BASE}/api/health`)).json();
   console.log(`[e2e] health: ${JSON.stringify(health)}`);
   console.log("[e2e] ALL PASSED");

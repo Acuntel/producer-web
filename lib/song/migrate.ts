@@ -8,14 +8,15 @@ export function migrateSong(input: unknown): Song | null {
   const s = input as Loose;
   if (!Array.isArray(s.tracks)) return null;
   const tracks = (s.tracks as Loose[]).map(migrateTrack).filter((t): t is Track => t !== null);
-  if (tracks.length === 0) return null;
+  const hasSections = Array.isArray(s.sections) && (s.sections as unknown[]).length > 0;
+  if (tracks.length === 0 && !hasSections) return null; // a skeleton (sections, no tracks yet) is allowed mid-build
   let sections = Array.isArray(s.sections) ? (s.sections as Loose[]).map(migrateSection).filter((x): x is Section => x !== null) : [];
   let arrangement = Array.isArray(s.arrangement) ? (s.arrangement as string[]).filter((id) => sections.some((x) => x.id === id)) : [];
-  if (sections.length === 0 || arrangement.length === 0) {
+  if (sections.length === 0) {
     // v1: one loop of everything.
     sections = [{ id: "loop", name: "Loop", bars: 8, active: tracks.map((t) => t.id), fill: "none" }];
     arrangement = ["loop"];
-  }
+  } else if (arrangement.length === 0) arrangement = sections.map((x) => x.id);
   const h = (s.humanize as Loose) ?? {};
   return {
     version: 3,

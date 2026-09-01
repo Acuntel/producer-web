@@ -6,7 +6,7 @@ import { kickDensityIn } from "./rhythm";
 import { chordsPerBar } from "./tonal";
 
 export type SectionLabel = "intro" | "groove" | "build" | "drop" | "break" | "outro" | "section";
-export type SectionFacts = { start: number; end: number; label: SectionLabel; lufs: number; energy: number; bands: BandShares; hasKick: boolean; chords: string[] };
+export type SectionFacts = { start: number; end: number; label: SectionLabel; lufs: number; energy: number; bands: BandShares; hasKick: boolean; chords: string[]; centroidHz?: number; pump?: number; kickDensity?: number; swing?: number; peak?: number };
 export type Structure = { sections: SectionFacts[]; energy: number[]; dropAt: number | null; barsTotal: number };
 
 function barFeatures(fr: Frames, barSec: number, offset: number, bars: number): { feats: Float32Array[]; rms: Float32Array; full: Float32Array } {

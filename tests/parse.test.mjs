@@ -23,6 +23,6 @@ test("a full song wins only when ops are absent, and gets migrated", () => {
 test("actions normalize", () => {
   assert.deepEqual(normalizeAction("play"), { type: "play" });
   assert.equal(normalizeAction({ type: "dance" }), null);
-  assert.deepEqual(normalizeAction({ type: "recordHum", beats: 8, track: "lead" }), { type: "recordHum", section: undefined, bar: undefined, beats: 8, track: "lead" });
+  assert.deepEqual(normalizeAction({ type: "recordHum", beats: 8, track: "lead" }), { type: "recordHum", section: undefined, bar: undefined, beats: 8, track: "lead", kind: undefined });
   assert.equal(extractJson("no json here"), null);
 });

@@ -5,6 +5,7 @@ import type { Song } from "../song/types";
 import { buildGraph, type Clips, type Graph } from "./graph";
 import { locate, loopBounds, type SectionSpan } from "./schedule";
 import { loadClipsFor } from "./clips";
+import { getKit, type Kit } from "./kits";
 
 export type Position = { section: string; sectionId: string; index: number; barInSection: number; beatInBar: number; absBar: number; beat: number };
 
@@ -14,6 +15,7 @@ export class Engine {
   private sectionStarts: SectionSpan[] = [];
   private builtBeats = 0;
   private clips: Clips = new Map();
+  private kit: Kit | null = null;
   playing = false;
   onSection: ((name: string, index: number, total: number) => void) | null = null;
 
@@ -22,6 +24,7 @@ export class Engine {
   async start(song: Song) {
     await Tone.start();
     await this.prepareClips(song);
+    this.kit = await getKit(song.lane);
     this.buildLive(song);
     this.transport.start();
     this.playing = true;
@@ -34,6 +37,7 @@ export class Engine {
   // Rebuild playing OR paused, keeping the groove position (clamped to the new length).
   async update(song: Song) {
     await this.prepareClips(song);
+    this.kit = await getKit(song.lane);
     const pos = this.transport.ticks;
     this.teardown();
     this.buildLive(song);
@@ -80,7 +84,7 @@ export class Engine {
   }
 
   private buildLive(song: Song) {
-    const g = buildGraph(song, this.transport, this.clips);
+    const g = buildGraph(song, this.transport, this.clips, this.kit ?? undefined);
     this.graph = g;
     this.sectionStarts = g.schedule.sectionStarts;
     this.builtBeats = g.schedule.totalBeats;
