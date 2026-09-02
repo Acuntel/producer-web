@@ -4,6 +4,6 @@ export async function GET() {
     brain: !!process.env.ANTHROPIC_API_KEY,
     voice: !!process.env.ELEVENLABS_API_KEY,
     model: process.env.PRODUCER_MODEL || "claude-opus-5",
-    version: "v8-ears",
+    version: "v9-process",
   });
 }
