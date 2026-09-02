@@ -5,4 +5,7 @@ export * from "./ops";
 export { migrateSong, isNote, cleanNote } from "./migrate";
 export * from "./harmony";
 export * from "./history";
-export { patternFor } from "./pattern";
+export * from "./pattern";
+export * from "./groove";
+export * from "./prng";
+export { type DawOp } from "./ops-daw";

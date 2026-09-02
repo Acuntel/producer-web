@@ -2,7 +2,7 @@
 // Runs a rollout: step by step, each its own inference, the ears grading every
 // step; steps that touch different tracks run concurrently.
 import { useCallback, useRef, useState } from "react";
-import { applyOps, migrateSong, type Song } from "@/lib/song";
+import { applyOps, migrateSong, withReferenceGroove, type Song } from "@/lib/song";
 import type { MusicFacts } from "@/lib/ears";
 import { ROLLOUTS, groupSteps, scopeText, type RolloutKind, type Step } from "@/lib/brain/rollouts";
 import { logMoveScore } from "@/lib/scorecard";
@@ -61,7 +61,7 @@ export function useRollout(deps: Deps) {
         const base = deps.getSong();
         let next: Song | null = null, applied = 0, skipped = 0;
         if (r.song) { next = migrateSong(r.song); if (next && lane) next.lane = lane; if (next && next.tracks.length === 0) next = withStarterBeat(next); }
-        else if (Array.isArray(r.ops)) { const res = applyOps(base, r.ops); next = res.song; applied = res.applied; skipped = res.skipped.length; if (res.skipped.length) console.warn("rollout skipped ops", step.id, res.skipped); }
+        else if (Array.isArray(r.ops)) { const res = applyOps(base, withReferenceGroove(r.ops, ref?.facts.groove.template)); next = res.song; applied = res.applied; skipped = res.skipped.length; if (res.skipped.length) console.warn("rollout skipped ops", step.id, res.skipped); }
         if (next) await deps.applySong(next, { silent: true });
         status(step.title, "listening");
         const after = next ? await deps.hearNow(next).catch(() => null) : facts;

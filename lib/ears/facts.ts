@@ -7,13 +7,14 @@ import { chordsPerBar, findKey, meanChroma, progressionOf } from "./tonal";
 import { analyzeSpectrum, type BandShares } from "./spectrum";
 import { analyzeStructure, type SectionFacts, type SectionLabel } from "./structure";
 import { describe } from "./describe";
+import { extractGroove, type GrooveTemplate } from "./groove";
 
-export type { BandShares, SectionFacts, SectionLabel };
+export type { BandShares, SectionFacts, SectionLabel, GrooveTemplate };
 
 export type MusicFacts = {
   duration: number; sampleRate: number;
   tempo: { bpm: number; confidence: number; alt: number; beatOffset: number };
-  groove: { swing: number; transientsPerBeat: number; pump: number; kickDensity: number };
+  groove: { swing: number; transientsPerBeat: number; pump: number; kickDensity: number; template?: GrooveTemplate };
   key: { name: string; tonic: string; mode: "major" | "minor"; confidence: number; alt: string };
   chords: { perBar: string[]; progression: string[] };
   loudness: { integrated: number; shortTermMax: number; range: number; crest: number; peak: number };
@@ -42,10 +43,12 @@ export function hear(channels: Float32Array[], sampleRate: number, opts: HearOpt
   const perBar = chordsPerBar(fr, rhythm.barSec, rhythm.downbeatOffset, duration, key);
   const spectrum = analyzeSpectrum(fr, chans.length >= 2 ? chans : undefined);
   const structure = analyzeStructure(fr, loud, rhythm.barSec, rhythm.downbeatOffset, duration, perBar);
+  // The groove map: where the hats and the top of the claps (onsets above 4 kHz, where the swing lives) land in each 16th slot.
+  const template = extractGroove(fine.onsetHi, fine.fps, rhythm.bpm, rhythm.downbeatOffset);
   const facts: MusicFacts = {
     duration: Math.round(duration * 100) / 100, sampleRate,
     tempo: { bpm: rhythm.bpm, confidence: rhythm.confidence, alt: rhythm.alt, beatOffset: rhythm.beatOffset },
-    groove: { swing: rhythm.swing, transientsPerBeat: rhythm.transientsPerBeat, pump: rhythm.pump, kickDensity: rhythm.kickDensity },
+    groove: { swing: rhythm.swing, transientsPerBeat: rhythm.transientsPerBeat, pump: rhythm.pump, kickDensity: rhythm.kickDensity, template },
     key: { name: key.name, tonic: key.tonic, mode: key.mode, confidence: key.confidence, alt: key.alt },
     chords: { perBar, progression: progressionOf(perBar) },
     loudness: { integrated: r1(loud.integrated), shortTermMax: r1(loud.shortTermMax), range: r1(loud.range), crest: r1(loud.crest), peak: r1(loud.peak) },

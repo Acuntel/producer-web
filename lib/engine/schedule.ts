@@ -1,9 +1,13 @@
-// Turn a SongDoc into absolute-beat events: pattern variants, solo/mute, fills,
-// deterministic humanization, transposition, automation ramps, clip spans.
+// Turn a SongDoc into absolute-beat events: pattern variants and playlists,
+// solo/mute, fills, deterministic humanization (groove pool, note chance,
+// velocity deviation), transposition, automation ramps, clip spans.
 import type { Song, Track, Note, Automation, Section } from "../song/types";
 import { isDrum } from "../song/types";
 import { patternFor } from "../song/pattern";
+import { streamFor } from "../song/prng";
+import { grooveFor, applyGroove } from "../song/groove";
 export { patternFor };
+export { mulberry32 } from "../song/prng";
 
 export type Ev = { beat: number; note: Note };
 export type SectionSpan = { id: string; name: string; startBeat: number; beats: number; fill: Section["fill"]; energy?: number };
@@ -19,29 +23,64 @@ export type Schedule = {
   audible: Set<string>;
 };
 
-// Deterministic PRNG: same seed, same feel, forever.
-export function mulberry32(seed: number) {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0; a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+// Roles whose velocities carried the legacy humanize.velVar looseness; a track's own velDev overrides it.
+const LOOSE_ROLES = ["hat", "openhat", "snare", "perc"];
 
 export function audibleTracks(song: Song): Set<string> {
   const anySolo = song.tracks.some((t) => t.solo && !t.mute);
   return new Set(song.tracks.filter((t) => !t.mute && (!anySolo || t.solo)).map((t) => t.id));
 }
 
+type Feel = { beatSec: number; clapLate: number; pocket: number; velVar: number; seed: number };
+
+// One track in one section: tile the pattern bar by bar (playlists may change it every bar,
+// the loop phase is kept so 8-beat patterns play whole), then humanize each hit from the
+// track's own seeded stream: chance roll, groove timing and accents, velocity deviation.
+function trackEvents(song: Song, sec: Section, tr: Track, cursor: number, feel: Feel, list: Ev[], kickBeats: number[]) {
+  const secBeats = sec.bars * 4;
+  const loop = Math.max(0.25, tr.loopBeats);
+  const rng = streamFor(feel.seed, `${sec.id}:${tr.id}`);
+  const groove = grooveFor(tr, song);
+  const transpose = tr.transpose ?? 0;
+  const dev = tr.velDev ?? (LOOSE_ROLES.includes(tr.role) ? Math.round(feel.velVar * 80) : 0);
+  const cut = sec.fill === "cut";
+  for (let bar = 0; bar < sec.bars; bar++) {
+    const notes = patternFor(tr, sec, bar, feel.seed);
+    if (notes.length === 0) continue;
+    const b0 = bar * 4, b1 = b0 + 4;
+    const r0 = Math.floor(b0 / loop), r1 = Math.ceil(b1 / loop);
+    for (let r = r0; r < r1; r++) {
+      for (const n of notes) {
+        const local = r * loop + n[1];
+        if (local < b0 || local >= b1 || local >= secBeats) continue;
+        // fill "cut": kick/bass/sub out for the final 2 beats, everything out for the last half beat.
+        if (cut && local >= secBeats - 2 && ["kick", "bass", "sub"].includes(tr.role)) continue;
+        if (cut && local >= secBeats - 0.5) continue;
+        const chance = n[4] ?? tr.chance ?? 1;
+        if (chance < 1 && rng() >= chance) continue;
+        const hit = applyGroove(local, n[3], groove, rng, feel.beatSec);
+        let beat = cursor + hit.beat;
+        let vel = hit.vel;
+        if (tr.role === "clap") beat += feel.clapLate;
+        if (tr.role !== "kick") beat += feel.pocket;
+        if (dev > 0) vel = Math.max(1, Math.min(127, vel + Math.round((rng() * 2 - 1) * dev)));
+        const midi = isDrum(tr.role) || tr.role === "audio" ? n[0] : n[0] + transpose;
+        list.push({ beat: Math.max(0, beat), note: [midi, n[1], n[2], vel] });
+        if (tr.role === "kick") kickBeats.push(beat);
+      }
+    }
+  }
+}
 
 export function scheduleEvents(song: Song): Schedule {
-  const rng = mulberry32(song.humanize.seed);
-  const swingShift = (song.humanize.swing - 0.5) * 0.5; // beats added to offbeat 16ths
   const beatSec = 60 / song.bpm;
-  const clapLate = (song.humanize.clapLateMs / 1000) / beatSec;
-  const pocket = ((song.humanize.pocketMs ?? 0) / 1000) / beatSec;
+  const feel: Feel = {
+    beatSec,
+    clapLate: (song.humanize.clapLateMs / 1000) / beatSec,
+    pocket: ((song.humanize.pocketMs ?? 0) / 1000) / beatSec,
+    velVar: song.humanize.velVar,
+    seed: song.humanize.seed,
+  };
   const audible = audibleTracks(song);
 
   const perTrack = new Map<string, Ev[]>();
@@ -60,39 +99,13 @@ export function scheduleEvents(song: Song): Schedule {
 
     for (const tr of song.tracks) {
       if (!audible.has(tr.id) || !sec.active.includes(tr.id)) continue;
-      const notes = patternFor(tr, sec);
       if (tr.role === "audio" && !tr.clip?.oneShot) {
         clipSpans.push({ trackId: tr.id, startBeat: cursor, beats: secBeats });
         continue;
       }
-      if (notes.length === 0) continue;
       const list = perTrack.get(tr.id) ?? [];
-      const loop = Math.max(0.25, tr.loopBeats);
-      const reps = Math.ceil(secBeats / loop);
-      const transpose = tr.transpose ?? 0;
-      for (let r = 0; r < reps; r++) {
-        for (const n of notes) {
-          const local = r * loop + n[1];
-          if (local >= secBeats) continue;
-          // fill "cut": kick/bass/sub out for the final 2 beats, everything out for the last half beat.
-          if (sec.fill === "cut" && local >= secBeats - 2 && ["kick", "bass", "sub"].includes(tr.role)) continue;
-          if (sec.fill === "cut" && local >= secBeats - 0.5) continue;
-          let beat = cursor + local;
-          let vel = n[3];
-          const frac = Math.round((n[1] % 0.5) * 100) / 100;
-          const isOffbeat16 = frac === 0.25;
-          if (isOffbeat16 && ["hat", "openhat", "perc", "bass", "pluck", "arp", "snare"].includes(tr.role)) beat += swingShift;
-          if (tr.role === "clap") beat += clapLate;
-          if (tr.role !== "kick") beat += pocket;
-          if (["hat", "openhat", "snare", "perc"].includes(tr.role) && song.humanize.velVar > 0) {
-            vel = Math.max(15, Math.min(127, Math.round(vel * (1 + (rng() - 0.5) * 2 * song.humanize.velVar))));
-          }
-          const midi = isDrum(tr.role) || tr.role === "audio" ? n[0] : n[0] + transpose;
-          list.push({ beat: Math.max(0, beat), note: [midi, n[1], n[2], vel] });
-          if (tr.role === "kick") kickBeats.push(beat);
-        }
-      }
-      perTrack.set(tr.id, list);
+      trackEvents(song, sec, tr, cursor, feel, list, kickBeats);
+      if (list.length) perTrack.set(tr.id, list);
     }
     // fill "roll": clap crescendo through the final 2 beats.
     if (sec.fill === "roll") {

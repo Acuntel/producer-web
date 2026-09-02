@@ -9,8 +9,9 @@ export type Role =
   | "bass" | "sub" | "chords" | "stab" | "pad" | "lead" | "pluck" | "arp" | "fx"
   | "audio";
 
-// [midi, startBeat, durBeats, velocity 1-127]. For audio one-shots midi = semitone offset (60 = unpitched).
-export type Note = [number, number, number, number];
+// [midi, startBeat, durBeats, velocity 1-127, chance 0-1?]. For audio one-shots midi = semitone offset (60 = unpitched).
+// chance (Live 11 style) is the probability the hit plays on each repetition; absent = 1. Seeded, so a render never changes between plays.
+export type Note = [number, number, number, number, number?];
 
 export type Wave = "sawtooth" | "square" | "triangle" | "sine" | "fatsawtooth" | "fatsquare" | "fattriangle" | "pwm" | "epiano" | "organ";
 
@@ -59,6 +60,17 @@ export type AudioClip = {
   durationSec?: number;
 };
 
+// Groove Pool: a 16-slot timing and accent map over one bar of 16ths (Ableton, MPC, 909).
+export type GrooveName = "straight" | "swing16" | "swing8" | "mpc16" | "mpc8" | "909" | "sp1200" | "garage-skip" | "custom";
+export type Groove = {
+  name: GrooveName;
+  amount: number;      // 0-1.3, Ableton's global amount; 1 = the template as written
+  velocity?: number;   // -1..1, how much the template's accents shape velocity (0 = timing only)
+  random?: number;     // 0-12 ms of seeded per-hit timing jitter
+  timing?: number[];   // 16 slots, beats of shift at amount 1 (custom / extracted from a reference)
+  accents?: number[];  // 16 slots, -1..1 accent at velocity 1
+};
+
 export type Track = {
   id: string;
   name: string;
@@ -74,6 +86,9 @@ export type Track = {
   fx?: Fx;
   clip?: AudioClip;    // role "audio"
   transpose?: number;  // semitones applied to every note
+  groove?: Groove | null; // per-track groove; null = straight; absent = the song groove (kick, clap, sub stay straight)
+  velDev?: number;     // 0-40 velocity steps of seeded per-hit deviation (Live 11 Velocity Deviation)
+  chance?: number;     // 0-1 track-wide default chance for notes without their own
   color?: string;
 };
 
@@ -90,13 +105,21 @@ export type Automation = {
   endBeat?: number;    // within the section, default section end
 };
 
+// Pattern playlists per section (Follow Actions): a plain name, a sequence of
+// names, a fill pattern every N bars, or a seeded pick from a list.
+export type VariantPlan =
+  | string
+  | { sequence: string[]; barsEach?: number }                       // A B A C, each for barsEach bars (default 8)
+  | { every: number; pattern: string; bars?: number; base?: string } // the pattern in the last `bars` of every `every` bars, base elsewhere
+  | { any: string[]; barsEach?: number };                            // seeded random pick per block
+
 export type Section = {
   id: string;
   name: string;
   bars: number;
   active: string[];                    // track ids sounding
   fill?: "cut" | "roll" | "none" | "riser";
-  variants?: Record<string, string>;   // trackId -> pattern name
+  variants?: Record<string, VariantPlan>; // trackId -> pattern name or playlist plan
   automation?: Automation[];
   energy?: number;                     // 0-1 intent, for the brain and the visuals
   note?: string;                       // producer note ("euphoric break, pads swell")
@@ -117,7 +140,7 @@ export type Master = {
 export type LoopRegion = { section?: string; startBar?: number; endBar?: number } | null;
 
 export type Humanize = {
-  swing: number;       // 0.50 straight .. 0.67 triplet, on offbeat 16ths
+  swing: number;       // 0.50 straight .. 0.67 triplet, on offbeat 16ths (legacy dial; song.groove is the full Groove Pool)
   velVar: number;      // 0-0.3 velocity looseness
   clapLateMs: number;  // pocket
   seed: number;        // same seed = same feel forever
@@ -134,6 +157,7 @@ export type Song = {
   key: string;
   lane: Lane;
   humanize: Humanize;
+  groove?: Groove | null; // the song groove; absent = swing16 derived from humanize.swing, null = straight
   tracks: Track[];
   sections: Section[];
   arrangement: string[];

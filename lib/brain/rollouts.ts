@@ -97,9 +97,9 @@ export function groupSteps(steps: Step[]): Step[][] {
 
 export function scopeText(step: Step): string {
   if (step.scope === "all") return "any op";
-  if (step.scope === "arrangement") return "section, removeSection, arrange, active, variant, automate, clearAutomation, loop, title, tempo, key, humanize, note";
-  if (step.scope === "mix") return "set (volume, fx.*, synth.*, master.*), mute, unmute, humanize";
-  return `addTrack / notes / sectionNotes / set / removeTrack for roles ${step.scope.join(", ")} plus active/variant for those tracks`;
+  if (step.scope === "arrangement") return "section, removeSection, arrange, active, variant (names or playlist plans), fill, automate, clearAutomation, loop, title, tempo, key, humanize, groove, note";
+  if (step.scope === "mix") return "set (volume, fx.*, synth.*, master.*), mute, unmute, humanize, groove, velDev";
+  return `addTrack / notes / grid / sectionNotes / set / removeTrack for roles ${step.scope.join(", ")} plus active / variant / fill / chance / velDev / groove for those tracks`;
 }
 
 export const patternSummary = (song: Song) => song.sections.map((s) => `${s.id}: ${s.active.map((id) => { const t = song.tracks.find((x) => x.id === id); return t ? `${id}(${patternFor(t, s).length}n)` : id; }).join(" ")}`).join("; ");

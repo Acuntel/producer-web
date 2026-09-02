@@ -13,6 +13,7 @@ Tone.js; `browser.ts` is the only file that touches Web Audio.
 | `tonal.ts` | key from two chroma flavours (constant-Q and harmonic salience, both tuned to the track) scored against Temperley profiles with a natural-minor seventh; confidence and alternate; key-aware per-bar triad chords; condensed progression; Camelot conversion |
 | `spectrum.ts` | perceptual band shares (sub <60, low 60-250, lowMid 250-500, mid 500-2k, highMid 2-6k, air >6k; gains calibrated on the DJ set so a typical master reads about 0.25/0.30/0.15/0.15/0.10/0.05), centroid, mud, harshness, stereo width |
 | `structure.ts` | per-bar features, self-similarity novelty, segmentation (min 4 bars), labels intro/build/drop/break/groove/outro, energy contour, first drop |
+| `groove.ts` | Extract Groove: folds the >4 kHz onsets (hats, the top of claps) into the 16 slots of one bar and reads each slot's timing (beats late or early) and accent; only slots with a stable hit in most bars count. Feeds `facts.groove.template` and the `{"op":"groove","from":"reference"}` move |
 | `describe.ts` | deterministic producer read of the facts |
 | `compare.ts` | render versus reference deltas and the sentence a mix engineer would say |
 | `facts.ts` | `hear()` orchestration and the `MusicFacts` type |

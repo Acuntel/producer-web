@@ -3,7 +3,7 @@
 // ears, verify-after-move, A/B auditions, rollouts, references, clips, taste,
 // history and the scorecard. The page only renders.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SEED_SONG, applyOps, migrateSong, History, diffSongs, type Song, type Note, type Role } from "@/lib/song";
+import { SEED_SONG, applyOps, migrateSong, withReferenceGroove, History, diffSongs, type Song, type Note, type Role } from "@/lib/song";
 import type { Engine, Position } from "@/lib/engine";
 import type { MusicFacts } from "@/lib/ears";
 import { logMove, setVerdict, inferVerdictFromUtterance, tasteSummary, logPair } from "@/lib/taste";
@@ -60,8 +60,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const abRef = useRef<AB>(null);
   const localMovesRef = useRef<string[]>([]);
   const verifyingRef = useRef(false);
-  useEffect(() => { songRef.current = song; }, [song]);
-  useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => { songRef.current = song; }, [song]); useEffect(() => { messagesRef.current = messages; }, [messages]);
 
   useEffect(() => {
     try {
@@ -233,11 +232,12 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       if (isE2E()) { const w = window as unknown as { __brain?: unknown[] }; (w.__brain ??= []).push(data); }
       setMessages((m) => [...m, { role: "assistant", content: data.say }]);
       let ns: Song | null = null, applied = 0, skipped = 0;
-      if (data.ops && Array.isArray(data.ops)) { const res = applyOps(songRef.current, data.ops); ns = res.song; applied = res.applied; skipped = res.skipped.length; }
+      const refGroove = referenceRef.current?.facts.groove.template; // {"op":"groove","from":"reference"} borrows the reference's measured timing
+      if (data.ops && Array.isArray(data.ops)) { const res = applyOps(songRef.current, withReferenceGroove(data.ops, refGroove)); ns = res.song; applied = res.applied; skipped = res.skipped.length; }
       else if (data.song) ns = migrateSong(data.song);
       if (ns) await setSong(ns, { silent: !!data.expect, label: data.say.slice(0, 40) });
       if (ns && data.alternative && Array.isArray(data.alternative)) {
-        const b = applyOps(cur, data.alternative).song;
+        const b = applyOps(cur, withReferenceGroove(data.alternative, refGroove)).song;
         abRef.current = { a: ns, b, playing: "a", label: data.say.slice(0, 60) }; setAb({ ...abRef.current });
       } else if (ns) { abRef.current = null; setAb(null); }
       setListenHint(data.listen ?? null);
@@ -288,8 +288,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
 
   const jump = useCallback(async (sectionId: string) => { const eng = await getEngine(); if (eng.goto(sectionId)) flash(`Jumped to ${songRef.current.sections.find((s) => s.id === sectionId)?.name ?? sectionId}`); }, [flash, getEngine]);
   const verdict = useCallback((v: "liked" | "killed") => { if (!lastMoveId) return; setVerdict(lastMoveId, v); flash(v === "liked" ? "Kept" : "Killed"); void send(v === "liked" ? "Yes, keep that." : "No, kill that, go a different direction."); }, [flash, lastMoveId, send]);
-  const undo = useCallback(() => void tryLocal("undo"), [tryLocal]);
-  const redo = useCallback(() => void tryLocal("redo"), [tryLocal]);
+  const undo = useCallback(() => void tryLocal("undo"), [tryLocal]); const redo = useCallback(() => void tryLocal("redo"), [tryLocal]);
   const pickAb = useCallback((which: "a" | "b" | "keepA" | "keepB") => void tryLocal(which === "a" ? "play a" : which === "b" ? "play b" : which === "keepA" ? "keep a" : "keep b"), [tryLocal]);
   const { loadSaved, saveNow, download } = useLibraryActions({ autoSave, flash, say, setSong, started, getSong: () => songRef.current, setRendering });
   const { addReference, addClip } = useUploads({ flash, send, setSong, setClips, factsRef, referenceRef, setReference, setDeltaText, getSong: () => songRef.current });
