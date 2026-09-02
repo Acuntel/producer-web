@@ -2,6 +2,8 @@
 // applyOps never throws on bad input; unknown ops are reported and skipped.
 import type { Song, Track, Section, Note, Automation, LoopRegion, Role } from "./types";
 import { isNote, cleanNote } from "./migrate";
+import { applyDawOp, findTrack, findSection, setChance, type DawOp } from "./ops-daw";
+import { swingToAmount } from "./groove";
 
 export type Op =
   | { op: "set"; track: string; path: string; value: unknown }               // track id | "master" | "song"
@@ -13,7 +15,6 @@ export type Op =
   | { op: "removeSection"; section: string }
   | { op: "arrange"; arrangement: string[] }
   | { op: "active"; section: string; add?: string[]; remove?: string[] }
-  | { op: "variant"; section: string; track: string; pattern: string | null }
   | { op: "automate"; section: string; automation: Automation }
   | { op: "clearAutomation"; section: string; track?: string }
   | { op: "transpose"; track?: string; semitones: number }
@@ -25,8 +26,9 @@ export type Op =
   | { op: "shift"; track: string; beats: number; pattern?: string }
   | { op: "velocity"; track: string; scale?: number; add?: number; pattern?: string }
   | { op: "sectionNotes"; section: string; track: string; notes: Note[]; loopBeats?: number }   // notes for ONE section only (auto pattern variant)
-  | { op: "grid"; track: string; steps: string; midi?: number; stepBeats?: number; dur?: number; vel?: Record<string, number>; pattern?: string; section?: string; role?: Role; name?: string; volume?: number; duck?: boolean }
-  | { op: "note"; note: string };
+  | { op: "grid"; track: string; steps: string; midi?: number; stepBeats?: number; dur?: number; vel?: Record<string, number>; chance?: Record<string, number>; pattern?: string; section?: string; role?: Role; name?: string; volume?: number; duck?: boolean }
+  | { op: "note"; note: string }
+  | DawOp;
 
 export type ApplyResult = { song: Song; applied: number; skipped: string[] };
 
@@ -52,8 +54,8 @@ const describeOp = (raw: unknown) => {
   try { return JSON.stringify(raw).slice(0, 120); } catch { return "op"; }
 };
 
-const track = (s: Song, id: string) => s.tracks.find((t) => t.id === id || t.name.toLowerCase() === id.toLowerCase());
-const section = (s: Song, id: string) => s.sections.find((x) => x.id === id || x.name.toLowerCase() === id.toLowerCase());
+const track = findTrack;
+const section = findSection;
 
 function applyOne(s: Song, o: Op): boolean {
   if (!o || typeof o !== "object" || typeof o.op !== "string") return false;
@@ -149,13 +151,6 @@ function applyOne(s: Song, o: Op): boolean {
       for (const id of o.remove ?? []) { const t = track(s, id); if (t) sec.active = sec.active.filter((x) => x !== t.id); }
       return true;
     }
-    case "variant": {
-      const sec = section(s, o.section); const t = track(s, o.track);
-      if (!sec || !t) return false;
-      sec.variants ??= {};
-      if (o.pattern === null || o.pattern === "A") delete sec.variants[t.id]; else sec.variants[t.id] = o.pattern;
-      return true;
-    }
     case "automate": {
       const sec = section(s, o.section);
       const a = o.automation;
@@ -197,7 +192,10 @@ function applyOne(s: Song, o: Op): boolean {
         const v = /[1-9]/.test(ch) ? Math.round((Number(ch) / 9) * 127) : vel[ch];
         if (!v) continue;
         const dur = o.dur ?? (ch === "o" || ch === "O" ? stepBeats * 1.6 : stepBeats * 0.5);
-        notes.push([midi, i * stepBeats, dur, Math.max(1, Math.min(127, v))]);
+        const note: Note = [midi, i * stepBeats, dur, Math.max(1, Math.min(127, v))];
+        const chance = o.chance?.[ch];
+        if (typeof chance === "number" && Number.isFinite(chance)) setChance(note, chance);
+        notes.push(note);
       }
       const loopBeats = steps.length * stepBeats;
       let t = track(s, o.track);
@@ -225,9 +223,13 @@ function applyOne(s: Song, o: Op): boolean {
       return true;
     }
     case "note": { if (typeof o.note !== "string") return false; s.notes = o.note.slice(0, 600); return true; }
+    case "groove": case "variant": case "fill": case "chance": case "velDev": return applyDawOp(s, o);
     case "humanize": {
       const h = s.humanize;
-      if (typeof o.swing === "number") h.swing = clamp(o.swing, 0.5, 0.7);
+      if (typeof o.swing === "number") {
+        h.swing = clamp(o.swing, 0.5, 0.7);
+        if (s.groove) s.groove.amount = swingToAmount(h.swing); // the legacy dial rescales the song groove
+      }
       if (typeof o.velVar === "number") h.velVar = clamp(o.velVar, 0, 0.35);
       if (typeof o.clapLateMs === "number") h.clapLateMs = clamp(o.clapLateMs, -20, 30);
       if (typeof o.seed === "number") h.seed = Math.round(o.seed);

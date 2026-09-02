@@ -31,7 +31,7 @@ function barProfile(song: Song, sec: Section, bar: number): Float64Array {
   const anySolo = song.tracks.some((t) => t.solo && !t.mute);
   for (const tr of song.tracks) {
     if (!isMelodic(tr.role) || tr.mute || (anySolo && !tr.solo) || !sec.active.includes(tr.id)) continue;
-    const notes: Note[] = patternFor(tr, sec);
+    const notes: Note[] = patternFor(tr, sec, bar, song.humanize.seed);
     const loop = Math.max(0.25, tr.loopBeats);
     const weight = ["bass", "sub"].includes(tr.role) ? 1.4 : ["chords", "pad", "stab"].includes(tr.role) ? 1.2 : 0.8;
     for (let r = 0; r * loop < b1; r++) {

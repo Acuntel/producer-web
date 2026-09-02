@@ -1,6 +1,6 @@
 // What the brain sees each exchange: the song, what the ears measured, the
 // reference, the deltas, now-playing, and the taste ledger. Compact by design.
-import type { Song } from "../song/types";
+import type { Song, Note } from "../song/types";
 
 export type ExchangeInput = {
   messages: { role: "user" | "assistant"; content: string }[];
@@ -20,14 +20,17 @@ export type ExchangeInput = {
   critic?: string | null;   // open critic notes (recommendations; the user decides)
 };
 
+// [midi, start, dur, vel, chance?] rounded for the prompt; the optional chance survives.
+const roundNote = (n: Note) => n.map((x, i) => (typeof x !== "number" ? x : i === 0 || i === 3 ? Math.round(x) : Math.round(x * 100) / 100));
+
 // Strip the song to what the brain needs; notes stay (they are the music).
 export function compactSong(song: Song): unknown {
   return {
     ...song,
     tracks: song.tracks.map((t) => ({
       ...t,
-      notes: t.notes.map((n) => n.map((x, i) => (i === 0 || i === 3 ? Math.round(x) : Math.round(x * 100) / 100))),
-      patterns: t.patterns ? Object.fromEntries(Object.entries(t.patterns).map(([k, v]) => [k, v.map((n) => n.map((x, i) => (i === 0 || i === 3 ? Math.round(x) : Math.round(x * 100) / 100)))])) : undefined,
+      notes: t.notes.map(roundNote),
+      patterns: t.patterns ? Object.fromEntries(Object.entries(t.patterns).map(([k, v]) => [k, v.map(roundNote)])) : undefined,
     })),
   };
 }

@@ -2,7 +2,7 @@
 import type { MusicFacts } from "../ears";
 import type { Expectation } from "./parse";
 
-const TOL: Record<string, number> = { centroidHz: 0.04, lufs: 0.4, pump: 0.03, harshness: 0.02, mud: 0.02, width: 0.03, energy: 0.03, sub: 0.02, low: 0.02, lowMid: 0.015, mid: 0.015, highMid: 0.015, air: 0.01 };
+const TOL: Record<string, number> = { centroidHz: 0.04, lufs: 0.4, pump: 0.03, transientsPerBeat: 0.15, harshness: 0.02, mud: 0.02, width: 0.03, energy: 0.03, sub: 0.02, low: 0.02, lowMid: 0.015, mid: 0.015, highMid: 0.015, air: 0.01 };
 
 export function metricValue(f: MusicFacts, e: Expectation): number | null {
   const sec = e.section ? f.structure.sections.find((s) => s.label === e.section || (s as { id?: string }).id === e.section) : null;
@@ -11,6 +11,7 @@ export function metricValue(f: MusicFacts, e: Expectation): number | null {
     case "centroidHz": return src?.centroidHz ?? f.spectrum.centroidHz;
     case "lufs": return src?.lufs ?? f.loudness.integrated;
     case "pump": return src?.pump ?? f.groove.pump;
+    case "transientsPerBeat": return f.groove.transientsPerBeat;
     case "harshness": return f.spectrum.harshness;
     case "mud": return f.spectrum.mud;
     case "width": return f.spectrum.width;

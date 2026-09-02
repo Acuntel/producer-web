@@ -1,6 +1,7 @@
 // Browser glue: decode a file, hear an AudioBuffer, compact facts for the brain prompt.
 import { hear, type HearOptions, type MusicFacts } from "./facts";
 import { mmss } from "./describe";
+import { grooveTemplateLine } from "./groove";
 
 export async function decodeFile(file: Blob): Promise<AudioBuffer> {
   const bytes = await file.arrayBuffer();
@@ -27,6 +28,7 @@ export function factsForBrain(f: MusicFacts): object {
     bandsPercent: { sub: pc(b.sub), low: pc(b.low), lowMid: pc(b.lowMid), mid: pc(b.mid), highMid: pc(b.highMid), air: pc(b.air) },
     centroidHz: f.spectrum.centroidHz, mud: f.spectrum.mud, harshness: f.spectrum.harshness, stereoWidth: f.spectrum.width,
     swing: f.groove.swing, pump: f.groove.pump, kicksPerBar: f.groove.kickDensity, transientsPerBeat: f.groove.transientsPerBeat,
+    grooveMap: f.groove.template ? grooveTemplateLine(f.groove.template, f.tempo.bpm) : undefined,
     chords: f.chords.progression,
     dropAt: f.structure.dropAt === null ? null : mmss(f.structure.dropAt),
     bars: f.structure.barsTotal,

@@ -1,5 +1,7 @@
 // Bring any stored song (v1 loop, v2 sections, v3) up to SongDoc v3.
-import type { Song, Track, Section } from "./types";
+import type { Song, Track, Section, VariantPlan } from "./types";
+import { cleanGroove } from "./groove";
+import { isPlan } from "./pattern";
 
 type Loose = Record<string, unknown>;
 
@@ -28,6 +30,7 @@ export function migrateSong(input: unknown): Song | null {
       swing: num(h.swing, 0.55), velVar: num(h.velVar, 0.06), clapLateMs: num(h.clapLateMs, 5), seed: num(h.seed, 42),
       pocketMs: typeof h.pocketMs === "number" ? h.pocketMs : undefined,
     },
+    groove: s.groove === null ? null : s.groove === undefined ? undefined : cleanGroove(s.groove) ?? undefined,
     tracks, sections, arrangement,
     master: (s.master as Song["master"]) ?? undefined,
     loop: (s.loop as Song["loop"]) ?? null,
@@ -55,6 +58,9 @@ function migrateTrack(t: Loose): Track | null {
     fx: (t.fx as Track["fx"]) ?? undefined,
     clip: (t.clip as Track["clip"]) ?? undefined,
     transpose: typeof t.transpose === "number" ? t.transpose : undefined,
+    groove: t.groove === null ? null : t.groove === undefined ? undefined : cleanGroove(t.groove) ?? undefined,
+    velDev: typeof t.velDev === "number" && t.velDev > 0 ? Math.min(40, Math.round(t.velDev)) : undefined,
+    chance: typeof t.chance === "number" && t.chance >= 0 && t.chance < 1 ? t.chance : undefined,
   };
 }
 
@@ -72,18 +78,28 @@ function migrateSection(s: Loose): Section | null {
     bars: Math.max(1, Math.round(num(s.bars, 8))),
     active: Array.isArray(s.active) ? (s.active as unknown[]).filter((x): x is string => typeof x === "string") : [],
     fill: (s.fill as Section["fill"]) ?? "none",
-    variants: (s.variants as Section["variants"]) ?? undefined,
+    variants: cleanVariants(s.variants),
     automation: Array.isArray(s.automation) ? (s.automation as Section["automation"]) : undefined,
     energy: typeof s.energy === "number" ? s.energy : undefined,
     note: typeof s.note === "string" ? s.note : undefined,
   };
 }
 
+function cleanVariants(v: unknown): Record<string, VariantPlan> | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const out: Record<string, VariantPlan> = {};
+  for (const [k, plan] of Object.entries(v as Loose)) if (isPlan(plan)) out[k] = plan;
+  return Object.keys(out).length ? out : undefined;
+}
+
 export function isNote(n: unknown): n is Track["notes"][number] {
   return Array.isArray(n) && n.length >= 3 && n.slice(0, 3).every((x) => typeof x === "number" && Number.isFinite(x));
 }
 
-// Normalize a note tuple (fill velocity, clamp) so sloppy brain output still plays.
+// Normalize a note tuple (fill velocity, clamp) so sloppy brain output still plays. A 5th element (chance 0-1) survives.
 export function cleanNote(n: Track["notes"][number]): Track["notes"][number] {
-  return [Math.round(n[0]), Math.max(0, n[1]), Math.max(0.03, n[2]), Math.max(1, Math.min(127, Math.round(n[3] ?? 100)))];
+  const base: Track["notes"][number] = [Math.round(n[0]), Math.max(0, n[1]), Math.max(0.03, n[2]), Math.max(1, Math.min(127, Math.round(n[3] ?? 100)))];
+  const chance = n[4];
+  if (typeof chance === "number" && Number.isFinite(chance) && chance < 1) base.push(Math.max(0, Math.min(1, chance)));
+  return base;
 }

@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import type { Song, Track } from "@/lib/song/types";
 import { isMelodic } from "@/lib/song/types";
 import { patternFor, audibleTracks } from "@/lib/engine/schedule";
+import { planLabel } from "@/lib/song/pattern";
 import { colorOf } from "./colors";
 
 export function TrackLanes({ song, beat, sectionIdx }: { song: Song; beat: number | null; sectionIdx: number }) {
@@ -26,8 +27,9 @@ export function TrackLanes({ song, beat, sectionIdx }: { song: Song; beat: numbe
       {song.tracks.map((tr: Track) => {
         const activeNow = cur?.sec ? cur.sec.active.includes(tr.id) && audible.has(tr.id) : audible.has(tr.id);
         const color = colorOf(tr.role);
-        const notes = cur?.sec ? patternFor(tr, cur.sec) : tr.notes;
-        const variant = cur?.sec?.variants?.[tr.id];
+        const barNow = beat !== null && cur ? Math.max(0, Math.floor((beat - cur.startBeat) / 4)) : 0;
+        const notes = cur?.sec ? patternFor(tr, cur.sec, barNow, song.humanize.seed) : tr.notes;
+        const variant = planLabel(cur?.sec?.variants?.[tr.id]);
         const melodic = isMelodic(tr.role);
         const pitches = melodic ? notes.map((n) => n[0]) : [];
         const pMin = pitches.length ? Math.min(...pitches) : 0;

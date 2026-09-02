@@ -8,6 +8,7 @@ import { getKit } from "./kits";
 import { hear, describe, type MusicFacts, type HearOptions, type SectionFacts } from "../ears";
 import { parseKey, keyName, chordsForSection, condense } from "../song/harmony";
 import { audibleTracks } from "./schedule";
+import { songSwing } from "../song/groove";
 
 type Transport = ReturnType<typeof Tone.getTransport>;
 
@@ -42,7 +43,7 @@ export function sectionCacheKey(song: Song, secId: string, bars: number): string
   const sec = song.sections.find((x) => x.id === secId);
   const audible = audibleTracks(song);
   const active = song.tracks.filter((t) => sec?.active.includes(t.id) && audible.has(t.id));
-  return JSON.stringify({ sec, bars, bpm: song.bpm, h: song.humanize, m: song.master, active });
+  return JSON.stringify({ sec, bars, bpm: song.bpm, h: song.humanize, g: song.groove ?? null, m: song.master, active });
 }
 
 // Which sections would re-render for this song right now (everything else is cached).
@@ -109,7 +110,7 @@ export async function hearSong(song: Song, opts?: HearSongOptions): Promise<Musi
     loudness: { ...main.facts.loudness, range: Math.round((maxLufs - minLufs) * 10) / 10 },
     key: k ? { name: keyName(k), tonic: k.tonic, mode: k.mode, confidence: 1, alt: main.facts.key.name } : main.facts.key,
     chords: { perBar, progression: condense(perBar) },
-    groove: { ...main.facts.groove, swing: song.humanize.swing, kickDensity: kickIds.some((id) => mainSec.active.includes(id)) ? main.facts.groove.kickDensity : 0 },
+    groove: { ...main.facts.groove, swing: songSwing(song), kickDensity: kickIds.some((id) => mainSec.active.includes(id)) ? main.facts.groove.kickDensity : 0 },
     duration: totalBeats * beatSec,
     structure: { sections, energy, dropAt: sections.find((s) => s.label === "drop")?.start ?? null, barsTotal: Math.round(totalBeats / 4) },
     read: "",
