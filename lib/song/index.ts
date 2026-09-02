@@ -4,3 +4,4 @@ export * from "./ops";
 export { migrateSong, isNote, cleanNote } from "./migrate";
 export * from "./harmony";
 export * from "./history";
+export { patternFor } from "./pattern";

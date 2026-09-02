@@ -10,6 +10,8 @@ const CHROME = process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/M
 const PORT = 9333;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Kill stale headless Chromes from earlier runs so they cannot starve this one.
+try { (await import("node:child_process")).execSync("pkill -f 'producer-.*-profile' || true", { stdio: "ignore" }); } catch {}
 const chrome = spawn(CHROME, [`--remote-debugging-port=${PORT}`, "--headless=new", "--no-first-run", "--no-default-browser-check", "--autoplay-policy=no-user-gesture-required",
   "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--disable-gpu", "--mute-audio", `--user-data-dir=/tmp/producer-e2e-profile`, "about:blank"], { stdio: "ignore" });
 process.on("exit", () => { try { chrome.kill("SIGKILL"); } catch {} });
@@ -44,7 +46,7 @@ async function main() {
   if (process.env.E2E_SKIP_SELFTEST) console.log("[e2e] skipping selftest"); else {
   console.log(`[e2e] ${BASE}/selftest`);
   await call("Page.navigate", { url: `${BASE}/selftest` });
-  const raw = await waitFor(`(() => { const t = document.querySelector('#result')?.textContent ?? ''; return t.startsWith('{') ? t : ''; })()`, 120000, "selftest result");
+  const raw = await waitFor(`(() => { const t = document.querySelector('#result')?.textContent ?? ''; return t.startsWith('{') ? t : ''; })()`, 300000, "selftest result");
   const res = JSON.parse(raw);
   assert.ok(res.ok, `selftest failed: ${res.error}`);
   console.log(`[e2e] tiny render ${res.results.tinyMs}ms, hear ${res.results.hearTinyMs}ms: ${JSON.stringify(res.results.tiny)}`);

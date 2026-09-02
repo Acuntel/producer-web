@@ -16,6 +16,7 @@ type Deps = {
   referenceRef: MutableRefObject<Reference | null>;
   setReference: (r: Reference | null) => void;
   setDeltaText: (t: string | null) => void;
+  getSong: () => Song;
 };
 
 export function useUploads(d: Deps) {
@@ -43,7 +44,7 @@ export function useUploads(d: Deps) {
     await putClip({ id, name, type: file.type, bytes, createdAt: Date.now(), durationSec: buf.duration, bpm: short ? undefined : f.tempo.bpm, key: f.key.name });
     cacheDecoded(id, buf);
     d.setClips((c) => [...c, { id, name, bpm: short ? undefined : f.tempo.bpm, key: f.key.name, durationSec: buf.duration }]);
-    const cur = songRef.current;
+    const cur = d.getSong();
     const trackId = `clip_${cur.tracks.length + 1}`;
     const beats = Math.max(1, Math.round((buf.duration / 60) * cur.bpm / 4) * 4);
     const { song: ns } = applyOps(cur, [{ op: "addTrack", track: { id: trackId, name, role: "audio", volume: -4, duck: true, loopBeats: short ? 4 : beats, notes: short ? [[60, 0, 0.5, 110], [60, 2, 0.5, 100]] : [],

@@ -1,0 +1,59 @@
+{
+  "ranAt": "2026-09-01T22:34:20.844Z",
+  "wallMs": 735512,
+  "cap": 500,
+  "jobs": 3,
+  "found": 1367,
+  "planned": 1166,
+  "insideCap": 500,
+  "skippedByCap": 666,
+  "skipped": {
+    "small": 3,
+    "name": 2,
+    "vbrTwin": 38,
+    "duplicateBasename": 158,
+    "short": 0
+  },
+  "alreadyMeasured": 68,
+  "measuredThisRun": 432,
+  "errors": [],
+  "shortFiles": [],
+  "groupsAll": {
+    "slop": 25,
+    "djpool-lane": 226,
+    "djpool-rest": 111,
+    "viral-lane": 210,
+    "freecc-lane": 363,
+    "viral-rest": 100,
+    "freecc-rest": 129,
+    "pioneer": 2
+  },
+  "groupsInCap": {
+    "slop": 25,
+    "djpool-lane": 226,
+    "djpool-rest": 111,
+    "viral-lane": 138
+  },
+  "skippedByCapExamples": [
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/08 - 135-145 TRAP DUBSTEP TECHNO/141 5B - quiz050-10-y2lhen-dance quest.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/08 - 135-145 TRAP DUBSTEP TECHNO/141 9A - prhcpunkrockskavol1 26 - Sin Oficio - Destruccion social.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/08 - 135-145 TRAP DUBSTEP TECHNO/141 9B - messian dread - reasonings in dub - 01 - words and teachings.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/08 - 135-145 TRAP DUBSTEP TECHNO/143 2B - messian dread - problem reaction solution.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/08 - 135-145 TRAP DUBSTEP TECHNO/143 2B - problem-reaction-solution.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/08 - 135-145 TRAP DUBSTEP TECHNO/144 10B - NS050-Tardiss The-Light-Between.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/08 - 135-145 TRAP DUBSTEP TECHNO/144 6A - JPT006-07-My Way My Love-With a Loose Gripp.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/08 - 135-145 TRAP DUBSTEP TECHNO/144 8A - magnolia.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/08 - 135-145 TRAP DUBSTEP TECHNO/145 2B - war on drugs inc.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/08 - 135-145 TRAP DUBSTEP TECHNO/145 3A - va - these boots are made for stomping - 1 jikkenteki - turning pages.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/08 - 135-145 TRAP DUBSTEP TECHNO/145 4A - DumboGetsMad-YouMakeYouFeelhwoodDayByDayRemix.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/08 - 135-145 TRAP DUBSTEP TECHNO/145 6A - va - these boots are made for stomping - 2 prosect - for twisted only.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/08 - 135-145 TRAP DUBSTEP TECHNO/145 7B - apocalypse in session subwoofers nightmare.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/08 - 135-145 TRAP DUBSTEP TECHNO/145 8B - mtk179-troupe-02-the-way-things-would-have-been-another-time.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/09 - 146-155 HARDSTYLE HARD DANCE/146 10A - Bostaurus-Demo2006-03-Destructive Hate vbr.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/09 - 146-155 HARDSTYLE HARD DANCE/146 10A - NS050-Medos-Little-Trap Lake.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/09 - 146-155 HARDSTYLE HARD DANCE/146 1B - operation enduring torture abu ghraip.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/09 - 146-155 HARDSTYLE HARD DANCE/146 7A - AstouEtChima04-daztroyah----8bit-frustration-mix.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/09 - 146-155 HARDSTYLE HARD DANCE/147 2A - va - these boots are made for stomping - 3 swan x 1 - ritual.mp3",
+    "/Users/bradyschwartz/Desktop/DJ LIBRARY/D - VIRAL & TRENDING/09 - 146-155 HARDSTYLE HARD DANCE/147 9B - 3x.13 - a summer spent inside - cd2 13 - go out dancing.mp3"
+  ]
+}

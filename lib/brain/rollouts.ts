@@ -4,7 +4,7 @@
 import type { Song, Role } from "../song/types";
 import type { MusicFacts } from "../ears";
 import { parseKey } from "../song/harmony";
-import { patternFor } from "../engine/schedule";
+import { patternFor } from "../song/pattern";
 
 export type StepTier = "fast" | "deep";
 export type RolloutKind = "newSong" | "emulate" | "finish" | "fixSection";

@@ -2,6 +2,8 @@
 // deterministic humanization, transposition, automation ramps, clip spans.
 import type { Song, Track, Note, Automation, Section } from "../song/types";
 import { isDrum } from "../song/types";
+import { patternFor } from "../song/pattern";
+export { patternFor };
 
 export type Ev = { beat: number; note: Note };
 export type SectionSpan = { id: string; name: string; startBeat: number; beats: number; fill: Section["fill"]; energy?: number };
@@ -33,11 +35,6 @@ export function audibleTracks(song: Song): Set<string> {
   return new Set(song.tracks.filter((t) => !t.mute && (!anySolo || t.solo)).map((t) => t.id));
 }
 
-export function patternFor(track: Track, sec: Section): Note[] {
-  const name = sec.variants?.[track.id];
-  if (name && name !== "A" && track.patterns?.[name]) return track.patterns[name];
-  return track.notes;
-}
 
 export function scheduleEvents(song: Song): Schedule {
   const rng = mulberry32(song.humanize.seed);

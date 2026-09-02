@@ -64,6 +64,27 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: 
     attack: p.attack ?? d.attack, decay: p.decay ?? d.decay, sustain: p.sustain ?? d.sustain, release: p.release ?? d.release,
   });
 
+  // The automation surface is shared by the sampled and synthesized paths, so it is defined first.
+  const automate: Voice["automate"] = (param, from, to, t0, t1, curve) => {
+    const ramp = (sig: Tone.Signal<"frequency"> | Tone.Signal<"decibels"> | Tone.Signal<"audioRange"> | Tone.Signal<"normalRange"> | Tone.Signal<"positive">, exp: boolean) => {
+      sig.cancelScheduledValues(t0);
+      sig.setValueAtTime(from, t0);
+      if (exp && from > 0 && to > 0) sig.exponentialRampToValueAtTime(to, t1); else sig.linearRampToValueAtTime(to, t1);
+      return true;
+    };
+    switch (param) {
+      case "filter.cutoff": return ramp(filter.frequency as unknown as Tone.Signal<"frequency">, curve !== "linear");
+      case "filter.q": return ramp(filter.Q as unknown as Tone.Signal<"positive">, false);
+      case "volume": return ramp(volume.volume as unknown as Tone.Signal<"decibels">, false);
+      case "pan": return ramp(panner.pan as unknown as Tone.Signal<"audioRange">, false);
+      case "reverb": return send ? ramp(send.gain as unknown as Tone.Signal<"normalRange">, false) : false;
+      case "delay.wet": return delay ? ramp(delay.wet as unknown as Tone.Signal<"normalRange">, false) : false;
+      case "drive": if (drive) { drive.distortion = Math.min(1, Math.max(0, to)); return true; } return false;
+      default: return false;
+    }
+  };
+
+
   let trigger: Voice["trigger"];
   const kitSound: KitSound | null = ["kick", "clap", "snare", "hat", "openhat", "perc"].includes(role) ? (role as KitSound) : null;
   if (kit && kitSound && !p.wave) {
@@ -79,7 +100,7 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: 
       if (dec) { decayGain.gain.cancelScheduledValues(t); decayGain.gain.setValueAtTime(1, t); decayGain.gain.exponentialRampToValueAtTime(0.001, t + dec); }
       try { player.start(t); } catch { /* overlapping start */ }
     };
-    return { trigger, automate: makeAutomate(), gate, dispose: () => disp.forEach((d) => d.dispose()) };
+    return { trigger, automate, gate, dispose: () => disp.forEach((d) => d.dispose()) };
   }
   switch (role) {
     case "kick": {
@@ -165,26 +186,6 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: 
       trigger = (n, t, bpm) => s.triggerAttackRelease(midiToFreq(n[0] + oct), durSec(n, bpm), t, vel(n));
     }
   }
-
-  function makeAutomate(): Voice["automate"] { return automate; }
-  const automate: Voice["automate"] = (param, from, to, t0, t1, curve) => {
-    const ramp = (sig: Tone.Signal<"frequency"> | Tone.Signal<"decibels"> | Tone.Signal<"audioRange"> | Tone.Signal<"normalRange"> | Tone.Signal<"positive">, exp: boolean) => {
-      sig.cancelScheduledValues(t0);
-      sig.setValueAtTime(from, t0);
-      if (exp && from > 0 && to > 0) sig.exponentialRampToValueAtTime(to, t1); else sig.linearRampToValueAtTime(to, t1);
-      return true;
-    };
-    switch (param) {
-      case "filter.cutoff": return ramp(filter.frequency as unknown as Tone.Signal<"frequency">, curve !== "linear");
-      case "filter.q": return ramp(filter.Q as unknown as Tone.Signal<"positive">, false);
-      case "volume": return ramp(volume.volume as unknown as Tone.Signal<"decibels">, false);
-      case "pan": return ramp(panner.pan as unknown as Tone.Signal<"audioRange">, false);
-      case "reverb": return send ? ramp(send.gain as unknown as Tone.Signal<"normalRange">, false) : false;
-      case "delay.wet": return delay ? ramp(delay.wet as unknown as Tone.Signal<"normalRange">, false) : false;
-      case "drive": if (drive) { drive.distortion = Math.min(1, Math.max(0, to)); return true; } return false;
-      default: return false;
-    }
-  };
 
   return { trigger, automate, gate, dispose: () => disp.forEach((d) => d.dispose()) };
 }
