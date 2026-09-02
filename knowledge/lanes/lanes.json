@@ -1,0 +1,1157 @@
+{
+ "builtAt": "2026-09-02",
+ "grid": "16 chars = 1 bar of 16ths; X 120, x 92, g 45, o 88, O 112, . rest, digits 1-9 = velocity tenths; | separates bars",
+ "note": "Numbers come from knowledge/lanes/<id>.md (sources inside). Recommendations only: the user decides every move.",
+ "lanes": [
+  {
+   "id": "melodic-house",
+   "name": "Melodic house and techno (Afterlife, Anyma, ARTBAT)",
+   "bpm": [
+    120,
+    124,
+    126
+   ],
+   "keys": [
+    "A minor",
+    "F minor",
+    "Ab minor",
+    "C minor"
+   ],
+   "swing": [
+    0.52,
+    0.54,
+    0.56
+   ],
+   "laws": "kick every beat; one chord per 2 bars; the lead melody is the drop; breakdown as long as the drop",
+   "drums": {
+    "kick": "X...X...X...X...",
+    "clap": "....X.......X...",
+    "hat": "x.g.x.ggx.g.x.gx",
+    "openhat": "................|..o...o...o...o.",
+    "perc": "...xx.....x.xxx."
+   },
+   "bass": {
+    "wave": "sawtooth",
+    "unison": 1,
+    "cutoff": 220,
+    "resonance": 2,
+    "envAmount": 1.8,
+    "decay": 0.18,
+    "sustain": 0.4,
+    "glide": 0.02,
+    "octave": -1,
+    "drive": 0.2,
+    "patterns": {
+     "pulse": "..x...x...x...x.",
+     "roll": ".xxx.xxx.xxx.xxx"
+    },
+    "hint": "roots; pulse in drop 1, roll in drop 2; sub sine one note per bar; sidechainDb 8 release 150"
+   },
+   "harmony": {
+    "progressions": [
+     "i-bVI-bIII-bVII",
+     "i-iv-v-bIII",
+     "i-bVII",
+     "i-bVII-bVI"
+    ],
+    "pad": "fatsawtooth unison 3 spread 26 cutoff 1200-2400 attack 0.6 width 0.9 -12 dB",
+    "arp": "16ths on 1-5-8-10, delay 8n. wet 0.25"
+   },
+   "arrangement": [
+    {
+     "name": "Intro",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.3
+    },
+    {
+     "name": "Groove",
+     "bars": 16,
+     "fill": "riser",
+     "energy": 0.55
+    },
+    {
+     "name": "Break",
+     "bars": 8,
+     "fill": "cut",
+     "energy": 0.4
+    },
+    {
+     "name": "Drop",
+     "bars": 32,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Breakdown",
+     "bars": 32,
+     "fill": "roll",
+     "energy": 0.35
+    },
+    {
+     "name": "Build",
+     "bars": 8,
+     "fill": "cut",
+     "energy": 0.75
+    },
+    {
+     "name": "Drop 2",
+     "bars": 32,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Outro",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.4
+    }
+   ],
+   "mix": {
+    "lufs": [
+     -9,
+     -7
+    ],
+    "subLow": [
+     0.55,
+     0.68
+    ],
+    "midShare": [
+     0.18,
+     0.3
+    ],
+    "pump": [
+     0.35,
+     0.6
+    ],
+    "sidechainDb": 8,
+    "sidechainReleaseMs": 150
+   },
+   "references": [
+    "Anyma & Grimes - Welcome To The Opera (2023, 125, F minor): the melody is the drop",
+    "ARTBAT - Horizon (2020, 124, F minor): bass and arp locked on roots",
+    "Solee - Pink Panther (2017, 123, E major; in his crate): pluck hook mutates every 8 bars"
+   ],
+   "feelWords": {
+    "epic": "pad attack 0.8, strings pad +1 oct -18, reverb 0.4, breakdown 32, master lowpass 16 bars",
+    "darker": "i-iv-v-bIII, pad cutoff 800, sub octave, hats -3 dB",
+    "emotional": "2 bars per chord, lead on the 9th, no openhat, velVar 0.1",
+    "driving": "bass roll, hats xgxg, sidechainDb +2",
+    "spacey": "arp delay 8n. wet 0.35 width 1, pad cutoff 4000",
+    "hypnotic": "i-bVII loop, no clap, ride quarters, automation only 32 bars"
+   }
+  },
+  {
+   "id": "afro-house",
+   "name": "Afro house (Keinemusik, Black Coffee) + amapiano and 3-step",
+   "bpm": [
+    118,
+    122,
+    124
+   ],
+   "keys": [
+    "G minor",
+    "A minor",
+    "Ab minor",
+    "B minor",
+    "F minor"
+   ],
+   "swing": [
+    0.56,
+    0.6,
+    0.62
+   ],
+   "laws": "soft kick; percussion carries it; drops arrive (0.85) not blast; amapiano 112 with a log drum; 3-step = three kicks per bar",
+   "drums": {
+    "kick": "X...X...X...X...",
+    "clap": "....X.......X...",
+    "hat": "xgXgxgXgxgXgxgXg",
+    "openhat": "..o...o...o...o.",
+    "perc": "....X.x...x.X...",
+    "perc2": "x..x..x..x..x..x|..x..x..x..x..x.",
+    "kickAmapiano": "X.......X..X....",
+    "kick3step": "X.....X...X....."
+   },
+   "bass": {
+    "wave": "triangle",
+    "unison": 1,
+    "cutoff": 500,
+    "resonance": 1.5,
+    "envAmount": 1.2,
+    "decay": 0.25,
+    "sustain": 0.6,
+    "glide": 0.04,
+    "octave": -1,
+    "drive": 0.15,
+    "patterns": {
+     "afro": "X.....x...X....x",
+     "logDrum": "..x..x.x..x..x.x"
+    },
+    "hint": "root dur 1.5, pickups to the 5th, iv in bar 2; log drum = triangle cutoff 350 res 5 env 2.5 decay 0.1 drive 0.35 midi 40-50; sidechainDb 4"
+   },
+   "harmony": {
+    "progressions": [
+     "i9 (one chord, bass i-iv-v)",
+     "i-bVI-bVII",
+     "i-iv",
+     "ii9-V7-Imaj9-vi7-VI7b9"
+    ],
+    "chords": "epiano 3-5-7-9 octave 4 -12 dB eq low -4",
+    "pad": "fatsawtooth unison 2 cutoff 900 -16 dB drone"
+   },
+   "arrangement": [
+    {
+     "name": "Intro",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.3
+    },
+    {
+     "name": "Groove",
+     "bars": 16,
+     "fill": "riser",
+     "energy": 0.55
+    },
+    {
+     "name": "Break",
+     "bars": 8,
+     "fill": "riser",
+     "energy": 0.4
+    },
+    {
+     "name": "Drop",
+     "bars": 32,
+     "fill": "none",
+     "energy": 0.85
+    },
+    {
+     "name": "Breakdown",
+     "bars": 16,
+     "fill": "roll",
+     "energy": 0.45
+    },
+    {
+     "name": "Build",
+     "bars": 8,
+     "fill": "cut",
+     "energy": 0.7
+    },
+    {
+     "name": "Drop 2",
+     "bars": 32,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Outro",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.4
+    }
+   ],
+   "mix": {
+    "lufs": [
+     -9.5,
+     -7.5
+    ],
+    "subLow": [
+     0.55,
+     0.68
+    ],
+    "midShare": [
+     0.2,
+     0.3
+    ],
+    "pump": [
+     0.2,
+     0.4
+    ],
+    "sidechainDb": 4,
+    "sidechainReleaseMs": 100
+   },
+   "references": [
+    "Adam Port, Stryv & Malachiii - Move (2024, 120, Ab minor): chant, arrival drop",
+    "&ME, Rampa, Adam Port - Muye (2018, 120, A minor): chant + perc bed",
+    "Black Coffee & Guetta - Drive (2018, 118, F# minor): deep bass, pop vocal",
+    "Tyler ICU - Mnike (2023, 113, F minor): log drum"
+   ],
+   "feelWords": {
+    "tribal": "perc2 3-over-4, conga +10, swing 0.6, velVar 0.14",
+    "warmer": "bass sustain 0.7 cutoff 400, chords cutoff 1800, no openhat",
+    "amapiano": "tempo 112, sparse kick, log drum, straight shaker, epiano 2-5-1",
+    "3-step": "tempo 116, kick3step, roll fills, log drum",
+    "bouncier": "bass glide 0.05, and-of-4 pickup, clapLateMs 15",
+    "chant": "recordHum chords 8 beats, pad drone, no clap"
+   }
+  },
+  {
+   "id": "deep-house",
+   "name": "Deep house and piano house (MAW, Kerri Chandler, Duke Dumont, Shouse)",
+   "bpm": [
+    120,
+    123,
+    125
+   ],
+   "keys": [
+    "C minor",
+    "F minor",
+    "A minor",
+    "Ab major",
+    "G minor"
+   ],
+   "swing": [
+    0.56,
+    0.58,
+    0.62
+   ],
+   "laws": "round kick every beat; m7 and m9 chords, keep every 7th; grooves not blasts (drop 1 = 0.9); Rhodes stabs on and-of-1 and and-of-3",
+   "drums": {
+    "kick": "X...X...X...X...",
+    "clap": "....X.......X...",
+    "hat": "x.gxx.g.x.gxx.g.",
+    "openhat": "..o...o...o...o.",
+    "perc": "xgxgxgxgxgxgxgxg",
+    "tom": "..x.....x.x.....",
+    "afro": ".x.......x......"
+   },
+   "bass": {
+    "wave": "triangle",
+    "unison": 1,
+    "cutoff": 400,
+    "resonance": 2,
+    "envAmount": 1.5,
+    "decay": 0.2,
+    "sustain": 0.3,
+    "octave": -1,
+    "drive": 0.15,
+    "patterns": {
+     "walk": "X.....x...xg....",
+     "organ": "..X...X.X.X...xx"
+    },
+    "hint": "walk = root 1, root and-of-2, 5th, b7; organ = wave organ octave -1 sustain 0.8 (M1 / Show Me Love); sub sine roots; sidechainDb 5"
+   },
+   "harmony": {
+    "progressions": [
+     "i7-bIIImaj7-v7 (MAW)",
+     "i7-v7-iv7 (Kerri Chandler)",
+     "bVImaj7-v7",
+     "i9 held"
+    ],
+    "stabs": "epiano steps 3 and 11 dur 0.3 delay 8n. wet 0.15 eq low -3",
+    "pianoHouse": "epiano stabs every offbeat 8th, organ chords -10 dB"
+   },
+   "arrangement": [
+    {
+     "name": "Intro",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.3
+    },
+    {
+     "name": "Groove",
+     "bars": 16,
+     "fill": "riser",
+     "energy": 0.6
+    },
+    {
+     "name": "Break",
+     "bars": 8,
+     "fill": "riser",
+     "energy": 0.4
+    },
+    {
+     "name": "Drop",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.9
+    },
+    {
+     "name": "Groove 2",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.75
+    },
+    {
+     "name": "Breakdown",
+     "bars": 16,
+     "fill": "roll",
+     "energy": 0.35
+    },
+    {
+     "name": "Build",
+     "bars": 4,
+     "fill": "cut",
+     "energy": 0.7
+    },
+    {
+     "name": "Drop 2",
+     "bars": 24,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Outro",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.4
+    }
+   ],
+   "mix": {
+    "lufs": [
+     -10,
+     -8
+    ],
+    "subLow": [
+     0.52,
+     0.66
+    ],
+    "midShare": [
+     0.2,
+     0.32
+    ],
+    "pump": [
+     0.25,
+     0.45
+    ],
+    "sidechainDb": 5,
+    "sidechainReleaseMs": 120
+   },
+   "references": [
+    "Shouse - Love Tonight (2017, 123, C minor; in his crate): one vocal, four chords",
+    "Duke Dumont - Need U (100%) (2013, 124, F minor): piano stabs, chop, organ bass",
+    "Route 94 - My Love (2014, 120, Ab major): sub bass, Rhodes, filtered vocal"
+   ],
+   "feelWords": {
+    "deeper": "epiano cutoff 1400, longer bass, no openhat, LUFS -10, pad -16",
+    "piano house": "epiano offbeat stabs, organ bass, chop, tempo 124",
+    "soulful": "m9 voicings, vocal phrase, swing 0.6",
+    "jackin": "swing 0.6, tom, 16th pickups, clapLateMs 12",
+    "smoother": "velVar 0.05, no tom, pad -14, stabs dur 0.4",
+    "summer": "Ab major IVmaj7-iii7-ii7-Imaj7, openhat +2 dB"
+   }
+  },
+  {
+   "id": "uk-garage",
+   "name": "UK garage 2-step (MJ Cole, Artful Dodger, PinkPantheress)",
+   "bpm": [
+    128,
+    132,
+    138
+   ],
+   "keys": [
+    "A minor",
+    "E minor",
+    "F major",
+    "Ab major",
+    "Bb minor"
+   ],
+   "swing": [
+    0.6,
+    0.63,
+    0.66
+   ],
+   "laws": "kick on 1 and the and-of-3 only; snare 2 and 4; every offbeat swings; sub-led, little sidechain; transpose +1 for the last drop",
+   "drums": {
+    "kick": "X.........X.....",
+    "kickB": "..........X....x",
+    "clap": "....X.......X...",
+    "ghost": "...............g",
+    "hat": "x......gxg......",
+    "openhat": "..o...o.......o.",
+    "perc": "...x.......x....",
+    "shaker": "gxgxgxgxgxgxgxgx"
+   },
+   "bass": {
+    "wave": "sawtooth",
+    "unison": 1,
+    "cutoff": 180,
+    "resonance": 4,
+    "envAmount": 2.2,
+    "attack": 0.12,
+    "decay": 0.3,
+    "sustain": 0.5,
+    "glide": 0.02,
+    "octave": -1,
+    "drive": 0.2,
+    "patterns": {
+     "dred": "X.....x....x....",
+     "organ": "..X...X...X..xX."
+    },
+    "hint": "dred = reverse-swell riff root b7 5th over 8 bars; organ = wave organ octave -1 sustain 0.8; sub sine 2 oct down on 1 and a-of-3; sidechainDb 3"
+   },
+   "harmony": {
+    "progressions": [
+     "i9-iv9",
+     "i7-bVImaj7-bIII-bVII",
+     "ii7-V7-Imaj7 then +1 st",
+     "I-V-vi-IV"
+    ],
+    "chords": "epiano or organ 9ths on steps 7 and 12, delay 8n wet 0.12",
+    "pluck": "pwm decay 0.2 delay 16n skipping 16ths"
+   },
+   "arrangement": [
+    {
+     "name": "Intro",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.3
+    },
+    {
+     "name": "Groove",
+     "bars": 8,
+     "fill": "none",
+     "energy": 0.55
+    },
+    {
+     "name": "Build",
+     "bars": 8,
+     "fill": "cut",
+     "energy": 0.7
+    },
+    {
+     "name": "Drop",
+     "bars": 32,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Breakdown",
+     "bars": 16,
+     "fill": "roll",
+     "energy": 0.35
+    },
+    {
+     "name": "Build 2",
+     "bars": 8,
+     "fill": "cut",
+     "energy": 0.75
+    },
+    {
+     "name": "Drop 2",
+     "bars": 32,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Outro",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.4
+    }
+   ],
+   "mix": {
+    "lufs": [
+     -9,
+     -7
+    ],
+    "subLow": [
+     0.55,
+     0.72
+    ],
+    "midShare": [
+     0.15,
+     0.25
+    ],
+    "pump": [
+     0.15,
+     0.35
+    ],
+    "sidechainDb": 3,
+    "sidechainReleaseMs": 90,
+    "kickDensity": 2
+   },
+   "references": [
+    "Artful Dodger - Re-Rewind (1999, 130, E minor): the 2-step skip under R&B vocal",
+    "MJ Cole - Sincere (1998, 132, Ab major): jazz chords, rolling bass",
+    "PinkPantheress - Boy's a liar (2022, 133, F major): revival, pluck hook, 2-minute form"
+   ],
+   "feelWords": {
+    "skippy": "swing 0.64, ghost hats steps 6 and 14, rim call-response",
+    "darker": "dred cutoff 150 res 6, no epiano, sub -1 oct",
+    "bubbly": "major key, epiano 9ths, chop +3 st, pluck",
+    "4x4": "kick every beat: hard-house drums, keep the chords",
+    "old school": "organ bass and chords, tempo 130, crackle perc crush 8",
+    "pinkpantheress": "tempo 133, 16th pluck, breathy vocal, drop at bar 9"
+   }
+  },
+  {
+   "id": "jersey-club",
+   "name": "Jersey club (MCVertt, DJ Sliink; R-You / DJ TAJ / BERGE edits)",
+   "bpm": [
+    130,
+    140,
+    150
+   ],
+   "keys": [
+    "F minor",
+    "B major",
+    "F# minor",
+    "D major",
+    "Bb minor"
+   ],
+   "swing": [
+    0.5,
+    0.5,
+    0.52
+   ],
+   "laws": "five kicks per bar at 16th steps 1,5,9,12,15 (4-4-3-3-2); snare against the run; hats on 2 and 4 only; 808 follows the kick; straight; short records",
+   "drums": {
+    "kick": "X...X...X..X..X.",
+    "snareA": "........X..X....",
+    "snareB": "........X.xX....",
+    "hat": "....x.......x...",
+    "squeak": "..x...x...x..x..",
+    "crash": "X...............",
+    "roll": "8th-triplet hats last beat of bars 4 and 8 (stepBeats 0.3333) vel 5,7,9"
+   },
+   "bass": {
+    "wave": "sine",
+    "cutoff": 1200,
+    "envAmount": 0,
+    "decay": 0.35,
+    "sustain": 0.5,
+    "release": 0.2,
+    "glide": 0.05,
+    "octave": -1,
+    "drive": 0.4,
+    "duck": false,
+    "patterns": {
+     "kickFollow": "X...X...X..X..X."
+    },
+    "hint": "808 on the kick steps, root 4 bars then bIII and bII (NI: F2, G#2, G2); sub sine on 1 and 9; sidechainDb 2"
+   },
+   "harmony": {
+    "progressions": [
+     "i (one chord or none)",
+     "root-octave hits on the kick rhythm",
+     "source I-V-vi-IV in the breakdown only"
+    ],
+    "stabs": "fatsawtooth unison 2 decay 0.15 on the kick grid",
+    "pad": "breakdown only, cutoff 1200 -14 dB"
+   },
+   "arrangement": [
+    {
+     "name": "Intro",
+     "bars": 8,
+     "fill": "none",
+     "energy": 0.35
+    },
+    {
+     "name": "Groove",
+     "bars": 8,
+     "fill": "none",
+     "energy": 0.6
+    },
+    {
+     "name": "Build",
+     "bars": 8,
+     "fill": "riser",
+     "energy": 0.75
+    },
+    {
+     "name": "Drop",
+     "bars": 16,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Groove 2",
+     "bars": 8,
+     "fill": "none",
+     "energy": 0.8
+    },
+    {
+     "name": "Break",
+     "bars": 8,
+     "fill": "roll",
+     "energy": 0.4
+    },
+    {
+     "name": "Drop 2",
+     "bars": 16,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Outro",
+     "bars": 8,
+     "fill": "none",
+     "energy": 0.4
+    }
+   ],
+   "mix": {
+    "lufs": [
+     -8,
+     -6
+    ],
+    "subLow": [
+     0.5,
+     0.65
+    ],
+    "midShare": [
+     0.15,
+     0.25
+    ],
+    "pump": [
+     0.15,
+     0.35
+    ],
+    "sidechainDb": 2,
+    "sidechainReleaseMs": 80,
+    "kickDensity": 5
+   },
+   "references": [
+    "Lil Uzi Vert - Just Wanna Rock (2022, 150, F# minor; MCVertt): chant + kick + 808",
+    "Drake - Sticky (2022, 137, F# major): rap vocal on a Jersey grid",
+    "Cookiee Kawaii - Vibe (2019, listed 160, A# major): vocal-first Jersey"
+   ],
+   "feelWords": {
+    "bouncier": "ghost at step 14, 808 glide 0.08, 5th kick vel 90",
+    "harder": "kick drive 0.5 drumTune -2, snare +3 dB, crash every drop bar 1",
+    "drill": "tempo 145-166, sliding 808 on 1 and and-of-3, triplet hats",
+    "flip": "warp vocal to 140, 2-syllable stabs on steps 3 and 7",
+    "squeak": "squeak on 3,7,11,14 vel 100 pan 0.3",
+    "baltimore": "kick on 8th-triplet grid X..X..X.X.X."
+   }
+  },
+  {
+   "id": "trap-club",
+   "name": "Trap and hip-hop club edits, written at double time",
+   "bpm": [
+    130,
+    150,
+    170
+   ],
+   "keys": [
+    "F minor",
+    "Eb minor",
+    "D minor",
+    "E minor",
+    "C minor"
+   ],
+   "swing": [
+    0.5,
+    0.52,
+    0.54
+   ],
+   "laws": "grid BPM = 2x felt (150 = 75); snare on beat 3 only; kick sparse; the 808 is bass and sub, duck false; lane-gate the kickDensity>=3 check",
+   "drums": {
+    "kick": "X.............x.|..x.............",
+    "snare": "........X.......",
+    "hat": "x.x.x.x.x.x.x.x.",
+    "hatRoll": "............5678",
+    "hat32": "stepBeats 0.125 gxgxgxgx, bar 4 last beat",
+    "hatTrip": "stepBeats 0.1667 xgxxgx, bar 8 last beat",
+    "openhat": "..............o.|................",
+    "perc": "......g........."
+   },
+   "bass": {
+    "wave": "sine",
+    "cutoff": 1500,
+    "resonance": 0.5,
+    "envAmount": 0,
+    "decay": 0.6,
+    "sustain": 0.7,
+    "release": 0.25,
+    "glide": 0.06,
+    "octave": -1,
+    "drive": 0.45,
+    "duck": false,
+    "patterns": {
+     "eight08": "X..........x..x.|x.............x."
+    },
+    "hint": "root on 1 dur 2, pickup a-of-3, 5th or b7 on and-of-4 of bar 2; one slide per 4 bars (overlapping notes); no sub track; kick drumTune +3 decay 0.18"
+   },
+   "harmony": {
+    "progressions": [
+     "i-bVI",
+     "i-bVII-bVI",
+     "i-iv",
+     "i-bII"
+    ],
+    "pad": "pwm unison 2 cutoff 1400 -14 dB reverb 0.4 width 0.9",
+    "bells": "sine decay 0.4 delay 4n wet 0.2; counter on root, octave, 5th, b7",
+    "lead": "sine flute glide 0.05 pentatonic 2-bar motif"
+   },
+   "arrangement": [
+    {
+     "name": "Intro",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.3
+    },
+    {
+     "name": "Verse",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.6
+    },
+    {
+     "name": "Drop",
+     "bars": 16,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Verse 2",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.65
+    },
+    {
+     "name": "Drop 2",
+     "bars": 16,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Bridge",
+     "bars": 8,
+     "fill": "riser",
+     "energy": 0.35
+    },
+    {
+     "name": "Drop 3",
+     "bars": 16,
+     "fill": "cut",
+     "energy": 1
+    },
+    {
+     "name": "Outro",
+     "bars": 8,
+     "fill": "none",
+     "energy": 0.4
+    }
+   ],
+   "mix": {
+    "lufs": [
+     -8,
+     -6
+    ],
+    "subLow": [
+     0.6,
+     0.75
+    ],
+    "midShare": [
+     0.12,
+     0.22
+    ],
+    "pump": [
+     0.1,
+     0.3
+    ],
+    "sidechainDb": 2,
+    "sidechainReleaseMs": 80,
+    "kickDensity": 1.5
+   },
+   "references": [
+    "Future - Mask Off (2017, 150 / 75 felt, D minor): flute loop over sparse 808s",
+    "Travis Scott - FE!N (2023, 148, Eb minor measured): one stab riff + chant",
+    "Playboi Carti - Magnolia (2017, 163, E minor): the bounce, 808 slides"
+   ],
+   "feelWords": {
+    "harder": "808 drive 0.6, kick drumTune +2 vol +1, clap +2 dB",
+    "darker": "i-bII pad cutoff 900, bells -1 oct, reverb 0.5",
+    "bouncier": "808 pickups steps 12 and 16, glide 0.1, triplet rolls, tempo 160",
+    "spacey": "pad width 1 reverb 0.5, lead delay 4n",
+    "drill": "tempo 140-146, sliding 808 on and-of-3, hats x.xx.xx.x.xx.x.x",
+    "slower": "tempo 130-136, 808 sustain 0.8"
+   }
+  },
+  {
+   "id": "techno",
+   "name": "Techno: peak-time and driving (Beyer, Eli Brown, de Witte) + hypnotic Berlin",
+   "bpm": [
+    128,
+    132,
+    136
+   ],
+   "keys": [
+    "A minor",
+    "B minor",
+    "Bb minor",
+    "C minor",
+    "F minor"
+   ],
+   "swing": [
+    0.5,
+    0.52,
+    0.55
+   ],
+   "laws": "hardest kick of any lane; the rumble (ducked reverbed sub) is the bass; empty mids; 16 or 32-bar sections",
+   "drums": {
+    "kick": "X...X...X...X...",
+    "clap": "....X.......X...",
+    "clapBerlin": "....X...........",
+    "snare": "..g....g..g....g",
+    "hat": "..x...x...x...x.",
+    "hat2": "gxgxgxgxgxgxgxgx",
+    "openhat": "..o...o...o...o.",
+    "ride": "x...x...x...x...",
+    "tom": "..............x.",
+    "tomB": "......x.......x.",
+    "rim": "xx......x......."
+   },
+   "bass": {
+    "rumble": "sub sine root dur 3.9 duck true drive 0.3 reverb 0.25 lowpass 140; sidechainDb 10-12",
+    "wave": "sawtooth",
+    "unison": 1,
+    "cutoff": 320,
+    "resonance": 3,
+    "envAmount": 1.5,
+    "decay": 0.12,
+    "sustain": 0.2,
+    "octave": -1,
+    "drive": 0.3,
+    "patterns": {
+     "offbeat": "..x...x...x...x.",
+     "roll": ".xxx.xxx.xxx.xxx"
+    },
+    "hint": "peak-time riff = 1-2 notes at octave 0, cutoff 300 to 2500 over 16 bars"
+   },
+   "harmony": {
+    "progressions": [
+     "i drone",
+     "i-bII",
+     "i-bVII",
+     "i5 rave stab"
+    ],
+    "stab": "fatsawtooth unison 3 spread 40 decay 0.25 on steps 7 and 15, delay 8n wet 0.25",
+    "pad": "sawtooth unison 3 cutoff 600 attack 1.5 -16 dB width 1",
+    "acid": "arp sawtooth res 8 env 3 cutoff 200 to 3000"
+   },
+   "arrangement": [
+    {
+     "name": "Intro",
+     "bars": 32,
+     "fill": "none",
+     "energy": 0.35
+    },
+    {
+     "name": "Groove",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.6
+    },
+    {
+     "name": "Break",
+     "bars": 16,
+     "fill": "cut",
+     "energy": 0.45
+    },
+    {
+     "name": "Drop",
+     "bars": 32,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Breakdown",
+     "bars": 32,
+     "fill": "roll",
+     "energy": 0.3
+    },
+    {
+     "name": "Build",
+     "bars": 16,
+     "fill": "cut",
+     "energy": 0.75
+    },
+    {
+     "name": "Drop 2",
+     "bars": 32,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Outro",
+     "bars": 32,
+     "fill": "none",
+     "energy": 0.35
+    }
+   ],
+   "mix": {
+    "lufs": [
+     -8,
+     -6
+    ],
+    "subLow": [
+     0.6,
+     0.75
+    ],
+    "midShare": [
+     0.12,
+     0.2
+    ],
+    "pump": [
+     0.4,
+     0.7
+    ],
+    "sidechainDb": 11,
+    "sidechainReleaseMs": 230
+   },
+   "references": [
+    "Adam Beyer & Bart Skils - Your Mind (2018, 126, B minor): one filtered riff + vocal",
+    "Eli Brown - Diamonds On My Mind (2023, 136, Bb minor): pop hook, driving groove",
+    "Charlotte de Witte - Doppler (2019, 135, Bb major): hypnotic 2-note motif"
+   ],
+   "feelWords": {
+    "harder": "kick drive 0.5 drumDecay 0.4, tempo +3, sidechainDb 12, hats 16ths",
+    "darker": "clap on 2 only, tomB, pad cutoff 400, tempo 128",
+    "rolling": "bass roll, swing 0.55, ride quarters, rim pair",
+    "hypnotic": "no clap, 2-note arp delay 8n. wet 0.4, automation only",
+    "acid": "arp res 9 env 3.5 cutoff 200 to 4000",
+    "rave": "stab unison 4 spread 45 on 7 and 15, -5 dB"
+   }
+  },
+  {
+   "id": "trance",
+   "name": "Trance: uplifting 136-140 and hard trance 145-150",
+   "bpm": [
+    136,
+    138,
+    150
+   ],
+   "keys": [
+    "A minor",
+    "B minor",
+    "Bb minor",
+    "E minor",
+    "F minor"
+   ],
+   "swing": [
+    0.5,
+    0.51,
+    0.53
+   ],
+   "laws": "bass on every 16th between kicks, 8-12 dB duck; hats 12 dB under the kick; harmonic minor leads; breakdown longer than the drop; build ends in silence",
+   "drums": {
+    "kick": "X...X...X...X...",
+    "clap": "....X.......X...",
+    "hat": "xgxgxgxgxgxgxgxg",
+    "openhat": "..o...o...o...o.",
+    "ride": "x.x.x.x.x.x.x.x.",
+    "rideHard": "..x...x...x...x.",
+    "roll": "snare 8ths 4 bars, 16ths 2, 32nds last bar"
+   },
+   "bass": {
+    "wave": "sawtooth",
+    "unison": 1,
+    "glide": 0.01,
+    "cutoff": 900,
+    "resonance": 1,
+    "envAmount": 0.8,
+    "decay": 0.05,
+    "sustain": 0,
+    "release": 0.05,
+    "octave": -1,
+    "drive": 0.3,
+    "patterns": {
+     "intro": "..X...X...X...X.",
+     "drop": ".XxX.XxX.XxX.XxX"
+    },
+    "hint": "dur 0.12; X 100 x 90; vary the last note every 4 bars; sub sine same pattern; sidechainDb 10"
+   },
+   "harmony": {
+    "progressions": [
+     "i-bVI-bIII-bVII",
+     "bVI-bIII-bVII-i",
+     "i-iv-bVII-V",
+     "vi-IV-I-V"
+    ],
+    "pad": "fatsawtooth unison 4 spread 30 cutoff 800-6000 attack 0.8 -11 dB width 1; gate 2 in builds",
+    "stab": "supersaw on offbeat 8ths, delay 8n",
+    "lead": "fatsawtooth unison 4 spread 35 cutoff 1500-6000 delay 8n width 1; epiano first"
+   },
+   "arrangement": [
+    {
+     "name": "Intro",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.3
+    },
+    {
+     "name": "Groove",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.55
+    },
+    {
+     "name": "Break",
+     "bars": 8,
+     "fill": "riser",
+     "energy": 0.4
+    },
+    {
+     "name": "Breakdown",
+     "bars": 32,
+     "fill": "none",
+     "energy": 0.35
+    },
+    {
+     "name": "Build",
+     "bars": 8,
+     "fill": "cut",
+     "energy": 0.8
+    },
+    {
+     "name": "Drop",
+     "bars": 32,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Bridge",
+     "bars": 8,
+     "fill": "none",
+     "energy": 0.45
+    },
+    {
+     "name": "Drop 2",
+     "bars": 32,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Outro",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.35
+    }
+   ],
+   "mix": {
+    "lufs": [
+     -8,
+     -6
+    ],
+    "subLow": [
+     0.5,
+     0.65
+    ],
+    "midShare": [
+     0.22,
+     0.32
+    ],
+    "pump": [
+     0.5,
+     0.75
+    ],
+    "sidechainDb": 10,
+    "sidechainReleaseMs": 120
+   },
+   "references": [
+    "Darude - Sandstorm (1999, 136, B minor): 16th riff, hoover build",
+    "Tiesto - Adagio For Strings (2005, 140, Bb minor): strings as the breakdown",
+    "Marlon Hoffstadt - It's That Time (2024, 146, A minor): hard-trance revival"
+   ],
+   "feelWords": {
+    "euphoric": "pad width 1, lead +1 oct -6 dB, breakdown +16, 32nd roll, drop 2 transpose +1",
+    "harder": "tempo 147, kick drive 0.45, hoover, rideHard swing 0.56",
+    "old school": "tempo 136, single-note 16th riff, hoover, i-bVI-bVII",
+    "dreamy": "pad gate 2, delay 8n. wet 0.4, hats -16 dB",
+    "psy": "tempo 140-142, 16th bass res 3, kick drumDecay 0.22, no clap",
+    "more drop": "counter arp, ride 8ths, strings octave"
+   }
+  }
+ ]
+}
