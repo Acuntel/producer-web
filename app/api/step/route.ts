@@ -43,7 +43,8 @@ export async function POST(req: Request) {
   try {
     const resp = await client.messages.create({
       model: x.step.tier === "deep" ? DEEP : FAST,
-      max_tokens: x.step.fullSong ? 12000 : 9000,
+      max_tokens: x.step.fullSong ? 12000 : 14000,
+      output_config: { effort: "low" },
       system: [
         { type: "text", text: PERSONA },
         { type: "text", text: CONTRACT },
@@ -54,7 +55,10 @@ export async function POST(req: Request) {
     } as never);
     const text = (resp as { content: { type: string; text?: string }[] }).content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("");
     const reply = parseBrain(text);
-    return Response.json({ say: reply.say, ops: reply.ops, song: reply.song, listen: reply.listen, model: x.step.tier === "deep" ? DEEP : FAST, usage: (resp as { usage?: unknown }).usage });
+    const stop = (resp as { stop_reason?: string }).stop_reason;
+    if (stop === "max_tokens" || (!reply.ops && !reply.song && !reply.say)) console.warn("step reply problem", x.step.id, stop, text.length, text.slice(0, 200));
+    const usage = (resp as { usage?: { output_tokens?: number; output_tokens_details?: { thinking_tokens?: number } } }).usage;
+    return Response.json({ say: reply.say, ops: reply.ops, song: reply.song, listen: reply.listen, model: x.step.tier === "deep" ? DEEP : FAST, usage, thinking: usage?.output_tokens_details?.thinking_tokens, stop, textLength: text.length, head: reply.ops || reply.song ? undefined : text.slice(0, 300) });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "unknown error";
     return Response.json({ say: "That step hiccuped.", ops: null, song: null, detail: msg.slice(0, 200) }, { status: 200 });

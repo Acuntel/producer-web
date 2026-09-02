@@ -34,7 +34,7 @@ const blueprint: Step = {
 const drums: Step = {
   id: "drums", title: "Drums", tier: "fast", scope: ["kick", "clap", "snare", "hat", "openhat", "perc"],
   goal: `Write the full drum kit with "grid" ops in step notation (kick, clap, hat, openhat, perc; snare/ghosts if the lane wants them; midi 36 kick, 39 clap, 38 snare, 42 hat, 46 openhat): velocity ladders, the lane's hat language, a "sparse" pattern variant for intros and breakdowns, then "active" ops so every section has the right drums (kick out of breakdowns). Set humanize swing for the lane. Do not touch anything else.`,
-  check: ({ song, facts }) => { const d = dropFacts(facts); if (!has(song, ["kick"])) return "no kick track"; if (!has(song, ["hat", "openhat", "perc"])) return "no hats or percussion"; if (d && d.kickDensity !== undefined && d.kickDensity < 3) return `drop kick density ${d.kickDensity.toFixed(1)} per bar, want 4`; return null; },
+  check: ({ song, facts }) => { const d = dropFacts(facts); if (!has(song, ["kick"])) return "no kick track"; if (!has(song, ["clap", "snare"])) return "no clap or snare on 2 and 4"; if (!has(song, ["hat", "openhat", "perc"])) return "no hats or percussion"; if (song.tracks.filter((t) => ["kick", "clap", "snare", "hat", "openhat", "perc"].includes(t.role) && hasNotes(t)).length < 4) return "fewer than 4 drum tracks (kick, clap, hats, open hat or percussion)"; if (d && d.kickDensity !== undefined && d.kickDensity < 3) return `drop kick density ${d.kickDensity.toFixed(1)} per bar, want 4`; return null; },
 };
 const bass: Step = {
   id: "bass", title: "Bass and sub", tier: "deep", scope: ["bass", "sub"],
@@ -49,7 +49,7 @@ const harmony: Step = {
 const hook: Step = {
   id: "hook", title: "Hook and ear candy", tier: "fast", group: "color", scope: ["lead", "pluck", "arp", "fx", "audio"],
   goal: `Add the memorable element as ops: a lead/pluck/arp phrase (call and response with the bass, repetition with one variation), plus ear candy that mutates every 8 bars (a pattern variant for drop2, a perc accent, an fx hit). Keep at most 6 sounding elements in the drop. Stay in key.`,
-  check: ({ song }) => (!has(song, ["lead", "pluck", "arp", "audio", "stab"]) ? "no hook element" : null),
+  check: ({ song }) => (!has(song, ["lead", "pluck", "arp", "audio"]) ? "no hook element (need a lead, pluck, arp or audio track with notes)" : null),
 };
 const craft: Step = {
   id: "craft", title: "Arrangement craft", tier: "fast", group: "finish", scope: "arrangement",
