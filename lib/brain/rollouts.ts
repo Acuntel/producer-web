@@ -48,7 +48,7 @@ const harmony: Step = {
 };
 const hook: Step = {
   id: "hook", title: "Hook and ear candy", tier: "fast", group: "color", scope: ["lead", "pluck", "arp", "fx", "audio"],
-  goal: `Add the memorable element as ops: a lead/pluck/arp phrase (call and response with the bass, repetition with one variation), plus ear candy that mutates every 8 bars (a pattern variant for drop2, a perc accent, an fx hit). Keep at most 6 sounding elements in the drop. Stay in key.`,
+  goal: `Add the memorable element as ops: a lead/pluck/arp phrase (call and response with the bass, repetition with one variation), plus ear candy that mutates every 8 bars (a pattern variant for drop2, a perc accent, an fx hit). Library sounds from SAMPLES AVAILABLE may be dropped in as audio tracks with clip.sampleId (a vocal shout on the offbeat, an impact on the drop downbeat, a riser under the build). Keep at most 6 sounding elements in the drop. Stay in key.`,
   check: ({ song }) => (!has(song, ["lead", "pluck", "arp", "audio"]) ? "no hook element (need a lead, pluck, arp or audio track with notes)" : null),
 };
 const craft: Step = {

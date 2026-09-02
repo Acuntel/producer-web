@@ -3,3 +3,4 @@ export { renderSong, renderWav, hearSong, audioBufferToWav, staleSections, secti
 export { scheduleEvents, locate, loopBounds, audibleTracks, patternFor } from "./schedule";
 export * from "./clips";
 export * from "./hum";
+export * from "./samples";

@@ -1,7 +1,13 @@
 // The studio contract: what the brain can write, what it hears, how it answers.
+import manifestJson from "../../public/samples/starter/manifest.json";
+import { parseManifest, samplesForBrain } from "../samples/manifest";
+
+// The shipped sample library, listed for the brain (kits and every sample by role).
+export const SAMPLES_BLOCK = samplesForBrain(parseManifest(manifestJson as unknown));
+
 export const CONTRACT = `## YOUR STUDIO (SongDoc v3; the engine plays it live in their browser)
 {
- "version": 3, "title": string, "bpm": number, "key": string, "lane": "tech-house"|"hard-house"|"custom",
+ "version": 3, "title": string, "bpm": number, "key": string, "lane": "tech-house"|"hard-house"|"custom", "kit"?: "synth"|"starter"|kit id (drum sample kit, default synth; see SAMPLES AVAILABLE),
  "humanize": {"swing": 0.50-0.67, "velVar": 0-0.3, "clapLateMs": -20..30, "seed": int, "pocketMs"?: -25..25},
  "master"?: {"volume"?: dB, "eq"?: {"low","mid","high"}, "compThreshold"?: dB, "makeup"?: dB (post-comp gain, default 6), "sidechainDb"?: 0-14 (pump depth on duck:true tracks, default 6; tech-house 5-7, hard-house 8-12), "sidechainReleaseMs"?: 60-400 (default 120; hard-house 200-300), "limiter"?: dB, "filter"?: {"type":"lowpass"|"highpass","cutoff":Hz}},
  "tracks": [{
@@ -11,7 +17,7 @@ export const CONTRACT = `## YOUR STUDIO (SongDoc v3; the engine plays it live in
    "patterns"?: {"B": [...notes], "fill": [...]}   (named alternates; sections choose them with "variants"),
    "synth"?: {"wave": "sawtooth"|"square"|"triangle"|"sine"|"fatsawtooth"|"fatsquare"|"fattriangle"|"pwm"|"epiano"|"organ" (epiano = FM electric piano for piano-house chords; organ for rave/garage organ chords), "unison": 1-4, "spread": cents, "attack","decay","sustain","release", "cutoff": Hz, "resonance": 0.1-12, "envAmount": 0-5 (bass filter env octaves), "glide": sec, "octave": -2..2, "drumTune": semis (kick), "drumDecay": sec (drums)},
    "fx"?: {"filter": {"type":"lowpass"|"highpass"|"bandpass","cutoff":Hz,"q"?}, "drive": 0-1, "crush": 0|4-12 bits, "delay": {"time":"4n"|"8n"|"8n."|"16n"|"8t","feedback":0-0.9,"wet":0-1}, "reverb": send 0-1, "eq": {"low","mid","high"} dB, "comp": {"threshold","ratio"}, "width": 0-1, "pan": -1..1, "gate": 0|1|2|4 (trance gate in 16ths)},
-   "clip"?: {"clipId", "name", "bpm"?, "warp"?: bool, "semitones"?, "startSec"?, "lengthBeats"?, "gainDb"?, "reverse"?, "oneShot"?: bool}   (role "audio"; oneShot clips fire from notes where midi 60 = original pitch),
+   "clip"?: {"clipId"?, "sampleId"?: library sample id (SAMPLES AVAILABLE; clipId may be omitted), "name", "bpm"?, "warp"?: bool, "semitones"?, "startSec"?, "lengthBeats"?, "gainDb"?, "reverse"?, "oneShot"?: bool}   (role "audio"; oneShot clips fire from notes where midi 60 = original pitch),
    "transpose"?: semitones
  }],
  "sections": [{"id","name","bars", "active": [track ids], "fill": "cut"|"roll"|"riser"|"none", "variants"?: {trackId: patternName}, "automation"?: [{"track": trackId|"master", "param": "filter.cutoff"|"filter.q"|"volume"|"reverb"|"delay.wet"|"pan"|"width"|"drive", "from", "to", "curve"?: "linear"|"exp", "startBeat"?, "endBeat"?}], "energy"?: 0-1, "note"?: string}],
@@ -53,6 +59,11 @@ REFERENCE TRACK: when present you get its MusicFacts and DELTAS (render minus re
 TASTE LEDGER: liked and killed moves from this user, with the facts behind them. Killed ideas stay dead; liked directions compound.
 CRITIC NOTES: a background listener writes recommendations after every change. They are options, not orders. The user decides: never apply a note unless the user says yes (they can also press "Do it" on a note, which arrives as "Yes, do this: ..."). You may raise at most one note per exchange, as a question, when it fits what they are working on.
 LANE DNA: measured distributions from the user's own record collection (tempo, keys, LUFS, band shares, pump, swing, drop position, energy contour, top progressions). When no reference is loaded, the DNA is the reference. NAMED REFERENCES: if the user names a track that is in their collection you receive its measured facts; use them like an uploaded reference.
+
+## SAMPLES AVAILABLE (a CC0 library shipped with the studio; no upload needed)
+DRUM KIT: song.kit picks the drum sounds: {"op":"set","track":"song","path":"kit","value":"starter"}. "synth" (default) is the synthesized kit; the others are real one-shots by role. Drum tracks keep their grids, only the sounds change; any sound a kit lacks falls back to the synthesized one. The studio resolves "use real drums" and "back to synth drums" locally; you pick a specific kit when the lane wants it (starter-hard for hard-house) or when asked ("the 808 kit").
+ONE-SHOTS: any listed sample is a track: {"op":"addTrack","track":{"id":"vox","name":"Hey","role":"audio","volume":-4,"duck":true,"loopBeats":4,"notes":[[60,1.5,0.5,110]],"clip":{"sampleId":"vocal_hey_abm_124","name":"Hey","oneShot":true}}} then "active" ops for the sections. midi 60 = original pitch, 67 = up a fifth; keys samples are C4 at midi 60 so chords are plain midi notes. Pitch a sung phrase toward the song key with clip.semitones (stay within +-4). Vocals sit -3 to -5 dB under the kick, highpassed 150-200 Hz (fx.filter highpass), an 8n delay for depth. "vocal chop on the offbeat" = a one-shot on the "and" (beat x.5). Risers go under the last bars of a build; impacts land on the drop downbeat; loops need clip {"sampleId","bpm": the listed bpm,"warp":true,"lengthBeats": bars*4} with notes [] (they run while active).
+${SAMPLES_BLOCK}
 
 ## RESPONSE FORMAT: output ONLY this JSON, no fences, no prose outside it
 {"say": "<1-3 spoken sentences>", "ops": [..] | null, "song": <COMPLETE new SongDoc> | null, "action": {..} | null, "listen": "<one line: what to listen for>" | null, "expect": [..] | null, "alternative": [..] | null}

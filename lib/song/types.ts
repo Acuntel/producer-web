@@ -46,7 +46,8 @@ export type Fx = {
 };
 
 export type AudioClip = {
-  clipId: string;      // key in the browser clip store (IndexedDB)
+  clipId: string;      // key in the browser clip store (IndexedDB); "sample:<id>" for library samples
+  sampleId?: string;   // a library sample from public/samples (manifest id); resolves to the decoded file
   name: string;
   bpm?: number;        // native tempo (measured by the ears); warps to the song when set
   warp?: boolean;      // time-stretch to the song tempo (default true when bpm known)
@@ -132,6 +133,7 @@ export type Song = {
   bpm: number;
   key: string;
   lane: Lane;
+  kit?: string;        // drum sample kit: "synth" (default) | "starter" | any manifest kit id
   humanize: Humanize;
   tracks: Track[];
   sections: Section[];

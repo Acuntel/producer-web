@@ -7,9 +7,24 @@ export type KitSound = "kick" | "clap" | "snare" | "hat" | "openhat" | "perc";
 export type Kit = Record<KitSound, AudioBuffer>;
 
 const cache = new Map<string, Promise<Kit>>();
+const sampled = new Map<string, Promise<Kit>>();
 const SR = 44100;
 
-export function getKit(style: KitStyle): Promise<Kit> {
+// The kit a song plays: `kit` undefined or "synth" = the synthesized kit for the lane;
+// anything else names a library kit (or a lane) from public/samples, sound by sound
+// falling back to the synthesized kit. A failed library load never blocks playback.
+export function getKit(style: KitStyle, kit?: string): Promise<Kit> {
+  if (!kit || kit === "synth") return synthKit(style);
+  const key = `${kit}|${style}`;
+  let p = sampled.get(key);
+  if (!p) {
+    p = import("./samples").then((m) => m.sampleKit(kit, style)).then((r) => r.kit).catch(() => { sampled.delete(key); return synthKit(style); });
+    sampled.set(key, p);
+  }
+  return p;
+}
+
+export function synthKit(style: KitStyle): Promise<Kit> {
   const key = style === "hard-house" ? "hard-house" : "tech-house";
   let p = cache.get(key);
   if (!p) { p = renderKit(key); cache.set(key, p); }

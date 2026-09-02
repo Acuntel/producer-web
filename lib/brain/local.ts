@@ -70,6 +70,18 @@ function matchSection(text: string, song: Song): string | null {
 
 const names = (ts: Track[]) => ts.map((x) => x.name).join(", ");
 
+// "use real drums" / "back to synth drums": the drum sample kit on the song, resolved instantly.
+const KIT_WORDS: Record<string, string> = { real: "starter", sampled: "starter", sample: "starter", starter: "starter", live: "starter", "808": "starter-808", acoustic: "starter-acoustic", hard: "starter-hard", synth: "synth", synthesized: "synth", synthetic: "synth", electronic: "synth" };
+const KIT_SAY: Record<string, string> = { starter: "Real drums are on.", "starter-hard": "The hard kit is on.", "starter-808": "The 808 kit is on.", "starter-acoustic": "The acoustic kit is on.", synth: "Back to the synth drums." };
+function kitIntent(t: string, song: Song): LocalIntent | null {
+  const m = t.match(/^(?:use|switch to|switch back to|put on|load|give me|try|go with|go back to|back to) (?:the )?(?<k>real|sampled|sample|starter|live|808|acoustic|hard|synth|synthesized|synthetic|electronic) (?:drums|drum kit|kit|sounds|samples|drum sounds|drum samples)(?: please)?$/)
+    ?? t.match(/^(?:use|load) (?:the )?samples$/) ?? t.match(/^(?<k>real|sampled|synth) drums(?: please)?$/);
+  if (!m) return null;
+  const kit = KIT_WORDS[m.groups?.k ?? "real"] ?? "starter";
+  const value = kit === "starter" && song.lane === "hard-house" ? "starter-hard" : kit;
+  return { ops: [{ op: "set", track: "song", path: "kit", value }], say: KIT_SAY[value], note: `drum kit set to ${value}`, kind: "kit" };
+}
+
 export function localIntent(text: string, song: Song): LocalIntent | null {
   const t = clean(text);
   if (!t || t.split(" ").length > 12) return null;
@@ -83,6 +95,8 @@ export function localIntent(text: string, song: Song): LocalIntent | null {
   if (/^(play|switch to|let me hear|give me) (version )?b$|^(the )?second one$/.test(t)) return { ab: "b", say: "Version B.", note: "user switched to B", kind: "ab" };
   if (/^(keep|go with|i like|take) (version )?a$/.test(t)) return { ab: "keepA", say: "A it is.", note: "user chose A", kind: "ab" };
   if (/^(keep|go with|i like|take) (version )?b$/.test(t)) return { ab: "keepB", say: "B it is.", note: "user chose B", kind: "ab" };
+  const kit = kitIntent(t, song);
+  if (kit) return kit;
 
   const bpm = t.match(/\b(\d{2,3}) ?bpm\b/) ?? (/^(make it|set it to|go to|tempo) (\d{2,3})$/.test(t) ? t.match(/(\d{2,3})$/) : null);
   if (bpm) { const v = Number(bpm[1]); if (v >= 60 && v <= 200) return { ops: [{ op: "tempo", bpm: v }], say: `${v}.`, note: `tempo set to ${v}`, kind: "tempo" }; }
