@@ -24,7 +24,7 @@ export class Engine {
   async start(song: Song) {
     await Tone.start();
     await this.prepareClips(song);
-    this.kit = await getKit(song.lane);
+    this.kit = await getKit(song.lane, song.bpm);
     this.buildLive(song);
     this.transport.start();
     this.playing = true;
@@ -37,7 +37,7 @@ export class Engine {
   // Rebuild playing OR paused, keeping the groove position (clamped to the new length).
   async update(song: Song) {
     await this.prepareClips(song);
-    this.kit = await getKit(song.lane);
+    this.kit = await getKit(song.lane, song.bpm);
     const pos = this.transport.ticks;
     this.teardown();
     this.buildLive(song);

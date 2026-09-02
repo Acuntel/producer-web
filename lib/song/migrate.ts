@@ -23,7 +23,7 @@ export function migrateSong(input: unknown): Song | null {
     title: typeof s.title === "string" ? s.title : "Untitled",
     bpm: typeof s.bpm === "number" ? s.bpm : 126,
     key: typeof s.key === "string" ? s.key : "D minor",
-    lane: s.lane === "hard-house" || s.lane === "custom" ? s.lane : "tech-house",
+    lane: typeof s.lane === "string" && s.lane.trim() ? s.lane.trim() : "tech-house",
     humanize: {
       swing: num(h.swing, 0.55), velVar: num(h.velVar, 0.06), clapLateMs: num(h.clapLateMs, 5), seed: num(h.seed, 42),
       pocketMs: typeof h.pocketMs === "number" ? h.pocketMs : undefined,

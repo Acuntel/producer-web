@@ -8,6 +8,8 @@ import { parseBrain } from "@/lib/brain/parse";
 import { buildUserBlock, type ExchangeInput } from "@/lib/brain/context";
 import { PROCESS } from "@/lib/brain/process";
 import { dnaForBrain, findReference, artistDna } from "@/lib/brain/dna";
+import { laneRecipe } from "@/lib/brain/lanes";
+import { dnaLaneFor, laneNamed } from "@/lib/brain/laneNames";
 
 export const maxDuration = 60;
 
@@ -23,7 +25,10 @@ export async function POST(req: Request) {
   });
   const convo = (input.messages ?? []).slice(-24);
   const last = convo.pop();
-  input.dna = dnaForBrain(input.song?.lane ?? "tech-house");
+  const lane = input.song?.lane ?? "tech-house";
+  const named = laneNamed(last?.content ?? "");
+  input.laneRecipe = named && named !== lane ? laneRecipe(named, "the user just named this lane; a switch is a new record via action rollout") : laneRecipe(lane);
+  input.dna = dnaForBrain(dnaLaneFor(lane));
   input.namedRefs = findReference(last?.content ?? "");
   input.artist = artistDna(last?.content ?? "");
   const finalUser = buildUserBlock(input, last?.content ?? "");

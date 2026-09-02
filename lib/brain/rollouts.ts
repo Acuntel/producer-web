@@ -5,6 +5,7 @@ import type { Song, Role } from "../song/types";
 import type { MusicFacts } from "../ears";
 import { parseKey } from "../song/harmony";
 import { patternFor } from "../song/pattern";
+import { laneKicksPerBar } from "./laneNames";
 
 export type StepTier = "fast" | "deep";
 export type RolloutKind = "newSong" | "emulate" | "finish" | "fixSection";
@@ -28,17 +29,17 @@ const has = (song: Song, roles: Role[], sectionId?: string) => song.tracks.some(
 
 const blueprint: Step = {
   id: "blueprint", title: "Blueprint", tier: "deep", scope: "arrangement", fullSong: true,
-  goal: `Design the record before writing a note. Return a COMPLETE SongDoc skeleton: title, bpm, key, lane, humanize, master, and the full sections + arrangement (bars, energy 0-1, fill, note per section describing what happens there), with "tracks": []. Follow the reference DNA or the lane DNA for tempo, key or its relative, section lengths, drop position and the energy contour. Write production notes in "notes": the hook idea, the bass concept, the arc.`,
+  goal: `Design the record before writing a note. Return a COMPLETE SongDoc skeleton: title, bpm, key, lane (the lane the user asked for when one is named), humanize, master, and the full sections + arrangement (bars, energy 0-1, fill, note per section describing what happens there), with "tracks": []. Follow the reference DNA or the lane DNA for tempo, key or its relative, section lengths, drop position and the energy contour. Write production notes in "notes": the hook idea, the bass concept, the arc.`,
   check: ({ song }) => (song.sections.length < 5 ? "fewer than 5 sections" : !song.sections.some((s) => /drop/i.test(s.name)) ? "no drop section" : song.bpm < 100 ? "tempo too low for the lane" : null),
 };
 const drums: Step = {
   id: "drums", title: "Drums", tier: "fast", scope: ["kick", "clap", "snare", "hat", "openhat", "perc"],
   goal: `Write the full drum kit with "grid" ops in step notation (kick, clap, hat, openhat, perc; snare/ghosts if the lane wants them; midi 36 kick, 39 clap, 38 snare, 42 hat, 46 openhat): velocity ladders, the lane's hat language, a "sparse" pattern variant for intros and breakdowns, then "active" ops so every section has the right drums (kick out of breakdowns). Set humanize swing for the lane. Do not touch anything else.`,
-  check: ({ song, facts }) => { const d = dropFacts(facts); if (!has(song, ["kick"])) return "no kick track"; if (!has(song, ["clap", "snare"])) return "no clap or snare on 2 and 4"; if (!has(song, ["hat", "openhat", "perc"])) return "no hats or percussion"; if (song.tracks.filter((t) => ["kick", "clap", "snare", "hat", "openhat", "perc"].includes(t.role) && hasNotes(t)).length < 4) return "fewer than 4 drum tracks (kick, clap, hats, open hat or percussion)"; if (d && d.kickDensity !== undefined && d.kickDensity < 3) return `drop kick density ${d.kickDensity.toFixed(1)} per bar, want 4`; return null; },
+  check: ({ song, facts, lane }) => { const d = dropFacts(facts); if (!has(song, ["kick"])) return "no kick track"; if (!has(song, ["clap", "snare"])) return "no clap or snare on 2 and 4"; if (!has(song, ["hat", "openhat", "perc"])) return "no hats or percussion"; if (song.tracks.filter((t) => ["kick", "clap", "snare", "hat", "openhat", "perc"].includes(t.role) && hasNotes(t)).length < 4) return "fewer than 4 drum tracks (kick, clap, hats, open hat or percussion)"; if (d && d.kickDensity !== undefined) { const want = laneKicksPerBar(lane); if (want >= 3 && d.kickDensity < 3) return `drop kick density ${d.kickDensity.toFixed(1)} per bar, want ${want}`; if (want < 3 && d.kickDensity > want + 1.5) return `drop kick density ${d.kickDensity.toFixed(1)} per bar, this lane wants about ${want} (not four on the floor)`; } return null; },
 };
 const bass: Step = {
   id: "bass", title: "Bass and sub", tier: "deep", scope: ["bass", "sub"],
-  goal: `Write the bass hook and the sub as ops (addTrack bass + sub): this is the identity of the record. Use the lane recipe (rolling offbeat saw bass for tech-house; warp/reese lead bass for hard-house), shaped velocities, an octave or color note that makes it a hook, sub on the roots under it, duck:true on both. Activate in groove/drop/drop2/outro as the lane dictates. Stay in key.`,
+  goal: `Write the bass hook and the sub as ops (addTrack bass + sub): this is the identity of the record. Use the lane recipe (rolling offbeat saw bass for tech-house; warp/reese lead bass for hard-house; the LANE RECIPE block's bass for every other lane), shaped velocities, an octave or color note that makes it a hook, sub on the roots under it, duck:true on both. Activate in groove/drop/drop2/outro as the lane dictates. Stay in key.`,
   check: ({ song, facts }) => { if (!has(song, ["bass"])) return "no bass track"; if (inKey(song, ["bass", "sub"]) < 0.8) return "bass notes leave the key"; const d = dropFacts(facts); if (d && d.bands.sub + d.bands.low < 0.5) return `drop sub+low share ${(d.bands.sub + d.bands.low).toFixed(2)}, want 0.55-0.8`; return null; },
 };
 const harmony: Step = {

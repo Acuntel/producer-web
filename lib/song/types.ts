@@ -124,7 +124,8 @@ export type Humanize = {
   pocketMs?: number;   // global push (+) or drag (-) of non-kick elements
 };
 
-export type Lane = "tech-house" | "hard-house" | "custom";
+// Any lane id: the shipped "tech-house" and "hard-house", the researched lanes in knowledge/lanes/lanes.json, or "custom".
+export type Lane = string;
 
 export type Song = {
   version: 3;

@@ -4,13 +4,42 @@ import type { Song, Track, Role } from "../song/types";
 import { isDrum } from "../song/types";
 import type { Op } from "../song/ops";
 import type { BrainAction } from "./parse";
+import { laneNamed, laneInfo, ALIAS_ALTERNATION as A } from "./laneNames";
 
 export type LocalIntent = { ops?: Op[]; action?: BrainAction; say: string; note: string; kind: string; history?: "undo" | "redo"; ab?: "a" | "b" | "keepA" | "keepB"; rollout?: "newSong" | "emulate" | "finish" | "fixSection" };
 
+export type RolloutAsk = { kind: "newSong" | "emulate" | "finish" | "fixSection"; section?: string; lane?: string };
+
+// A lane named the way he names it ("make it afro house", "jersey club style", "let's do techno") is a new record in that lane.
+const LANE_FRAMES = [
+  new RegExp(`\\b(make|turn|flip) (it|this|that|the song|the track|the whole thing|our song|our track|me one|me something|something|one) (into |to |as |like |sound like )?(a |an |some |the )?(${A})\\b`),
+  new RegExp(`\\b(go|switch( it| this)? to|take (it|this) (to|into)|try|let'?s (do|go|try|make)|give me|i want|build( me)?|start|write( me)?) (a |an |some |the |it )?(new |fresh )?(${A})\\b`),
+  new RegExp(`\\b(${A}) (style|vibes?|mode|energy|version|edit|remix|flip|track|song|tune|banger|record|beat|thing)\\b`),
+  new RegExp(`\\b(new|fresh) (song|track|one|tune|banger|record|beat)\\b.*\\b(${A})\\b`),
+  new RegExp(`^(${A})( please)?$`),
+];
+export function laneAsk(t: string): string | null {
+  if (/^(flip (it|this)( for me)?|jersey flip)$/.test(t)) return "jersey-club";   // the five-kick pattern is what "flip this" means to him
+  if (/^(what|how|why|who|which|when|is|are|does|do|can|could|should|would|will)\b/.test(t)) return null;   // questions about a lane are conversation
+  if (!LANE_FRAMES.some((re) => re.test(t))) return null;
+  return laneNamed(t);
+}
+
+// The one line the studio speaks while a rollout starts.
+export function rolloutLine(ro: RolloutAsk, sectionName?: string | null): string {
+  if (ro.kind === "emulate") return "On it. I will chase the reference in layers: drums, bass, harmony, hook, then the mix.";
+  if (ro.kind === "finish") return "Building it out to a full arrangement now.";
+  if (ro.kind === "fixSection") return `Reworking the ${sectionName ?? "section"} now.`;
+  const lane = ro.lane ? laneInfo(ro.lane) : null;
+  return lane ? `Give me a minute, I will build a ${lane.name.toLowerCase()} record at ${lane.home} in layers: drums, bass, then the hook.` : "Give me a minute, I will build this in layers: drums, bass, then the hook.";
+}
+
 // Big builds are deterministic: these phrasings always run the process engine.
-export function rolloutIntent(text: string, hasReference: boolean): { kind: "newSong" | "emulate" | "finish" | "fixSection"; section?: string } | null {
+export function rolloutIntent(text: string, hasReference: boolean): RolloutAsk | null {
   const t = clean(text);
   if (/\b(make|build|produce|do) (it|this|our song|our track|the song|the track|something|one|a (song|track)) (like|in the style of|sound like|closer to) (the|this|that|my) (reference|ref|track i uploaded|upload)\b/.test(t) || /\b(emulate|chase|copy the dna of|match) (the|this|that|my) (reference|ref)\b/.test(t)) return { kind: hasReference ? "emulate" : "newSong" };
+  const lane = laneAsk(t);
+  if (lane) return { kind: "newSong", lane };
   if (/\b(new song|new track|fresh (song|track|one)|start (a )?(new|fresh) (song|track|one)|start over with a new (song|track)|make me a (new )?(song|track|record|banger|tune)|build me a (song|track|record)|write me a (song|track))\b/.test(t)) return { kind: hasReference ? "emulate" : "newSong" };
   if (/\b(finish (it|the song|the track|this)|build (it|this) out|take (it|this) to the end|complete (it|the song|the track)|full arrangement|arrange (it|this|the whole thing))\b/.test(t)) return { kind: "finish" };
   const m = t.match(/\b(rebuild|redo|remake|rework|fix|rewrite) (the |my )?(intro|groove|build ?2?|drop ?2?|second drop|breakdown|break|outro)\b/);

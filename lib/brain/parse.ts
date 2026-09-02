@@ -2,8 +2,9 @@
 // we survive fences, prose, and missing fields.
 import type { Song } from "../song/types";
 import { migrateSong } from "../song/migrate";
+import { laneId } from "./laneNames";
 
-export type BrainAction = { type: "play" | "pause" | "goto" | "loop" | "unloop" | "recordHum" | "rollout" | "hear" | "none"; section?: string; bar?: number; beats?: number; track?: string; kind?: string };
+export type BrainAction = { type: "play" | "pause" | "goto" | "loop" | "unloop" | "recordHum" | "rollout" | "hear" | "none"; section?: string; bar?: number; beats?: number; track?: string; kind?: string; lane?: string };
 export type Expectation = { section?: string; metric: string; dir: "up" | "down" };
 export type BrainReply = { say: string; ops: unknown[] | null; song: Song | null; action: BrainAction | null; listen: string | null; expect: Expectation[] | null; alternative: unknown[] | null; raw?: string };
 
@@ -38,6 +39,7 @@ export function normalizeAction(a: unknown): BrainAction | null {
     beats: typeof o.beats === "number" ? o.beats : undefined,
     track: typeof o.track === "string" ? o.track : undefined,
     kind: typeof o.kind === "string" ? o.kind : undefined,
+    ...(laneId(o.lane) ? { lane: laneId(o.lane) as string } : {}),
   };
 }
 

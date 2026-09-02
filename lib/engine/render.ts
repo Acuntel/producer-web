@@ -17,7 +17,7 @@ async function clipsFor(song: Song): Promise<Clips> {
 }
 
 async function renderOffline(song: Song, secs: number, clips: Clips, sampleRate?: number): Promise<AudioBuffer> {
-  const kit = await getKit(song.lane);
+  const kit = await getKit(song.lane, song.bpm);
   const buffer = await Tone.Offline(({ transport }) => {
     buildGraph(song, transport as unknown as Transport, clips, kit);
     transport.start(0);

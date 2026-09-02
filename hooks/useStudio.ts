@@ -9,7 +9,7 @@ import type { MusicFacts } from "@/lib/ears";
 import { logMove, setVerdict, inferVerdictFromUtterance, tasteSummary, logPair } from "@/lib/taste";
 import { logMoveScore, referenceDelta, scoreLine } from "@/lib/scorecard";
 import { notesForBrain } from "@/lib/critic";
-import { localIntent, rolloutIntent } from "@/lib/brain/local";
+import { localIntent, rolloutIntent, rolloutLine } from "@/lib/brain/local";
 import { verifyMove } from "@/lib/brain/verify";
 import type { BrainAction, Expectation } from "@/lib/brain/parse";
 import type { RolloutKind } from "@/lib/brain/rollouts";
@@ -47,10 +47,8 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const [toast, setToast] = useState("");
   const [lastMoveId, setLastMoveId] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
-  const [ab, setAb] = useState<AB>(null);
-  const [score, setScore] = useState("");
-  const [canUndo, setCanUndo] = useState(false);
-  const [canRedo, setCanRedo] = useState(false);
+  const [ab, setAb] = useState<AB>(null); const [score, setScore] = useState("");
+  const [canUndo, setCanUndo] = useState(false); const [canRedo, setCanRedo] = useState(false);
 
   const engineRef = useRef<Engine | null>(null);
   const songRef = useRef(song); const messagesRef = useRef(messages);
@@ -152,7 +150,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     else if (a.type === "rollout") {
       const kind = (["newSong", "emulate", "finish", "fixSection"].includes(a.kind ?? "") ? a.kind : referenceRef.current ? "emulate" : "newSong") as RolloutKind;
       historyRef.current.push(songRef.current, `before ${kind}`); setCanUndo(true);
-      const res = await runRollout(kind, ask, a.section ?? null);
+      const res = await runRollout(kind, ask, a.section ?? null, a.lane ?? null);
       refreshEars(songRef.current);
       if (res) { setMessages((m) => [...m, { role: "assistant", content: res.say }]); messagesRef.current = [...messagesRef.current, { role: "assistant", content: res.say }]; setListenHint(res.listen); say(res.say); }
     }
@@ -211,9 +209,9 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       busyRef.current = true; setBusy(true);
       setMessages((m) => [...m, { role: "user", content: t }]);
       const sec = ro.section ? (songRef.current.sections.find((x) => x.id === ro.section || x.name.toLowerCase().replace(/\s+/g, "") === ro.section)?.id ?? ro.section) : null;
-      const line = ro.kind === "emulate" ? "On it. I will chase the reference in layers: drums, bass, harmony, hook, then the mix." : ro.kind === "finish" ? "Building it out to a full arrangement now." : ro.kind === "fixSection" ? `Reworking the ${sec ?? "section"} now.` : "Give me a minute, I will build this in layers: drums, bass, then the hook.";
+      const line = rolloutLine(ro, sec);
       setMessages((m) => [...m, { role: "assistant", content: line }]); say(line);
-      try { await runAction({ type: "rollout", kind: ro.kind, section: sec ?? undefined }, songRef.current, t); }
+      try { await runAction({ type: "rollout", kind: ro.kind, section: sec ?? undefined, lane: ro.lane }, songRef.current, t); }
       finally { busyRef.current = false; setBusy(false); const p = pendingRef.current; pendingRef.current = null; if (p) void send(p); }
       return;
     }
