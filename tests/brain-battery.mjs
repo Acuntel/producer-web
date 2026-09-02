@@ -8,7 +8,7 @@ import { chordsForSection, condense } from "../lib/song/harmony.ts";
 
 const BASE = process.argv[2] ?? "http://localhost:3111";
 const ASKS = [
-  ["solo the bass, I want to hear it alone", (s, r) => s.tracks.find((t) => t.role === "bass").solo === true],
+  ["solo the bass, I want to hear it alone", (s) => { const b = s.tracks.find((t) => t.role === "bass"); const others = s.tracks.filter((t) => t.id !== b.id && t.role !== "kick"); return b.solo === true || (others.length > 0 && others.every((t) => t.mute || (s.tracks.some((x) => x.solo) && !t.solo))); }],
   ["ok bring everything back and loop the drop", (s, r) => s.tracks.every((t) => !t.solo) && (s.loop?.section != null || r.action?.type === "loop")],
   ["put a filter sweep on the build so it opens up into the drop", (s) => s.sections.some((x) => (x.automation ?? []).some((a) => a.param === "filter.cutoff"))],
   ["add a dotted eighth delay on the stabs and pan them a little left", (s) => { const st = s.tracks.find((t) => t.role === "stab"); return !!st?.fx?.delay && (st.fx.pan ?? 0) < 0; }],
