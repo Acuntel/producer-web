@@ -15,14 +15,25 @@ export type Buses = { master: Tone.ToneAudioNode; duck: Tone.ToneAudioNode; reve
 
 const midiToFreq = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 const REV_WET: Partial<Record<Role, number>> = { clap: 0.14, snare: 0.1, stab: 0.2, pad: 0.32, chords: 0.22, lead: 0.16, openhat: 0.07, perc: 0.08, arp: 0.15, pluck: 0.12, fx: 0.3, audio: 0.1 };
-const ROLE_CUTOFF: Partial<Record<Role, number>> = { pad: 1100, chords: 2400, stab: 3200, lead: 6000, pluck: 5000, arp: 4500, fx: 8000 };
+const ROLE_CUTOFF: Partial<Record<Role, number>> = { pad: 2400, chords: 3600, stab: 4800, lead: 6500, pluck: 5200, arp: 5000, fx: 8000 };
+// Gain staging: measured solo LUFS in the drop with seed volumes, targeted at record levels relative to the kick.
+const ROLE_TRIM: Partial<Record<Role, number>> = { kick: -2.5, clap: 2, snare: 3, hat: 5, openhat: 4, perc: 4, bass: 3, sub: -3, stab: 7, chords: 7, pad: 8, lead: 6, pluck: 6, arp: 6, fx: 4, audio: 3 };
+const ROLE_WAVE: Partial<Record<Role, Wave>> = { pad: "fatsawtooth", chords: "fatsawtooth", stab: "fatsawtooth", lead: "fatsawtooth", arp: "sawtooth", pluck: "triangle" };
+const ROLE_UNISON: Partial<Record<Role, [number, number]>> = { pad: [3, 26], chords: [2, 14], stab: [2, 12], lead: [2, 10] };
 
-function oscOf(p: SynthParams | undefined, fallback: Wave): Tone.OmniOscillatorOptions {
-  const wave = p?.wave ?? fallback;
+function oscOf(p: SynthParams | undefined, fallback: Wave, unison?: [number, number]): Tone.OmniOscillatorOptions {
+  let wave = p?.wave ?? fallback;
+  if (wave === "epiano" || wave === "organ") wave = "sine";
   const fat = wave.startsWith("fat");
   const base: Record<string, unknown> = { type: wave };
-  if (fat) { base.count = Math.max(1, Math.min(4, p?.unison ?? 2)); base.spread = p?.spread ?? 18; }
+  if (fat) { base.count = Math.max(1, Math.min(4, p?.unison ?? unison?.[0] ?? 2)); base.spread = p?.spread ?? unison?.[1] ?? 18; }
   return base as unknown as Tone.OmniOscillatorOptions;
+}
+
+// Keyboard voices: an FM electric piano and a drawbar-ish organ, for piano-house and rave chords.
+function keyboardVoice(kind: "epiano" | "organ", p: SynthParams, envOf: (d: { attack: number; decay: number; sustain: number; release: number }) => { attack: number; decay: number; sustain: number; release: number }) {
+  if (kind === "epiano") return new Tone.PolySynth(Tone.FMSynth, { harmonicity: 3.01, modulationIndex: 11, oscillator: { type: "sine" }, modulation: { type: "sine" }, envelope: envOf({ attack: 0.004, decay: 0.9, sustain: 0.12, release: 0.6 }), modulationEnvelope: { attack: 0.002, decay: 0.25, sustain: 0.05, release: 0.3 } });
+  return new Tone.PolySynth(Tone.AMSynth, { harmonicity: 2, oscillator: { type: "sine" }, modulation: { type: "square" }, envelope: envOf({ attack: 0.01, decay: 0.1, sustain: 0.9, release: 0.12 }), modulationEnvelope: { attack: 0.01, decay: 0.1, sustain: 1, release: 0.1 } });
 }
 
 export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: Kit): Voice {
@@ -33,7 +44,7 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: 
   const dest = track.duck ? buses.duck : buses.master;
 
   // Insert chain (built back to front): filter -> drive -> crush -> eq -> delay -> pan -> width -> volume.
-  const volume = new Tone.Volume(track.volume).connect(dest); disp.push(volume);
+  const volume = new Tone.Volume(track.volume + (ROLE_TRIM[role] ?? 0)).connect(dest); disp.push(volume);
   let head: Tone.ToneAudioNode = volume;
   if (typeof fx.width === "number") { const w = new Tone.StereoWidener(fx.width); w.connect(head); head = w; disp.push(w); }
   const panner = new Tone.Panner(fx.pan ?? 0); panner.connect(head); head = panner; disp.push(panner);
@@ -75,7 +86,7 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: 
     switch (param) {
       case "filter.cutoff": return ramp(filter.frequency as unknown as Tone.Signal<"frequency">, curve !== "linear");
       case "filter.q": return ramp(filter.Q as unknown as Tone.Signal<"positive">, false);
-      case "volume": return ramp(volume.volume as unknown as Tone.Signal<"decibels">, false);
+      case "volume": { const trim = ROLE_TRIM[role] ?? 0; volume.volume.cancelScheduledValues(t0); volume.volume.setValueAtTime(from + trim, t0); volume.volume.linearRampToValueAtTime(to + trim, t1); return true; }
       case "pan": return ramp(panner.pan as unknown as Tone.Signal<"audioRange">, false);
       case "reverb": return send ? ramp(send.gain as unknown as Tone.Signal<"normalRange">, false) : false;
       case "delay.wet": return delay ? ramp(delay.wet as unknown as Tone.Signal<"normalRange">, false) : false;
@@ -159,14 +170,18 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: 
       break;
     }
     case "stab": {
-      const s = new Tone.PolySynth(Tone.Synth, { oscillator: oscOf(p, "sawtooth"), envelope: env({ attack: 0.003, decay: 0.22, sustain: 0, release: 0.06 }) }).connect(head); disp.push(s);
+      const s = p.wave === "epiano" || p.wave === "organ" ? keyboardVoice(p.wave, p, env) : new Tone.PolySynth(Tone.Synth, { oscillator: oscOf(p, ROLE_WAVE.stab ?? "sawtooth", ROLE_UNISON.stab), envelope: env({ attack: 0.003, decay: 0.24, sustain: 0, release: 0.08 }) });
+      s.connect(head); disp.push(s);
       trigger = (n, t, bpm) => s.triggerAttackRelease(midiToFreq(n[0] + oct), durSec(n, bpm), t, vel(n));
       break;
     }
     case "chords": case "pad": {
-      const s = new Tone.PolySynth(Tone.Synth, { oscillator: oscOf(p, "sawtooth"), envelope: env({ attack: role === "pad" ? 0.4 : 0.005, decay: 0.5, sustain: 0.65, release: 0.9 }) });
+      const s = p.wave === "epiano" || p.wave === "organ" ? keyboardVoice(p.wave, p, env) : new Tone.PolySynth(Tone.Synth, { oscillator: oscOf(p, ROLE_WAVE[role] ?? "sawtooth", ROLE_UNISON[role]), envelope: env({ attack: role === "pad" ? 0.4 : 0.005, decay: 0.5, sustain: 0.65, release: 0.9 }) });
       const ch = new Tone.Chorus(0.6, 3.5, 0.4).start(); s.connect(ch); ch.connect(head); disp.push(s, ch);
-      trigger = (n, t, bpm) => s.triggerAttackRelease(midiToFreq(n[0] + oct), durSec(n, bpm), t, vel(n) * 0.8);
+      // A quiet sub-octave sine under chords gives the mids a floor without mud.
+      const body = new Tone.PolySynth(Tone.Synth, { oscillator: { type: "sine" }, envelope: env({ attack: role === "pad" ? 0.4 : 0.005, decay: 0.5, sustain: 0.65, release: 0.9 }) });
+      const bodyVol = new Tone.Volume(-14); body.connect(bodyVol); bodyVol.connect(head); disp.push(body, bodyVol);
+      trigger = (n, t, bpm) => { s.triggerAttackRelease(midiToFreq(n[0] + oct), durSec(n, bpm), t, vel(n) * 0.8); if (n[0] + oct >= 52) body.triggerAttackRelease(midiToFreq(n[0] + oct - 12), durSec(n, bpm), t, vel(n) * 0.5); };
       break;
     }
     case "audio": {
@@ -182,7 +197,8 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: 
       break;
     }
     default: { // lead, pluck, arp, fx
-      const s = new Tone.PolySynth(Tone.Synth, { oscillator: oscOf(p, role === "lead" ? "sawtooth" : "triangle"), envelope: env({ attack: 0.004, decay: 0.18, sustain: role === "lead" ? 0.4 : 0.15, release: 0.12 }) }).connect(head); disp.push(s);
+      const s = p.wave === "epiano" || p.wave === "organ" ? keyboardVoice(p.wave, p, env) : new Tone.PolySynth(Tone.Synth, { oscillator: oscOf(p, ROLE_WAVE[role] ?? "triangle", ROLE_UNISON[role]), envelope: env({ attack: 0.004, decay: 0.18, sustain: role === "lead" ? 0.4 : 0.15, release: 0.12 }) });
+      s.connect(head); disp.push(s);
       trigger = (n, t, bpm) => s.triggerAttackRelease(midiToFreq(n[0] + oct), durSec(n, bpm), t, vel(n));
     }
   }

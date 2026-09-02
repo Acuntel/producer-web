@@ -7,7 +7,7 @@ import { CONTRACT } from "@/lib/brain/contract";
 import { parseBrain } from "@/lib/brain/parse";
 import { buildUserBlock, type ExchangeInput } from "@/lib/brain/context";
 import { PROCESS } from "@/lib/brain/process";
-import { dnaForBrain, findReference } from "@/lib/brain/dna";
+import { dnaForBrain, findReference, artistDna } from "@/lib/brain/dna";
 
 export const maxDuration = 60;
 
@@ -25,6 +25,7 @@ export async function POST(req: Request) {
   const last = convo.pop();
   input.dna = dnaForBrain(input.song?.lane ?? "tech-house");
   input.namedRefs = findReference(last?.content ?? "");
+  input.artist = artistDna(last?.content ?? "");
   const finalUser = buildUserBlock(input, last?.content ?? "");
 
   try {

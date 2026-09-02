@@ -76,7 +76,7 @@ export const SEED_HARD_HOUSE: Song = {
   key: "F minor",
   lane: "hard-house",
   humanize: { swing: 0.57, velVar: 0.07, clapLateMs: 0, seed: 99 },
-  master: { compThreshold: -16, limiter: -0.8 },
+  master: { compThreshold: -16, limiter: -0.8, sidechainDb: 9, sidechainReleaseMs: 220 },
   tracks: [
     { id: "kick", name: "Kick", role: "kick", volume: 0, loopBeats: 4, fx: { drive: 0.35 },
       notes: rep(4, (b) => [[36, b, 0.18, 127]]) },

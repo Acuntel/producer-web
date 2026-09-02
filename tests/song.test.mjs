@@ -174,7 +174,7 @@ test("rollout checks read the song and the facts", async () => {
   assert.ok(step("bass").check({ song: offKey, facts: null, reference: null, lane: "tech-house" }).includes("key"));
   assert.equal(step("craft").check({ song: s, facts: null, reference: null, lane: "tech-house" }), null);
   assert.ok(step("mix").check({ song: s, facts: facts({ peak: 1.5 }), reference: null, lane: "tech-house" }).includes("clipping"));
-  assert.ok(step("mix").check({ song: s, facts: facts({ bands: { sub: 0.7, low: 0.28, lowMid: 0.01, mid: 0.01, highMid: 0, air: 0 } }), reference: null, lane: "tech-house" }).includes("top end"));
+  assert.ok(step("mix").check({ song: s, facts: facts({ bands: { sub: 0.7, low: 0.28, lowMid: 0.01, mid: 0.01, highMid: 0, air: 0 } }), reference: null, lane: "tech-house" }).includes("top"));
   const { referenceDelta } = await import("../lib/scorecard.ts");
   assert.ok(referenceDelta({ lufs: 0, bands: { sub: 0, low: 0 }, tempoRatio: 1, pump: 0 }) === 0);
   assert.ok(referenceDelta({ lufs: 5, bands: { sub: 0.1, low: -0.1 }, tempoRatio: 1.02, pump: 0.1 }) > 0.5);

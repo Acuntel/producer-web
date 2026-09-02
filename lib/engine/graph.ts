@@ -117,12 +117,14 @@ export function buildGraph(song: Song, transport: Transport, clips: Clips = new 
     riserPart.start(0); parts.push(riserPart);
   }
 
-  // The pump: duck the bus at every kick.
+  // The pump: duck the bus at every kick. Depth and release are master params (records: 5-7 dB, 100-120 ms).
+  const duckFloor = Math.pow(10, -Math.max(0, Math.min(14, m.sidechainDb ?? 6)) / 20);
+  const duckRelease = Math.min(beatSec * 0.8, Math.max(0.06, (m.sidechainReleaseMs ?? 120) / 1000));
   const duckPart = new Tone.Part((time) => {
     duck.gain.cancelScheduledValues(time);
     duck.gain.setValueAtTime(1, time);
-    duck.gain.linearRampToValueAtTime(0.38, time + 0.015);
-    duck.gain.linearRampToValueAtTime(1, time + Math.min(0.26, beatSec * 0.55));
+    duck.gain.linearRampToValueAtTime(duckFloor, time + 0.012);
+    duck.gain.linearRampToValueAtTime(1, time + 0.012 + duckRelease);
   }, kickBeats.map((b) => [tick(b), b] as [string, number]));
   duckPart.start(0); parts.push(duckPart);
 

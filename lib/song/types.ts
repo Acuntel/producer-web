@@ -12,7 +12,7 @@ export type Role =
 // [midi, startBeat, durBeats, velocity 1-127]. For audio one-shots midi = semitone offset (60 = unpitched).
 export type Note = [number, number, number, number];
 
-export type Wave = "sawtooth" | "square" | "triangle" | "sine" | "fatsawtooth" | "fatsquare" | "pwm";
+export type Wave = "sawtooth" | "square" | "triangle" | "sine" | "fatsawtooth" | "fatsquare" | "fattriangle" | "pwm" | "epiano" | "organ";
 
 export type SynthParams = {
   wave?: Wave;
@@ -108,6 +108,8 @@ export type Master = {
   compThreshold?: number; // dB
   limiter?: number;       // dB ceiling
   makeup?: number;        // dB after the compressor, default +6
+  sidechainDb?: number;   // pump depth on ducked tracks, 0-14 dB, default 6
+  sidechainReleaseMs?: number; // 60-400, default 120
   filter?: { type: "lowpass" | "highpass"; cutoff: number };
   width?: number;
 };

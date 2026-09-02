@@ -39,7 +39,7 @@ const drums: Step = {
 const bass: Step = {
   id: "bass", title: "Bass and sub", tier: "deep", scope: ["bass", "sub"],
   goal: `Write the bass hook and the sub as ops (addTrack bass + sub): this is the identity of the record. Use the lane recipe (rolling offbeat saw bass for tech-house; warp/reese lead bass for hard-house), shaped velocities, an octave or color note that makes it a hook, sub on the roots under it, duck:true on both. Activate in groove/drop/drop2/outro as the lane dictates. Stay in key.`,
-  check: ({ song, facts }) => { if (!has(song, ["bass"])) return "no bass track"; if (inKey(song, ["bass", "sub"]) < 0.8) return "bass notes leave the key"; const d = dropFacts(facts); if (d && d.bands.sub + d.bands.low < 0.6) return `drop sub+low share ${(d.bands.sub + d.bands.low).toFixed(2)}, want 0.75-0.9`; return null; },
+  check: ({ song, facts }) => { if (!has(song, ["bass"])) return "no bass track"; if (inKey(song, ["bass", "sub"]) < 0.8) return "bass notes leave the key"; const d = dropFacts(facts); if (d && d.bands.sub + d.bands.low < 0.5) return `drop sub+low share ${(d.bands.sub + d.bands.low).toFixed(2)}, want 0.55-0.8`; return null; },
 };
 const harmony: Step = {
   id: "harmony", title: "Harmony", tier: "fast", group: "color", scope: ["chords", "pad", "stab"],
@@ -59,7 +59,7 @@ const craft: Step = {
 const mix: Step = {
   id: "mix", title: "Mix", tier: "fast", group: "finish", scope: "mix",
   goal: `Mix as ops on volumes, pans, sends, EQ, drive, master (compThreshold, makeup, limiter): kick and bass own the low end, pads sit low, hats and percussion give the top its life, stabs and leads pan for width. Use the measured facts: hit the lane's LUFS and band targets without clipping (peak <= 0).`,
-  check: ({ song, facts }) => { const d = dropFacts(facts); if (!d) return null; if (d.peak !== undefined && d.peak > 0.2) return `drop peaks at ${d.peak.toFixed(1)} dBFS, clipping`; if (d.lufs < -12) return `drop at ${d.lufs.toFixed(1)} LUFS, want -10 to -7`; const sl = d.bands.sub + d.bands.low; if (sl > 0.95) return `drop top end missing, sub+low ${sl.toFixed(2)}`; if (sl < 0.65) return `drop low end thin, sub+low ${sl.toFixed(2)}`; return null; },
+  check: ({ song, facts }) => { const d = dropFacts(facts); if (!d) return null; if (d.peak !== undefined && d.peak > 0.2) return `drop peaks at ${d.peak.toFixed(1)} dBFS, clipping`; if (d.lufs < -12) return `drop at ${d.lufs.toFixed(1)} LUFS, want -10 to -7`; const sl = d.bands.sub + d.bands.low; if (sl > 0.9) return `drop mids and top missing, sub+low ${sl.toFixed(2)} (collection p50 0.57): raise stabs, chords, hats; open filters`; if (sl < 0.45) return `drop low end thin, sub+low ${sl.toFixed(2)}`; return null; },
 };
 const verdict: Step = {
   id: "verdict", title: "Verdict", tier: "deep", scope: "all",

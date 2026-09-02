@@ -22,9 +22,11 @@ type Deps = {
 export function useUploads(d: Deps) {
   const addReference = useCallback(async (file: File) => {
     d.flash("Listening to the reference…");
+    console.log("reference: decoding", file.name, file.size);
     const { decodeFile, hearBuffer } = await import("@/lib/ears/browser");
     const f = await hearBuffer(await decodeFile(file), { maxSeconds: 240, label: file.name });
     const ref = { name: file.name.replace(/\.[a-z0-9]+$/i, ""), facts: f };
+    console.log("reference: heard", ref.name, f.read.slice(0, 120));
     d.referenceRef.current = ref; d.setReference(ref);
     try { localStorage.setItem(REF_KEY, JSON.stringify(ref)); } catch {}
     if (d.factsRef.current) { const { compare } = await import("@/lib/ears"); d.setDeltaText(compare(d.factsRef.current, f).text); }

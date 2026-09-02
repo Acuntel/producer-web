@@ -15,6 +15,7 @@ export type ExchangeInput = {
   verify?: string | null;   // a contradiction the ears found in the last move
   dna?: string | null;      // measured lane DNA (server adds)
   namedRefs?: unknown[];    // measured facts for tracks the user named (server adds)
+  artist?: unknown;         // measured medians for an artist the user named (server adds)
   score?: string;           // scorecard line
 };
 
@@ -53,6 +54,7 @@ export function buildUserBlock(x: ExchangeInput, lastUser: string): string {
   if (x.verify) parts.push(`VERIFY (your ears contradict your last move): ${x.verify}`);
   if (x.dna) parts.push(`LANE DNA (measured from the user's own collection): ${x.dna}`);
   if (x.namedRefs && x.namedRefs.length) parts.push(`NAMED REFERENCES the user mentioned (measured from their collection): ${JSON.stringify(x.namedRefs)}`);
+  if (x.artist) parts.push(`ARTIST DNA (the user named this artist; medians measured from their own collection): ${JSON.stringify(x.artist)}`);
   if (x.score) parts.push(`SESSION SCORECARD: ${x.score}`);
   if (x.taste) parts.push(`TASTE LEDGER:\n${x.taste}`);
   parts.push(`USER SAYS: ${lastUser}`);

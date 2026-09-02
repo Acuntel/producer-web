@@ -58,3 +58,17 @@ export function findReference(text: string): Json[] {
   });
   return hits.slice(0, 3).map((r) => ({ name: r.name, artist: r.artist, title: r.title, bpm: r.bpm, key: r.key, lufs: r.lufs, dropAt: r.dropAt, lane: r.lane, subPlusLow: r.subPlusLow, pump: r.pump, swing: r.swing }));
 }
+
+// Per-artist medians computed on the fly from the reference index when the user names an artist.
+export function artistDna(text: string): Json | null {
+  if (indexCache === undefined) indexCache = readJson<Json[]>("data/reference-index.json") ?? [];
+  const t = norm(text);
+  if (t.length < 4) return null;
+  const artists = new Map<string, Json[]>();
+  for (const r of indexCache) { const a = norm(r.artist); if (a.length > 4 && t.includes(a)) (artists.get(a) ?? artists.set(a, []).get(a)!).push(r); }
+  if (artists.size === 0) return null;
+  const [name, rows] = [...artists.entries()].sort((a, b) => b[1].length - a[1].length)[0];
+  const med = (k: string) => { const xs = rows.map((r) => r[k]).filter((v): v is number => typeof v === "number").sort((a, b) => a - b); return xs.length ? Math.round(xs[Math.floor(xs.length / 2)] * 100) / 100 : undefined; };
+  const keys = new Map<string, number>(); for (const r of rows) if (typeof r.key === "string") keys.set(r.key, (keys.get(r.key) ?? 0) + 1);
+  return { artist: rows[0].artist ?? name, tracksMeasured: rows.length, bpm: med("bpm"), lufs: med("lufs"), dropAtSec: med("dropAt"), subPlusLow: med("subPlusLow"), pump: med("pump"), swing: med("swing"), keys: [...keys.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, n]) => `${k} x${n}`), titles: rows.slice(0, 5).map((r) => r.title ?? r.name) };
+}
