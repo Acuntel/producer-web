@@ -4,6 +4,7 @@ import * as Tone from "tone";
 import type { Song, AutoParam } from "../song/types";
 import { scheduleEvents, type Ev, type Schedule } from "./schedule";
 import { makeVoice, type Voice } from "./voices";
+import { clipBuffer } from "./clips";
 import type { Kit } from "./kits";
 
 export type Clips = Map<string, AudioBuffer>;
@@ -41,7 +42,7 @@ export function buildGraph(song: Song, transport: Transport, clips: Clips = new 
     const evs = perTrack.get(tr.id);
     const spans = clipSpans.filter((c) => c.trackId === tr.id);
     if ((!evs || evs.length === 0) && spans.length === 0) continue;
-    const buf = tr.clip ? clips.get(tr.clip.clipId) : undefined;
+    const buf = clipBuffer(clips, tr.clip);   // an upload by clipId, or a library sample by sampleId
     const voice = makeVoice(tr, buses, buf, kit);
     voices.push(voice); voiceByTrack.set(tr.id, voice);
     if (evs && evs.length) {

@@ -1,5 +1,8 @@
 // Audio clips live in the browser (IndexedDB): uploads, recordings, the
 // producer's own bounces. Nothing is ever lost, nothing leaves the machine.
+// Library samples (public/samples) share the same map under "sample:<id>" keys.
+import type { Song, AudioClip } from "../song/types";
+import { sampleKey, sampleIdOf } from "../samples/manifest";
 const DB = "producer.clips";
 const STORE = "clips";
 
@@ -38,18 +41,42 @@ export async function decodeBytes(bytes: ArrayBuffer): Promise<AudioBuffer> {
   return ctx.decodeAudioData(bytes.slice(0));
 }
 
+async function decodeStored(id: string): Promise<AudioBuffer | null> {
+  const c = await getClip(id);
+  return c ? decodeBytes(c.bytes) : null;
+}
+
+// Uploads come from IndexedDB; "sample:<id>" keys come from the library manifest.
 export async function loadClipsFor(ids: string[]): Promise<Map<string, AudioBuffer>> {
   const out = new Map<string, AudioBuffer>();
   for (const id of ids) {
     if (decoded.has(id)) { out.set(id, decoded.get(id)!); continue; }
     try {
-      const c = await getClip(id);
-      if (!c) continue;
-      const buf = await decodeBytes(c.bytes);
+      const sid = sampleIdOf(id);
+      const buf = sid ? await (await import("./samples")).decodeSample(sid) : await decodeStored(id);
+      if (!buf) continue;
       decoded.set(id, buf); out.set(id, buf);
     } catch { /* skip broken clip */ }
   }
   return out;
+}
+
+// Every clip-store key a song needs: library samples by sampleId, uploads by clipId.
+export function clipKeysFor(song: Song): string[] {
+  const keys = new Set<string>();
+  for (const t of song.tracks) {
+    if (!t.clip) continue;
+    if (t.clip.sampleId) keys.add(sampleKey(t.clip.sampleId));
+    else if (t.clip.clipId) keys.add(t.clip.clipId);
+  }
+  return [...keys];
+}
+
+// Which buffer a clip plays: the named library sample first, else the stored upload.
+export function clipBuffer(clips: Map<string, AudioBuffer>, clip: AudioClip | undefined): AudioBuffer | undefined {
+  if (!clip) return undefined;
+  const fromSample = clip.sampleId ? clips.get(sampleKey(clip.sampleId)) : undefined;
+  return fromSample ?? (clip.clipId ? clips.get(clip.clipId) : undefined);
 }
 
 export function cacheDecoded(id: string, buf: AudioBuffer) { decoded.set(id, buf); }

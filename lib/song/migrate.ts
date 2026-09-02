@@ -1,7 +1,8 @@
 // Bring any stored song (v1 loop, v2 sections, v3) up to SongDoc v3.
-import type { Song, Track, Section, VariantPlan } from "./types";
+import type { Song, Track, Section, VariantPlan, AudioClip } from "./types";
 import { cleanGroove } from "./groove";
 import { isPlan } from "./pattern";
+import { sampleKey } from "../samples/manifest";
 
 type Loose = Record<string, unknown>;
 
@@ -26,6 +27,7 @@ export function migrateSong(input: unknown): Song | null {
     bpm: typeof s.bpm === "number" ? s.bpm : 126,
     key: typeof s.key === "string" ? s.key : "D minor",
     lane: typeof s.lane === "string" && s.lane.trim() ? s.lane.trim() : "tech-house",
+    kit: typeof s.kit === "string" && s.kit ? s.kit : undefined,
     humanize: {
       swing: num(h.swing, 0.55), velVar: num(h.velVar, 0.06), clapLateMs: num(h.clapLateMs, 5), seed: num(h.seed, 42),
       pocketMs: typeof h.pocketMs === "number" ? h.pocketMs : undefined,
@@ -56,12 +58,26 @@ function migrateTrack(t: Loose): Track | null {
     patterns: t.patterns && typeof t.patterns === "object" ? cleanPatterns(t.patterns as Loose) : undefined,
     synth: (t.synth as Track["synth"]) ?? undefined,
     fx: (t.fx as Track["fx"]) ?? undefined,
-    clip: (t.clip as Track["clip"]) ?? undefined,
+    clip: cleanClip(t.clip),
     transpose: typeof t.transpose === "number" ? t.transpose : undefined,
     groove: t.groove === null ? null : t.groove === undefined ? undefined : cleanGroove(t.groove) ?? undefined,
     velDev: typeof t.velDev === "number" && t.velDev > 0 ? Math.min(40, Math.round(t.velDev)) : undefined,
     chance: typeof t.chance === "number" && t.chance >= 0 && t.chance < 1 ? t.chance : undefined,
   };
+}
+
+// Normalize a clip: a library sample gets its store key and a name, and plays as a
+// one-shot unless the brain described a loop (warp or lengthBeats). No key, no clip.
+export function cleanClip(c: unknown): AudioClip | undefined {
+  if (!c || typeof c !== "object") return undefined;
+  const clip = { ...(c as Record<string, unknown>) } as AudioClip;
+  if (typeof clip.sampleId === "string" && clip.sampleId) {
+    if (typeof clip.clipId !== "string" || !clip.clipId) clip.clipId = sampleKey(clip.sampleId);
+    if (typeof clip.name !== "string" || !clip.name) clip.name = clip.sampleId;
+    if (clip.oneShot === undefined && clip.warp === undefined && clip.lengthBeats === undefined) clip.oneShot = true;
+  } else delete clip.sampleId;
+  if (typeof clip.clipId !== "string" || !clip.clipId) return undefined;
+  return clip;
 }
 
 function cleanPatterns(p: Loose): Record<string, Track["notes"]> {

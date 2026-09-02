@@ -1,7 +1,7 @@
 // Ops: small, deterministic edits the brain can return instead of a whole song.
 // applyOps never throws on bad input; unknown ops are reported and skipped.
 import type { Song, Track, Section, Note, Automation, LoopRegion, Role } from "./types";
-import { isNote, cleanNote } from "./migrate";
+import { isNote, cleanNote, cleanClip } from "./migrate";
 import { applyDawOp, findTrack, findSection, setChance, type DawOp } from "./ops-daw";
 import { swingToAmount } from "./groove";
 
@@ -82,7 +82,7 @@ function applyOne(s: Song, o: Op): boolean {
         duck: t.duck ?? !["kick", "clap"].includes(t.role), mute: false, solo: false,
         loopBeats: t.loopBeats && t.loopBeats > 0 ? t.loopBeats : 4,
         notes: Array.isArray(t.notes) ? t.notes.filter(isNote).map(cleanNote) : [],
-        patterns: t.patterns, synth: t.synth, fx: t.fx, clip: t.clip, transpose: t.transpose,
+        patterns: t.patterns, synth: t.synth, fx: t.fx, clip: cleanClip(t.clip), transpose: t.transpose,
       };
       const existing = s.tracks.findIndex((x) => x.id === nt.id);
       if (existing >= 0) s.tracks[existing] = nt;

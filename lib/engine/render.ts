@@ -3,7 +3,7 @@ import * as Tone from "tone";
 import type { Song } from "../song/types";
 import { buildGraph, type Clips } from "./graph";
 import { scheduleEvents } from "./schedule";
-import { loadClipsFor } from "./clips";
+import { loadClipsFor, clipKeysFor } from "./clips";
 import { getKit } from "./kits";
 import { hear, describe, type MusicFacts, type HearOptions, type SectionFacts } from "../ears";
 import { parseKey, keyName, chordsForSection, condense } from "../song/harmony";
@@ -13,12 +13,12 @@ import { songSwing } from "../song/groove";
 type Transport = ReturnType<typeof Tone.getTransport>;
 
 async function clipsFor(song: Song): Promise<Clips> {
-  const ids = song.tracks.map((t) => t.clip?.clipId).filter((x): x is string => !!x);
+  const ids = clipKeysFor(song);
   return ids.length ? loadClipsFor(ids) : new Map();
 }
 
 async function renderOffline(song: Song, secs: number, clips: Clips, sampleRate?: number): Promise<AudioBuffer> {
-  const kit = await getKit(song.lane, song.bpm);
+  const kit = await getKit(song.lane, song.kit, song.bpm);
   const buffer = await Tone.Offline(({ transport }) => {
     buildGraph(song, transport as unknown as Transport, clips, kit);
     transport.start(0);
@@ -43,7 +43,7 @@ export function sectionCacheKey(song: Song, secId: string, bars: number): string
   const sec = song.sections.find((x) => x.id === secId);
   const audible = audibleTracks(song);
   const active = song.tracks.filter((t) => sec?.active.includes(t.id) && audible.has(t.id));
-  return JSON.stringify({ sec, bars, bpm: song.bpm, h: song.humanize, g: song.groove ?? null, m: song.master, active });
+  return JSON.stringify({ sec, bars, bpm: song.bpm, h: song.humanize, g: song.groove ?? null, m: song.master, kit: song.kit ?? "synth", active });
 }
 
 // Which sections would re-render for this song right now (everything else is cached).

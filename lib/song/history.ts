@@ -35,6 +35,7 @@ export function diffSongs(a: Song, b: Song): string[] {
   if (a.bpm !== b.bpm) out.push(`tempo ${a.bpm}→${b.bpm}`);
   if (a.key !== b.key) out.push(`key ${a.key}→${b.key}`);
   if (a.title !== b.title) out.push(`title ${a.title}→${b.title}`);
+  if ((a.kit ?? "synth") !== (b.kit ?? "synth")) out.push(`kit ${a.kit ?? "synth"}→${b.kit ?? "synth"}`);
   if (JSON.stringify(a.humanize) !== JSON.stringify(b.humanize)) out.push("humanize changed");
   if (JSON.stringify(a.master) !== JSON.stringify(b.master)) out.push("master changed");
   const aT = new Map(a.tracks.map((t) => [t.id, t])), bT = new Map(b.tracks.map((t) => [t.id, t]));

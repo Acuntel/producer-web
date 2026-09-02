@@ -4,7 +4,7 @@ import * as Tone from "tone";
 import type { Song } from "../song/types";
 import { buildGraph, type Clips, type Graph } from "./graph";
 import { locate, loopBounds, type SectionSpan } from "./schedule";
-import { loadClipsFor } from "./clips";
+import { loadClipsFor, clipKeysFor } from "./clips";
 import { getKit, type Kit } from "./kits";
 
 export type Position = { section: string; sectionId: string; index: number; barInSection: number; beatInBar: number; absBar: number; beat: number };
@@ -24,7 +24,7 @@ export class Engine {
   async start(song: Song) {
     await Tone.start();
     await this.prepareClips(song);
-    this.kit = await getKit(song.lane, song.bpm);
+    this.kit = await getKit(song.lane, song.kit, song.bpm);
     this.buildLive(song);
     this.transport.start();
     this.playing = true;
@@ -37,7 +37,7 @@ export class Engine {
   // Rebuild playing OR paused, keeping the groove position (clamped to the new length).
   async update(song: Song) {
     await this.prepareClips(song);
-    this.kit = await getKit(song.lane, song.bpm);
+    this.kit = await getKit(song.lane, song.kit, song.bpm);
     const pos = this.transport.ticks;
     this.teardown();
     this.buildLive(song);
@@ -75,7 +75,7 @@ export class Engine {
   get sections() { return this.sectionStarts; }
 
   private async prepareClips(song: Song) {
-    const ids = song.tracks.map((t) => t.clip?.clipId).filter((x): x is string => !!x);
+    const ids = clipKeysFor(song);
     if (ids.length === 0) return;
     const missing = ids.filter((id) => !this.clips.has(id));
     if (missing.length === 0) return;
