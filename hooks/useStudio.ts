@@ -8,12 +8,14 @@ import type { Engine, Position } from "@/lib/engine";
 import type { MusicFacts } from "@/lib/ears";
 import { logMove, setVerdict, inferVerdictFromUtterance, tasteSummary, logPair } from "@/lib/taste";
 import { logMoveScore, referenceDelta, scoreLine } from "@/lib/scorecard";
+import { notesForBrain } from "@/lib/critic";
 import { localIntent, rolloutIntent } from "@/lib/brain/local";
 import { verifyMove } from "@/lib/brain/verify";
 import type { BrainAction, Expectation } from "@/lib/brain/parse";
 import type { RolloutKind } from "@/lib/brain/rollouts";
 import { useRollout } from "./useRollout";
 import { useUploads } from "./useUploads";
+import { useLibraryActions } from "./useLibraryActions";
 import type { Reference } from "@/components/EarsPanel";
 import type { SavedSong, ClipMeta } from "@/components/SongsSheet";
 
@@ -131,7 +133,6 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     compact: (f: MusicFacts | null) => { if (!f) return null; let c: unknown = null; void compactFacts(f).then((x) => (c = x)); return c; },
     say, taste: () => tasteSummary(songRef.current.title),
   });
-  // Synchronous compaction for the rollout runner (the ears module is loaded by then).
   const earsModRef = useRef<typeof import("@/lib/ears") | null>(null);
   useEffect(() => { void import("@/lib/ears").then((m) => { earsModRef.current = m; }); }, []);
   rolloutDeps.current.compact = (f) => (f && earsModRef.current ? earsModRef.current.factsForBrain(f) : null);
@@ -229,7 +230,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       const refFacts = referenceRef.current ? await compactFacts(referenceRef.current.facts) : null;
       const deltas = await deltasFor(factsRef.current);
       const localMoves = localMovesRef.current.splice(0);
-      const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: next, song: cur, facts: factsCompact, reference: referenceRef.current ? { name: referenceRef.current.name, facts: refFacts } : null, deltas, nowPlaying, taste: tasteSummary(cur.title), clips, localMoves, verify: opts?.verify ?? null, score: scoreLine() }) });
+      const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: next, song: cur, facts: factsCompact, reference: referenceRef.current ? { name: referenceRef.current.name, facts: refFacts } : null, deltas, nowPlaying, taste: tasteSummary(cur.title), clips, localMoves, verify: opts?.verify ?? null, score: scoreLine(), critic: notesForBrain() }) });
       const data = (await r.json()) as Reply;
       if (isE2E()) { const w = window as unknown as { __brain?: unknown[] }; (w.__brain ??= []).push(data); }
       setMessages((m) => [...m, { role: "assistant", content: data.say }]);
@@ -292,19 +293,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const undo = useCallback(() => void tryLocal("undo"), [tryLocal]);
   const redo = useCallback(() => void tryLocal("redo"), [tryLocal]);
   const pickAb = useCallback((which: "a" | "b" | "keepA" | "keepB") => void tryLocal(which === "a" ? "play a" : which === "b" ? "play b" : which === "keepA" ? "keep a" : "keep b"), [tryLocal]);
-  const loadSaved = useCallback(async (item: SavedSong) => { await setSong(item.song, { label: `open ${item.song.title}` }); flash(`Loaded ${item.song.title}`); if (started) say(`Loaded ${item.song.title}. Where were we?`); }, [flash, say, setSong, started]);
-  const saveNow = useCallback(() => { autoSave(songRef.current); flash(`Saved ${songRef.current.title}`); }, [autoSave, flash]);
-  const download = useCallback(async (s?: Song) => {
-    setRendering(true);
-    try {
-      const target = s ?? songRef.current;
-      const { renderWav } = await import("@/lib/engine");
-      const url = URL.createObjectURL(await renderWav(target));
-      const a = document.createElement("a"); a.href = url; a.download = `${target.title.replace(/\s+/g, "-")}.wav`; a.click();
-      URL.revokeObjectURL(url); flash("Downloading your song");
-    } finally { setRendering(false); }
-  }, [flash]);
-
+  const { loadSaved, saveNow, download } = useLibraryActions({ autoSave, flash, say, setSong, started, getSong: () => songRef.current, setRendering });
   const { addReference, addClip } = useUploads({ flash, send, setSong, setClips, factsRef, referenceRef, setReference, setDeltaText, getSong: () => songRef.current });
 
   return { song, messages, busy, started, starting, paused, nowSection, beat, library, clips, facts, hearing, reference, deltaText, listenHint, toast, lastMoveId, rendering, ab, score, canUndo, canRedo, rollout,

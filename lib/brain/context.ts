@@ -17,6 +17,7 @@ export type ExchangeInput = {
   namedRefs?: unknown[];    // measured facts for tracks the user named (server adds)
   artist?: unknown;         // measured medians for an artist the user named (server adds)
   score?: string;           // scorecard line
+  critic?: string | null;   // open critic notes (recommendations; the user decides)
 };
 
 // Strip the song to what the brain needs; notes stay (they are the music).
@@ -56,6 +57,7 @@ export function buildUserBlock(x: ExchangeInput, lastUser: string): string {
   if (x.namedRefs && x.namedRefs.length) parts.push(`NAMED REFERENCES the user mentioned (measured from their collection): ${JSON.stringify(x.namedRefs)}`);
   if (x.artist) parts.push(`ARTIST DNA (the user named this artist; medians measured from their own collection): ${JSON.stringify(x.artist)}`);
   if (x.score) parts.push(`SESSION SCORECARD: ${x.score}`);
+  if (x.critic) parts.push(`CRITIC NOTES (recommendations from the background listener; the USER decides, never apply one unasked; you may mention at most ONE as a question when it fits):\n${x.critic}`);
   if (x.taste) parts.push(`TASTE LEDGER:\n${x.taste}`);
   parts.push(`USER SAYS: ${lastUser}`);
   return parts.join("\n\n");

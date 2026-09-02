@@ -113,6 +113,10 @@ async function main() {
   assert.ok(changed, "the brain should have changed the song");
   const facts = await waitFor(`(() => { const t = document.body.innerText; return /LUFS/.test(t) ? t.match(/(\\d+) BPM[^\\n]*LUFS[^\\n]*/)?.[0] ?? '' : ''; })()`, 60000, "ears panel");
   console.log(`[e2e] ears panel: ${facts}`);
+  {
+    const note = await waitFor(`(() => { const t = document.body.innerText; const i = t.indexOf('Suggested:'); return i >= 0 ? t.slice(Math.max(0, i - 260), i + 160).split(String.fromCharCode(10)).filter(Boolean).slice(-4).join(' | ') : ''; })()`, 150000, "critic note");
+    console.log(`[e2e] critic: ${note.slice(0, 420)}`);
+  }
   if (process.env.E2E_REFERENCE) {
     const file = process.env.E2E_REFERENCE;
     console.log(`[e2e] reference upload: ${file.split("/").pop()}`);

@@ -9,6 +9,8 @@ import { Mixer } from "@/components/Mixer";
 import { SectionStrip } from "@/components/SectionStrip";
 import { EarsPanel } from "@/components/EarsPanel";
 import { SongsSheet } from "@/components/SongsSheet";
+import { CriticPanel } from "@/components/CriticPanel";
+import { useCritic } from "@/hooks/useCritic";
 
 export default function Studio() {
   const sendRef = useRef<(t: string) => void>(() => {});
@@ -16,12 +18,14 @@ export default function Studio() {
   const hum = useHum();
   const studio = useStudio(voice.say, (bpm, beats) => hum.record(bpm, beats));
   useEffect(() => { sendRef.current = (t) => void studio.send(t); }, [studio]);
+  const critic = useCritic({ song: studio.song, facts: studio.facts, reference: studio.reference, paused: !!studio.rollout, send: studio.send, started: studio.started });
 
   const [input, setInput] = useState("");
   const [showSongs, setShowSongs] = useState(false);
   const [showLanes, setShowLanes] = useState(true);
   const [showMixer, setShowMixer] = useState(true);
   const [showEars, setShowEars] = useState(true);
+  const [showNotes, setShowNotes] = useState(true);
   const refInput = useRef<HTMLInputElement>(null);
   const clipInput = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -75,10 +79,12 @@ export default function Studio() {
           <button onClick={() => setShowLanes(!showLanes)}>{showLanes ? "▾ the music" : "▸ the music"}</button>
           <button onClick={() => setShowMixer(!showMixer)}>{showMixer ? "▾ mixer" : "▸ mixer"}</button>
           <button onClick={() => setShowEars(!showEars)}>{showEars ? "▾ ears" : "▸ ears"}</button>
+          <button onClick={() => setShowNotes(!showNotes)}>{showNotes ? "▾ notes" : "▸ notes"}{critic.notes.length ? ` (${critic.notes.length})` : ""}</button>
         </div>
         {showLanes && <TrackLanes song={song} beat={started && !paused ? studio.beat : null} sectionIdx={studio.nowSection} />}
         {showMixer && <Mixer song={song} />}
         {showEars && <EarsPanel facts={studio.facts} reference={studio.reference} deltaText={studio.deltaText} hearing={studio.hearing} />}
+        {showNotes && started && <CriticPanel notes={critic.notes} headline={critic.headline} thinking={critic.thinking} onApply={critic.apply} onDismiss={critic.dismiss} />}
       </section>
 
       <section className="mt-3 flex-1 space-y-2 overflow-y-auto rounded-3xl bg-zinc-900 p-4">
