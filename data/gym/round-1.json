@@ -1,0 +1,88 @@
+{
+ "round": 1,
+ "date": "2026-09-02",
+ "gates": {
+  "unit": 42,
+  "ears": 8,
+  "tsc": "clean",
+  "build": "clean",
+  "localBattery": "11/11"
+ },
+ "merged": [
+  "gym/lanes",
+  "gym/daw",
+  "gym/samples"
+ ],
+ "reverted": [],
+ "kitMeasurements": {
+  "techSynth": {
+   "lufs": -8.9,
+   "subLow": 0.88,
+   "mids": 0.07,
+   "top": 0.04,
+   "centroid": 2253
+  },
+  "techSampled": {
+   "lufs": -7.3,
+   "subLow": 0.89,
+   "mids": 0.05,
+   "top": 0.06,
+   "centroid": 2493
+  },
+  "tech808": {
+   "lufs": -10.2,
+   "subLow": 0.7,
+   "mids": 0.07,
+   "top": 0.23,
+   "centroid": 4251
+  },
+  "hardSynth": {
+   "lufs": -6.6,
+   "subLow": 0.77,
+   "mids": 0.14,
+   "top": 0.1,
+   "centroid": 2835
+  },
+  "hardSampled": {
+   "lufs": -5.0,
+   "subLow": 0.62,
+   "mids": 0.09,
+   "top": 0.29,
+   "centroid": 4311
+  },
+  "techFull": {
+   "lufs": -6.8,
+   "subLow": 0.83,
+   "mids": 0.12,
+   "top": 0.05,
+   "centroid": 2312
+  },
+  "collectionP50": {
+   "lufs": -8.8,
+   "subLow": 0.57,
+   "mids": 0.27,
+   "top": 0.13,
+   "centroid": 2484
+  }
+ },
+ "openRecommendations": [
+  {
+   "rank": 1,
+   "what": "mids 0.05-0.14 vs 0.27 median",
+   "where": "chords, stabs, keys register"
+  },
+  {
+   "rank": 2,
+   "what": "tech-house sub+low 0.89 vs 0.57",
+   "where": "kit choice and level"
+  },
+  {
+   "rank": 3,
+   "what": "kit swaps change loudness -5.0 to -10.2",
+   "where": "per-kit makeup calibration"
+  }
+ ],
+ "blocked": [
+  "live lane scoring: production Anthropic account out of credits"
+ ]
+}

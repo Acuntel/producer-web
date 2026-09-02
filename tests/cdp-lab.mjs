@@ -19,6 +19,6 @@ for (const expr of EXPRS) {
   const t0 = Date.now();
   const r = await send("Runtime.evaluate", { expression: `(async () => { const L = window.__lab; const t0 = performance.now(); const v = await (${expr}); return { ms: Math.round(performance.now() - t0), v: typeof v === 'object' && v && v.length !== undefined && v.sampleRate ? { len: v.length, sr: v.sampleRate } : v }; })()`, awaitPromise: true, returnByValue: true, timeout: 280000 }, sessionId);
   const out = r.result?.result?.value ?? r.result?.exceptionDetails?.exception?.description ?? JSON.stringify(r).slice(0, 300);
-  console.log(`[lab ${Date.now() - t0}ms] ${expr.slice(0, 90)} => ${JSON.stringify(out).slice(0, 300)}`);
+  console.log(`[lab ${Date.now() - t0}ms] ${expr.slice(0, 90)} => ${JSON.stringify(out).slice(0, 4000)}`);
 }
 process.exit(0);
