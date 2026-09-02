@@ -5,6 +5,8 @@ import { CONTRACT } from "@/lib/brain/contract";
 import { extractJson } from "@/lib/brain/parse";
 import { parseCritic } from "@/lib/critic";
 import { dnaForBrain } from "@/lib/brain/dna";
+import { laneRecipe } from "@/lib/brain/lanes";
+import { dnaLaneFor } from "@/lib/brain/laneNames";
 import { mixerLine } from "@/lib/brain/context";
 
 export const maxDuration = 60;
@@ -23,7 +25,8 @@ export async function POST(req: Request) {
     x.facts ? `MEASURED SOUND (full render): ${JSON.stringify(x.facts)}` : "MEASURED SOUND: none yet",
     x.reference ? `REFERENCE "${x.reference.name}": ${JSON.stringify(x.reference.facts)}` : "",
     x.deltas ? `DELTAS render minus reference: ${JSON.stringify(x.deltas)}` : "",
-    `LANE DNA (user's collection): ${dnaForBrain(x.song.lane ?? "tech-house") ?? "none"}`,
+    laneRecipe(x.song.lane ?? "tech-house") ?? "",
+    `LANE DNA (user's collection, closest measured tempo band): ${dnaForBrain(dnaLaneFor(x.song.lane ?? "tech-house")) ?? "none"}`,
     x.recent?.length ? `RECENT MOVES: ${x.recent.join(" | ")}` : "",
     x.dismissed?.length ? `ALREADY DISMISSED BY THE USER (never suggest again): ${x.dismissed.join(" | ")}` : "",
     x.taste ? `TASTE LEDGER:\n${x.taste}` : "",

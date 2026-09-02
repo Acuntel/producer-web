@@ -2,15 +2,24 @@
 // cached as AudioBuffers, played back like samples. Record-weight kicks,
 // 909-style metal hats (six detuned squares), layered claps. Cheap to play,
 // cheap to render, bright where records are bright.
-export type KitStyle = "tech-house" | "hard-house" | "custom";
+import { laneHomeBpm } from "../brain/laneNames";
+
+export type KitStyle = "tech-house" | "hard-house";
 export type KitSound = "kick" | "clap" | "snare" | "hat" | "openhat" | "perc";
 export type Kit = Record<KitSound, AudioBuffer>;
 
 const cache = new Map<string, Promise<Kit>>();
 const SR = 44100;
 
-export function getKit(style: KitStyle): Promise<Kit> {
-  const key = style === "hard-house" ? "hard-house" : "tech-house";
+// Two kits exist. Any other lane borrows the closer one by tempo: a known lane's home tempo, else the song's own; 136 and up gets the hard kick.
+export function kitStyleFor(lane: string, bpm?: number): KitStyle {
+  if (lane === "hard-house" || lane === "tech-house") return lane;
+  const tempo = laneHomeBpm(lane) ?? bpm ?? 126;
+  return tempo >= 136 ? "hard-house" : "tech-house";
+}
+
+export function getKit(lane: string, bpm?: number): Promise<Kit> {
+  const key = kitStyleFor(lane, bpm);
   let p = cache.get(key);
   if (!p) { p = renderKit(key); cache.set(key, p); }
   return p;

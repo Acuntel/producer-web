@@ -35,7 +35,7 @@ export function useRollout(deps: Deps) {
   const cancelRef = useRef(false);
   const cancel = useCallback(() => { cancelRef.current = true; }, []);
 
-  const run = useCallback(async (kind: RolloutKind, ask: string, section?: string | null): Promise<{ say: string; listen: string | null } | null> => {
+  const run = useCallback(async (kind: RolloutKind, ask: string, section?: string | null, lane?: string | null): Promise<{ say: string; listen: string | null } | null> => {
     const groups = groupSteps(ROLLOUTS[kind]);
     const total = ROLLOUTS[kind].length;
     cancelRef.current = false;
@@ -54,13 +54,13 @@ export function useRollout(deps: Deps) {
         const ts = Date.now();
         const r = await fetch("/api/step", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
           step: { id: step.id, title: step.title, goal: step.goal, scope: scopeText(step), tier: step.tier, fullSong: !!step.fullSong }, kind, song, facts: deps.compact(facts),
-          reference: ref ? { name: ref.name, facts: deps.compact(ref.facts) } : null, deltas: deps.getDeltas(facts), lane: song.lane, ask, prior, attempt, failure, section: section ?? null, taste: deps.taste(),
+          reference: ref ? { name: ref.name, facts: deps.compact(ref.facts) } : null, deltas: deps.getDeltas(facts), lane: song.lane, askedLane: lane ?? null, ask, prior, attempt, failure, section: section ?? null, taste: deps.taste(),
         }) }).then((x) => x.json()).catch(() => null);
         if (!r) { failure = "no reply"; attempt++; continue; }
         // Apply against the FRESHEST song (a sibling step may have landed meanwhile).
         const base = deps.getSong();
         let next: Song | null = null, applied = 0, skipped = 0;
-        if (r.song) { next = migrateSong(r.song); if (next && next.tracks.length === 0) next = withStarterBeat(next); }
+        if (r.song) { next = migrateSong(r.song); if (next && lane) next.lane = lane; if (next && next.tracks.length === 0) next = withStarterBeat(next); }
         else if (Array.isArray(r.ops)) { const res = applyOps(base, r.ops); next = res.song; applied = res.applied; skipped = res.skipped.length; if (res.skipped.length) console.warn("rollout skipped ops", step.id, res.skipped); }
         if (next) await deps.applySong(next, { silent: true });
         status(step.title, "listening");

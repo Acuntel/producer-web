@@ -50,7 +50,7 @@ test("rollout intents are deterministic", async () => {
   const { rolloutIntent } = await import("../lib/brain/local.ts");
   assert.deepEqual(rolloutIntent("make our song like this reference", true), { kind: "emulate" });
   assert.deepEqual(rolloutIntent("make it sound like the reference", false), { kind: "newSong" });
-  assert.deepEqual(rolloutIntent("new song, KETTAMA style, surprise me", false), { kind: "newSong" });
+  assert.deepEqual(rolloutIntent("new song, KETTAMA style, surprise me", false), { kind: "newSong", lane: "hard-house" });
   assert.deepEqual(rolloutIntent("make me a banger", true), { kind: "emulate" });
   assert.deepEqual(rolloutIntent("finish it", false), { kind: "finish" });
   assert.deepEqual(rolloutIntent("rebuild the breakdown", false), { kind: "fixSection", section: "breakdown" });
