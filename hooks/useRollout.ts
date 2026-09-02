@@ -1,12 +1,14 @@
 "use client";
-// Runs a rollout: step by step, each its own inference, the ears grading every step.
+// Runs a rollout: step by step, each its own inference, the ears grading every
+// step; steps that touch different tracks run concurrently.
 import { useCallback, useRef, useState } from "react";
 import { applyOps, migrateSong, type Song } from "@/lib/song";
 import type { MusicFacts } from "@/lib/ears";
-import { ROLLOUTS, scopeText, type RolloutKind, type Step } from "@/lib/brain/rollouts";
+import { ROLLOUTS, groupSteps, scopeText, type RolloutKind, type Step } from "@/lib/brain/rollouts";
 import { logMoveScore } from "@/lib/scorecard";
 
 export type RolloutState = { kind: RolloutKind; index: number; total: number; title: string; status: string } | null;
+export type StepLog = { step: string; attempt: number; ms: number; model?: string; applied: number; skipped: number; check: string | null; say: string; tracks: number };
 type Deps = {
   getSong: () => Song;
   applySong: (s: Song, opts?: { silent?: boolean }) => Promise<void>;
@@ -18,46 +20,72 @@ type Deps = {
   taste: () => string;
 };
 
+// A blueprint has no tracks yet; keep a kick and a hat running so the wait is musical.
+function withStarterBeat(s: Song): Song {
+  const { song } = applyOps(s, [
+    { op: "grid", track: "kick", role: "kick", name: "Kick", volume: 0, steps: "X...X...X...X...", midi: 36 },
+    { op: "grid", track: "hat", role: "hat", name: "Hats", volume: -10, steps: "..x...x...x...x.", midi: 42 },
+    ...s.sections.filter((x) => !/break/i.test(x.name)).map((x) => ({ op: "active" as const, section: x.id, add: ["kick", "hat"] })),
+  ]);
+  return song;
+}
+
 export function useRollout(deps: Deps) {
   const [rollout, setRollout] = useState<RolloutState>(null);
   const cancelRef = useRef(false);
   const cancel = useCallback(() => { cancelRef.current = true; }, []);
 
   const run = useCallback(async (kind: RolloutKind, ask: string, section?: string | null): Promise<{ say: string; listen: string | null } | null> => {
-    const steps: Step[] = ROLLOUTS[kind];
+    const groups = groupSteps(ROLLOUTS[kind]);
+    const total = ROLLOUTS[kind].length;
     cancelRef.current = false;
     const prior: { id: string; summary: string }[] = [];
-    let lastSay = "", lastListen: string | null = null;
+    const log: StepLog[] = [];
+    let lastSay = "", lastListen: string | null = null, done = 0;
     const t0 = Date.now();
-    for (let i = 0; i < steps.length; i++) {
-      const step = steps[i];
-      if (cancelRef.current) break;
-      let attempt = 1, failure: string | null = null;
-      while (attempt <= 1 + (step.maxRetries ?? 1)) {
-        setRollout({ kind, index: i, total: steps.length, title: step.title, status: attempt > 1 ? `retry: ${failure}` : "thinking" });
+    const status = (title: string, st: string) => setRollout({ kind, index: done, total, title, status: st });
+
+    const runStep = async (step: Step, factsAtStart: MusicFacts | null): Promise<void> => {
+      let attempt = 1, failure: string | null = null, facts = factsAtStart;
+      while (attempt <= 1 + (step.maxRetries ?? 1) && !cancelRef.current) {
+        status(step.title, attempt > 1 ? `retry: ${failure}` : "thinking");
         const song = deps.getSong();
-        const facts = await deps.hearNow(song).catch(() => null);
         const ref = deps.getReference();
+        const ts = Date.now();
         const r = await fetch("/api/step", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
           step: { id: step.id, title: step.title, goal: step.goal, scope: scopeText(step), tier: step.tier, fullSong: !!step.fullSong }, kind, song, facts: deps.compact(facts),
           reference: ref ? { name: ref.name, facts: deps.compact(ref.facts) } : null, deltas: deps.getDeltas(facts), lane: song.lane, ask, prior, attempt, failure, section: section ?? null, taste: deps.taste(),
         }) }).then((x) => x.json()).catch(() => null);
         if (!r) { failure = "no reply"; attempt++; continue; }
+        // Apply against the FRESHEST song (a sibling step may have landed meanwhile).
+        const base = deps.getSong();
         let next: Song | null = null, applied = 0, skipped = 0;
-        if (r.song) { next = migrateSong(r.song); if (next && step.fullSong && next.tracks.length === 0 && song.tracks.length) next = { ...next, tracks: [] }; }
-        else if (Array.isArray(r.ops)) { const res = applyOps(song, r.ops); next = res.song; applied = res.applied; skipped = res.skipped.length; }
+        if (r.song) { next = migrateSong(r.song); if (next && next.tracks.length === 0) next = withStarterBeat(next); }
+        else if (Array.isArray(r.ops)) { const res = applyOps(base, r.ops); next = res.song; applied = res.applied; skipped = res.skipped.length; if (res.skipped.length) console.warn("rollout skipped ops", step.id, res.skipped); }
         if (next) await deps.applySong(next, { silent: true });
-        setRollout({ kind, index: i, total: steps.length, title: step.title, status: "listening" });
+        status(step.title, "listening");
         const after = next ? await deps.hearNow(next).catch(() => null) : facts;
+        facts = after;
         const problem = step.check({ song: deps.getSong(), facts: after, reference: ref?.facts ?? null, lane: deps.getSong().lane, section: section ?? undefined });
-        logMoveScore({ at: Date.now(), ask: `${kind}/${step.id}`, kind: "rollout", latencyMs: Date.now() - t0, opsApplied: applied, skipped, verified: problem ? "fail" : "pass" });
-        if (r.say) { lastSay = r.say; if (i < steps.length - 1) deps.say(r.say); }
+        const entry: StepLog = { step: step.id, attempt, ms: Date.now() - ts, model: r.model, applied, skipped, check: problem, say: r.say ?? "", tracks: deps.getSong().tracks.length };
+        log.push(entry); console.log("rollout step", JSON.stringify(entry));
+        logMoveScore({ at: Date.now(), ask: `${kind}/${step.id}`, kind: "rollout", latencyMs: entry.ms, opsApplied: applied, skipped, verified: problem ? "fail" : "pass" });
+        if (r.say) { lastSay = r.say; if (step.id !== "verdict") deps.say(r.say); }
         if (r.listen) lastListen = r.listen;
         if (!problem) { prior.push({ id: step.id, summary: r.say ?? "done" }); break; }
         failure = problem; attempt++;
         if (attempt > 1 + (step.maxRetries ?? 1)) prior.push({ id: step.id, summary: `${r.say ?? "done"} (check still failing: ${problem})` });
       }
+      done++;
+    };
+
+    for (const group of groups) {
+      if (cancelRef.current) break;
+      const facts = await deps.hearNow(deps.getSong()).catch(() => null);
+      await Promise.all(group.map((st) => runStep(st, facts)));
     }
+    if (typeof window !== "undefined") (window as unknown as { __steps?: StepLog[] }).__steps = log;
+    console.log(`rollout ${kind} done in ${Math.round((Date.now() - t0) / 1000)}s`);
     setRollout(null);
     return lastSay ? { say: lastSay, listen: lastListen } : null;
   }, [deps]);

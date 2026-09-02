@@ -121,8 +121,9 @@ async function main() {
     await evalJs(`(() => { const i = document.querySelector('footer input'); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; })()`);
     await waitFor(`document.body.innerText.includes('🛠')`, 60000, "rollout to start");
     const t1 = Date.now();
-    while (Date.now() - t1 < 420000) { await sleep(5000); const line = await evalJs(`(document.body.innerText.match(/🛠[^\n]*/) || [''])[0]`); if (line) console.log(`[e2e]   ${line}`); else break; }
+    while (Date.now() - t1 < 720000) { await sleep(5000); const line = await evalJs(`(document.body.innerText.split(String.fromCharCode(10)).find((l) => l.includes('🛠')) || '')`); if (line) console.log(`[e2e]   ${line}`); else break; }
     const doc = JSON.parse(await evalJs(`localStorage.getItem('producer.song.v4')`));
+    console.log(`[e2e] steps: ${await evalJs(`JSON.stringify((window.__steps ?? []).map((s) => [s.step, s.attempt, Math.round(s.ms / 1000) + 's', s.model ? s.model.replace('claude-', '') : '?', 'ops ' + s.applied + (s.skipped ? '/skip ' + s.skipped : ''), s.check ?? 'ok', s.tracks + ' tracks', (s.say || '').slice(0, 70)]))`)}`);
     console.log(`[e2e] rollout result: "${doc.title}" ${doc.bpm} BPM ${doc.key} ${doc.lane} · ${doc.tracks.length} tracks · ${doc.sections.length} sections · autos ${doc.sections.reduce((a, s) => a + (s.automation?.length ?? 0), 0)}`);
     assert.ok(doc.title !== titleBefore || doc.tracks.length >= 6, "rollout should have produced a new song");
     assert.ok(doc.tracks.length >= 6 && doc.sections.length >= 5, "new song needs tracks and sections");

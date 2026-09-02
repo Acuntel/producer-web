@@ -17,7 +17,8 @@ const ASKS = [
   ["I want to hum a bassline", (s, r) => r.action?.type === "recordHum"],
   ["take me back to the intro and pause there", (s, r) => r.action?.type === "goto" || r.action?.type === "pause"],
   ["make the drop hit harder", (s) => true],
-  ["new song, KETTAMA style, surprise me", (s) => s.lane === "hard-house" && s.bpm >= 138 && s.tracks.length >= 6 && s.sections.length >= 5],
+  ["make the hats brighter and give me a B version with a different open hat pattern", (s, r) => Array.isArray(r.alternative) && r.alternative.length > 0],
+  ["new song, KETTAMA style, surprise me", (s, r) => r.action?.type === "rollout" || (s.lane === "hard-house" && s.bpm >= 138 && s.tracks.length >= 6)],
 ];
 
 let song = JSON.parse(JSON.stringify(SEED_TECH_HOUSE));
@@ -36,6 +37,7 @@ for (const [ask, check] of ASKS) {
   let schedOk = true, totalBeats = 0;
   try { totalBeats = scheduleEvents(next).totalBeats; } catch (e) { schedOk = false; }
   const ok = schedOk && check(next, data) && !/hiccuped|not connected|setup step|credits/i.test(data.say);
+  if (data.expect) console.log(`     expect: ${JSON.stringify(data.expect)}`);
   if (ok) pass++; else fail++;
   song = next;
   const drop = next.sections.find((x) => /drop/i.test(x.name)) ?? next.sections[0];

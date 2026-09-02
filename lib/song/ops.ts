@@ -1,6 +1,6 @@
 // Ops: small, deterministic edits the brain can return instead of a whole song.
 // applyOps never throws on bad input; unknown ops are reported and skipped.
-import type { Song, Track, Section, Note, Automation, LoopRegion } from "./types";
+import type { Song, Track, Section, Note, Automation, LoopRegion, Role } from "./types";
 import { isNote, cleanNote } from "./migrate";
 
 export type Op =
@@ -25,6 +25,7 @@ export type Op =
   | { op: "shift"; track: string; beats: number; pattern?: string }
   | { op: "velocity"; track: string; scale?: number; add?: number; pattern?: string }
   | { op: "sectionNotes"; section: string; track: string; notes: Note[]; loopBeats?: number }   // notes for ONE section only (auto pattern variant)
+  | { op: "grid"; track: string; steps: string; midi?: number; stepBeats?: number; dur?: number; vel?: Record<string, number>; pattern?: string; section?: string; role?: Role; name?: string; volume?: number; duck?: boolean }
   | { op: "note"; note: string };
 
 export type ApplyResult = { song: Song; applied: number; skipped: string[] };
@@ -181,6 +182,38 @@ function applyOne(s: Song, o: Op): boolean {
     case "tempo": { if (typeof o.bpm !== "number" || o.bpm < 60 || o.bpm > 200) return false; s.bpm = Math.round(o.bpm * 10) / 10; return true; }
     case "key": { if (typeof o.key !== "string") return false; s.key = o.key; return true; }
     case "title": { if (typeof o.title !== "string") return false; s.title = o.title.slice(0, 60); return true; }
+    case "grid": {
+      // Step notation: X accent, x normal, g ghost, o open/long, O loud long, . rest; digits 1-9 = velocity tenths. Spaces and | ignored.
+      if (typeof o.steps !== "string") return false;
+      const steps = o.steps.replace(/[\s|]/g, "");
+      if (!steps.length) return false;
+      const stepBeats = o.stepBeats && o.stepBeats > 0 ? o.stepBeats : 0.25;
+      const vel = { X: 120, x: 92, g: 45, o: 88, O: 112, ...(o.vel ?? {}) } as Record<string, number>;
+      const midi = typeof o.midi === "number" ? o.midi : 36;
+      const notes: Note[] = [];
+      for (let i = 0; i < steps.length; i++) {
+        const ch = steps[i];
+        if (ch === ".") continue;
+        const v = /[1-9]/.test(ch) ? Math.round((Number(ch) / 9) * 127) : vel[ch];
+        if (!v) continue;
+        const dur = o.dur ?? (ch === "o" || ch === "O" ? stepBeats * 1.6 : stepBeats * 0.5);
+        notes.push([midi, i * stepBeats, dur, Math.max(1, Math.min(127, v))]);
+      }
+      const loopBeats = steps.length * stepBeats;
+      let t = track(s, o.track);
+      if (!t) {
+        if (!o.role) return false;
+        t = { id: o.track, name: o.name ?? o.track, role: o.role, volume: typeof o.volume === "number" ? o.volume : -6, duck: o.duck ?? !["kick", "clap"].includes(o.role), mute: false, solo: false, loopBeats, notes: [] };
+        s.tracks.push(t);
+      }
+      if (o.section) {
+        const sec = section(s, o.section); if (!sec) return false;
+        const name = `sec:${sec.id}`; (t.patterns ??= {})[name] = notes; (sec.variants ??= {})[t.id] = name;
+        if (!sec.active.includes(t.id)) sec.active.push(t.id);
+      } else if (o.pattern && o.pattern !== "A") (t.patterns ??= {})[o.pattern] = notes;
+      else { t.notes = notes; t.loopBeats = loopBeats; }
+      return true;
+    }
     case "sectionNotes": {
       const sec = section(s, o.section); const t = track(s, o.track);
       if (!sec || !t || !Array.isArray(o.notes)) return false;

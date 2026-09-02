@@ -179,3 +179,24 @@ test("rollout checks read the song and the facts", async () => {
   assert.ok(referenceDelta({ lufs: 0, bands: { sub: 0, low: 0 }, tempoRatio: 1, pump: 0 }) === 0);
   assert.ok(referenceDelta({ lufs: 5, bands: { sub: 0.1, low: -0.1 }, tempoRatio: 1.02, pump: 0.1 }) > 0.5);
 });
+
+test("grid op: step notation to notes, creates tracks, variants, sections", () => {
+  const s = seed();
+  const r = applyOps(s, [
+    { op: "grid", track: "kick", steps: "X...X...X...X..g" },
+    { op: "grid", track: "ride", role: "perc", name: "Ride", volume: -12, steps: "..x...x...x...x." , midi: 51 },
+    { op: "grid", track: "hat", pattern: "skip", steps: "X.g.x.g.X.g.x.g." , midi: 42 },
+    { op: "grid", track: "clap", section: "drop2", steps: "....X.......X..x", midi: 39 },
+    { op: "grid", track: "sub", steps: "o.o.o.o.", midi: 29, stepBeats: 0.5 },
+    { op: "grid", track: "nope", steps: "x" },
+  ]);
+  assert.equal(r.skipped.length, 1);
+  const kick = r.song.tracks.find((t) => t.id === "kick");
+  assert.equal(kick.notes.length, 5); assert.equal(kick.loopBeats, 4); assert.deepEqual(kick.notes[0], [36, 0, 0.125, 120]); assert.equal(kick.notes[4][3], 45);
+  const ride = r.song.tracks.find((t) => t.id === "ride"); assert.equal(ride.role, "perc"); assert.equal(ride.notes.length, 4); assert.equal(ride.notes[0][0], 51); assert.equal(ride.duck, true);
+  assert.equal(r.song.tracks.find((t) => t.id === "hat").patterns.skip.length, 8);
+  const d2 = r.song.sections.find((x) => x.id === "drop2"); assert.equal(d2.variants.clap, "sec:drop2");
+  assert.equal(r.song.tracks.find((t) => t.id === "clap").patterns["sec:drop2"].length, 3);
+  const sub = r.song.tracks.find((t) => t.id === "sub"); assert.equal(sub.loopBeats, 4); assert.equal(sub.notes[0][2], 0.8);
+  assert.ok(scheduleEvents(r.song).totalBeats > 0);
+});
