@@ -5,7 +5,18 @@ import { isDrum } from "../song/types";
 import type { Op } from "../song/ops";
 import type { BrainAction } from "./parse";
 
-export type LocalIntent = { ops?: Op[]; action?: BrainAction; say: string; note: string; kind: string; history?: "undo" | "redo"; ab?: "a" | "b" | "keepA" | "keepB" };
+export type LocalIntent = { ops?: Op[]; action?: BrainAction; say: string; note: string; kind: string; history?: "undo" | "redo"; ab?: "a" | "b" | "keepA" | "keepB"; rollout?: "newSong" | "emulate" | "finish" | "fixSection" };
+
+// Big builds are deterministic: these phrasings always run the process engine.
+export function rolloutIntent(text: string, hasReference: boolean): { kind: "newSong" | "emulate" | "finish" | "fixSection"; section?: string } | null {
+  const t = clean(text);
+  if (/\b(make|build|produce|do) (it|this|our song|our track|the song|the track|something|one|a (song|track)) (like|in the style of|sound like|closer to) (the|this|that|my) (reference|ref|track i uploaded|upload)\b/.test(t) || /\b(emulate|chase|copy the dna of|match) (the|this|that|my) (reference|ref)\b/.test(t)) return { kind: hasReference ? "emulate" : "newSong" };
+  if (/\b(new song|new track|fresh (song|track|one)|start (a )?(new|fresh) (song|track|one)|start over with a new (song|track)|make me a (new )?(song|track|record|banger|tune)|build me a (song|track|record)|write me a (song|track))\b/.test(t)) return { kind: hasReference ? "emulate" : "newSong" };
+  if (/\b(finish (it|the song|the track|this)|build (it|this) out|take (it|this) to the end|complete (it|the song|the track)|full arrangement|arrange (it|this|the whole thing))\b/.test(t)) return { kind: "finish" };
+  const m = t.match(/\b(rebuild|redo|remake|rework|fix|rewrite) (the |my )?(intro|groove|build ?2?|drop ?2?|second drop|breakdown|break|outro)\b/);
+  if (m) return { kind: "fixSection", section: m[3].replace(/\s+/g, "") };
+  return null;
+}
 
 const SYN: [RegExp, Role[] | "all-drums"][] = [
   [/\b(kicks?|kick drums?|bass drums?)\b/, ["kick"]],

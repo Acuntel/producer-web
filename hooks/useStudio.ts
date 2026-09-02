@@ -8,7 +8,7 @@ import type { Engine, Position } from "@/lib/engine";
 import type { MusicFacts } from "@/lib/ears";
 import { logMove, setVerdict, inferVerdictFromUtterance, tasteSummary, logPair } from "@/lib/taste";
 import { logMoveScore, referenceDelta, scoreLine } from "@/lib/scorecard";
-import { localIntent } from "@/lib/brain/local";
+import { localIntent, rolloutIntent } from "@/lib/brain/local";
 import { verifyMove } from "@/lib/brain/verify";
 import type { BrainAction, Expectation } from "@/lib/brain/parse";
 import type { RolloutKind } from "@/lib/brain/rollouts";
@@ -205,6 +205,17 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     if (!t) return;
     if (busyRef.current) { pendingRef.current = t; return; }
     if (!opts?.hidden && !opts?.verify && (await tryLocal(t))) return;
+    const ro = !opts?.hidden && !opts?.verify ? rolloutIntent(t, !!referenceRef.current) : null;
+    if (ro) {
+      busyRef.current = true; setBusy(true);
+      setMessages((m) => [...m, { role: "user", content: t }]);
+      const sec = ro.section ? (songRef.current.sections.find((x) => x.id === ro.section || x.name.toLowerCase().replace(/\s+/g, "") === ro.section)?.id ?? ro.section) : null;
+      const line = ro.kind === "emulate" ? "On it. I will chase the reference in layers: drums, bass, harmony, hook, then the mix." : ro.kind === "finish" ? "Building it out to a full arrangement now." : ro.kind === "fixSection" ? `Reworking the ${sec ?? "section"} now.` : "Give me a minute, I will build this in layers: drums, bass, then the hook.";
+      setMessages((m) => [...m, { role: "assistant", content: line }]); say(line);
+      try { await runAction({ type: "rollout", kind: ro.kind, section: sec ?? undefined }, songRef.current, t); }
+      finally { busyRef.current = false; setBusy(false); const p = pendingRef.current; pendingRef.current = null; if (p) void send(p); }
+      return;
+    }
     busyRef.current = true; setBusy(true);
     const t0 = performance.now();
     if (lastMoveRef.current && !opts?.hidden) { const v = inferVerdictFromUtterance(t); if (v) setVerdict(lastMoveRef.current, v); }

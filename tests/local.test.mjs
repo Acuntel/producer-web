@@ -45,3 +45,16 @@ test("tempo, undo, ab, and non-intents fall through to the brain", () => {
   assert.equal(matchTracks("the hi-hats", s)[0].id, "hat");
   assert.equal(matchTracks("open hat", s)[0].id, "openhat");
 });
+
+test("rollout intents are deterministic", async () => {
+  const { rolloutIntent } = await import("../lib/brain/local.ts");
+  assert.deepEqual(rolloutIntent("make our song like this reference", true), { kind: "emulate" });
+  assert.deepEqual(rolloutIntent("make it sound like the reference", false), { kind: "newSong" });
+  assert.deepEqual(rolloutIntent("new song, KETTAMA style, surprise me", false), { kind: "newSong" });
+  assert.deepEqual(rolloutIntent("make me a banger", true), { kind: "emulate" });
+  assert.deepEqual(rolloutIntent("finish it", false), { kind: "finish" });
+  assert.deepEqual(rolloutIntent("rebuild the breakdown", false), { kind: "fixSection", section: "breakdown" });
+  assert.deepEqual(rolloutIntent("redo drop 2", false), { kind: "fixSection", section: "drop2" });
+  assert.equal(rolloutIntent("make the bass darker", true), null);
+  assert.equal(rolloutIntent("what do you think of the drop", true), null);
+});
