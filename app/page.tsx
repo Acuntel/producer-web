@@ -1,16 +1,17 @@
 "use client";
-// The Producer: one orb, a mixer, lanes, the ears, and a conversation.
+// The Producer. Two panes: the song on one side, the conversation on the other.
+// On phones they stack, the song staying visible above the talk.
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "@/hooks/useStudio";
 import { useVoiceLoop } from "@/hooks/useVoiceLoop";
 import { useHum } from "@/hooks/useHum";
-import { TrackLanes } from "@/components/TrackLanes";
-import { Mixer } from "@/components/Mixer";
-import { SectionStrip } from "@/components/SectionStrip";
-import { EarsPanel } from "@/components/EarsPanel";
-import { SongsSheet } from "@/components/SongsSheet";
-import { CriticPanel } from "@/components/CriticPanel";
 import { useCritic } from "@/hooks/useCritic";
+import { StudioPanel } from "@/components/StudioPanel";
+import { Conversation } from "@/components/Conversation";
+import { SongsSheet } from "@/components/SongsSheet";
+import { IconButton } from "@/components/ui";
+import { Icon } from "@/components/Icon";
+import type { Phase } from "@/components/Orb";
 
 export default function Studio() {
   const sendRef = useRef<(t: string) => void>(() => {});
@@ -18,21 +19,15 @@ export default function Studio() {
   const hum = useHum();
   const studio = useStudio(voice.say, (bpm, beats) => hum.record(bpm, beats));
   useEffect(() => { sendRef.current = (t) => void studio.send(t); }, [studio]);
-  const critic = useCritic({ song: studio.song, facts: studio.facts, reference: studio.reference, paused: !!studio.rollout, send: studio.send, started: studio.started });
+  const critic = useCritic({
+    song: studio.song, facts: studio.facts, reference: studio.reference,
+    paused: !!studio.rollout, send: studio.send, started: studio.started,
+  });
 
-  const [input, setInput] = useState("");
   const [showSongs, setShowSongs] = useState(false);
-  const [showLanes, setShowLanes] = useState(true);
-  const [showMixer, setShowMixer] = useState(true);
-  const [showEars, setShowEars] = useState(true);
-  const [showNotes, setShowNotes] = useState(true);
-  const refInput = useRef<HTMLInputElement>(null);
-  const clipInput = useRef<HTMLInputElement>(null);
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [studio.messages, studio.busy, voice.interim]);
-
   const { song, started, paused, starting } = studio;
   const beatSec = 60 / song.bpm;
+  const playing = started && !paused;
 
   async function orb() {
     const wasStarted = started;
@@ -40,95 +35,108 @@ export default function Studio() {
     if (!wasStarted) voice.begin();
   }
 
-  const status = studio.hearing ? "hearing" : voice.speaking ? "speaking" : studio.busy ? "thinking" : voice.listening ? "listening" : started ? "ready" : "";
+  const phase: Phase =
+    starting ? "starting"
+    : !started ? "idle"
+    : studio.hearing ? "hearing"
+    : studio.busy ? "thinking"
+    : voice.speaking ? "speaking"
+    : voice.listening ? "listening"
+    : paused ? "paused"
+    : "playing";
 
   return (
-    <main className="mx-auto flex h-dvh max-w-2xl flex-col p-4">
-      <header className="flex items-center justify-between pb-2">
-        <h1 className="text-lg font-extrabold tracking-tight">🎚 The Producer</h1>
-        <div className="flex items-center gap-1.5">
-          <button onClick={() => refInput.current?.click()} className="rounded-full bg-zinc-800 px-3 py-2 text-xs font-semibold" title="Upload a reference track for the producer to hear">🎧 Reference</button>
-          <button onClick={() => clipInput.current?.click()} className="rounded-full bg-zinc-800 px-3 py-2 text-xs font-semibold" title="Add a sample or vocal as an audio track">🎤 Sample</button>
-          <button onClick={studio.undo} disabled={!studio.canUndo} className="rounded-full bg-zinc-800 px-2.5 py-2 text-xs font-semibold disabled:opacity-40" title="Undo">↶</button>
-          <button onClick={studio.redo} disabled={!studio.canRedo} className="rounded-full bg-zinc-800 px-2.5 py-2 text-xs font-semibold disabled:opacity-40" title="Redo">↷</button>
-          <button onClick={() => setShowSongs(true)} className="rounded-full bg-zinc-800 px-3 py-2 text-xs font-semibold">Songs</button>
-          <button onClick={() => void studio.download()} disabled={studio.rendering} className="rounded-full bg-zinc-800 px-3 py-2 text-xs font-semibold disabled:opacity-50">{studio.rendering ? "…" : "⬇"}</button>
+    <main className="flex h-dvh flex-col overflow-hidden">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-line/50 px-3 py-2.5 sm:px-4">
+        <h1 className="flex min-w-0 items-center gap-2 text-[15px] font-semibold tracking-tight">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent text-accent-ink">
+            <Icon name="logo" size={16} />
+          </span>
+          <span className="truncate">The Producer</span>
+        </h1>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <IconButton name="undo" label="Undo" onClick={studio.undo} disabled={!studio.canUndo} />
+          <IconButton name="redo" label="Redo" onClick={studio.redo} disabled={!studio.canRedo} />
+          <IconButton name="library" label="My songs" onClick={() => setShowSongs(true)} />
+          <IconButton
+            name="download"
+            label={studio.rendering ? "Rendering WAV…" : "Download WAV"}
+            onClick={() => void studio.download()}
+            disabled={studio.rendering}
+            className={studio.rendering ? "animate-breathe" : ""}
+          />
         </div>
-        <input ref={refInput} type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void studio.addReference(f); e.target.value = ""; }} />
-        <input ref={clipInput} type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void studio.addClip(f); e.target.value = ""; }} />
       </header>
 
-      <section className="rounded-3xl bg-zinc-900 p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-base font-bold">{song.title}</div>
-            <div className="text-xs text-zinc-500">{song.bpm} BPM · {song.key} · {song.tracks.length} tracks{song.loop ? " · looping" : ""}{status ? ` · ${status}` : ""}</div>
-            {studio.listenHint && <div className="mt-0.5 text-[11px] text-amber-300">👂 {studio.listenHint}</div>}
-            {studio.rollout && <div className="mt-0.5 text-[11px] text-sky-300">🛠 {studio.rollout.title} ({studio.rollout.index + 1}/{studio.rollout.total}) · {studio.rollout.status} <button onClick={studio.cancelRollout} className="ml-1 rounded bg-zinc-800 px-1.5 text-[10px]">stop</button></div>}
-            {studio.ab && <div className="mt-0.5 flex items-center gap-1 text-[11px] text-violet-300">A/B: <button onClick={() => studio.pickAb("a")} className={`rounded px-1.5 ${studio.ab.playing === "a" ? "bg-violet-500 text-black" : "bg-zinc-800"}`}>A</button><button onClick={() => studio.pickAb("b")} className={`rounded px-1.5 ${studio.ab.playing === "b" ? "bg-violet-500 text-black" : "bg-zinc-800"}`}>B</button><button onClick={() => studio.pickAb(studio.ab!.playing === "a" ? "keepA" : "keepB")} className="rounded bg-zinc-800 px-1.5">keep {studio.ab.playing.toUpperCase()}</button></div>}
-            {studio.score && <div className="mt-0.5 text-[10px] text-zinc-500">{studio.score}</div>}
-          </div>
-          <button onClick={orb} disabled={starting} aria-label={!started ? "Start" : paused ? "Play" : "Pause"}
-            className={`grid h-20 w-20 place-items-center rounded-full text-3xl font-black text-black shadow-xl transition-transform active:scale-95 ${!started || paused ? "bg-amber-500" : "bg-emerald-500"}`}
-            style={!started || paused ? {} : { animation: `pulse-beat ${beatSec}s ease-out infinite` }}>
-            {starting ? "…" : !started ? "▶" : paused ? "▶" : "❚❚"}
-          </button>
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(400px,34rem)_1fr]">
+        <div className="scroll-y scroll-fade-y max-h-[52dvh] shrink-0 border-b border-line/50 p-3 sm:p-4 lg:max-h-none lg:border-b-0 lg:border-r">
+          <StudioPanel
+            song={song}
+            phase={phase}
+            beatSec={beatSec}
+            onOrb={orb}
+            starting={starting}
+            playing={playing}
+            nowSection={studio.nowSection}
+            beat={playing ? studio.beat : null}
+            onJump={(id) => void studio.jump(id)}
+            listenHint={studio.listenHint}
+            rollout={studio.rollout}
+            onCancelRollout={studio.cancelRollout}
+            ab={studio.ab}
+            onPickAb={(k) => studio.pickAb(k as never)}
+            score={studio.score}
+            facts={studio.facts}
+            reference={studio.reference}
+            deltaText={studio.deltaText}
+            hearing={studio.hearing}
+            notes={critic.notes}
+            headline={critic.headline}
+            criticThinking={critic.thinking}
+            onApply={critic.apply}
+            onDismiss={critic.dismiss}
+            started={started}
+          />
         </div>
-        <SectionStrip song={song} nowSection={studio.nowSection} playing={started && !paused} onJump={(id) => void studio.jump(id)} />
-        <div className="mt-1 flex gap-3 text-[11px] font-semibold text-zinc-500">
-          <button onClick={() => setShowLanes(!showLanes)}>{showLanes ? "▾ the music" : "▸ the music"}</button>
-          <button onClick={() => setShowMixer(!showMixer)}>{showMixer ? "▾ mixer" : "▸ mixer"}</button>
-          <button onClick={() => setShowEars(!showEars)}>{showEars ? "▾ ears" : "▸ ears"}</button>
-          <button onClick={() => setShowNotes(!showNotes)}>{showNotes ? "▾ notes" : "▸ notes"}{critic.notes.length ? ` (${critic.notes.length})` : ""}</button>
+
+        <div className="flex min-h-0 flex-col bg-s1/40">
+          <Conversation
+            started={started}
+            messages={studio.messages}
+            busy={studio.busy}
+            interim={voice.interim}
+            humming={hum.recording}
+            humCountIn={hum.countIn}
+            listening={voice.listening}
+            speaking={voice.speaking}
+            canVerdict={!!studio.lastMoveId}
+            onVerdict={studio.verdict}
+            onHush={voice.hush}
+            onSend={(t) => void studio.send(t)}
+            onReference={(f) => void studio.addReference(f)}
+            onSample={(f) => void studio.addClip(f)}
+          />
         </div>
-        {showLanes && <TrackLanes song={song} beat={started && !paused ? studio.beat : null} sectionIdx={studio.nowSection} />}
-        {showMixer && <Mixer song={song} />}
-        {showEars && <EarsPanel facts={studio.facts} reference={studio.reference} deltaText={studio.deltaText} hearing={studio.hearing} />}
-        {showNotes && started && <CriticPanel notes={critic.notes} headline={critic.headline} thinking={critic.thinking} onApply={critic.apply} onDismiss={critic.dismiss} />}
-      </section>
+      </div>
 
-      <section className="mt-3 flex-1 space-y-2 overflow-y-auto rounded-3xl bg-zinc-900 p-4">
-        {!started && (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-            <p className="max-w-xs text-[15px] leading-relaxed text-zinc-400">Tap the big button. The music starts, the mic opens, and you just talk. It answers out loud, hears its own work, and changes the song while you listen.</p>
-            <p className="text-xs text-zinc-600">Chrome + headphones = best experience</p>
-          </div>
-        )}
-        {started && studio.messages.slice(-30).map((m, i) => (
-          <div key={i} className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-[15px] ${m.role === "user" ? "ml-auto bg-blue-600/80" : "bg-zinc-800"}`}>{m.content}</div>
-        ))}
-        {started && voice.interim && <div className="ml-auto max-w-[85%] rounded-2xl border border-blue-400/40 bg-blue-600/25 px-3.5 py-2 text-[15px] italic text-blue-100">{voice.interim}…</div>}
-        {started && hum.recording && <div className="rounded-2xl bg-rose-900/60 px-3.5 py-2 text-[15px] text-rose-100">{hum.countIn > 0 ? `Hum in ${hum.countIn}…` : "🎙 Humming… keep going"}</div>}
-        {started && studio.busy && (
-          <div className="flex max-w-[85%] items-center gap-1.5 rounded-2xl bg-zinc-800 px-3.5 py-3">
-            {[0, 120, 240].map((d) => <span key={d} className="h-2 w-2 animate-bounce rounded-full bg-zinc-500" style={{ animationDelay: `${d}ms` }} />)}
-          </div>
-        )}
-        {started && studio.lastMoveId && !studio.busy && (
-          <div className="flex gap-2 pl-1 text-xs">
-            <button onClick={() => studio.verdict("liked")} className="rounded-full bg-zinc-800 px-3 py-1 text-zinc-300">👍 keep</button>
-            <button onClick={() => studio.verdict("killed")} className="rounded-full bg-zinc-800 px-3 py-1 text-zinc-300">👎 kill</button>
-            {voice.speaking && <button onClick={voice.hush} className="rounded-full bg-zinc-800 px-3 py-1 text-zinc-300">shh</button>}
-          </div>
-        )}
-        <div ref={chatEndRef} />
-      </section>
+      {showSongs && (
+        <SongsSheet
+          library={studio.library}
+          clips={studio.clips}
+          onOpen={(s) => { setShowSongs(false); void studio.loadSaved(s); }}
+          onDownload={(s) => void studio.download(s)}
+          onClose={() => setShowSongs(false)}
+        />
+      )}
 
-      <footer className="pt-3">
-        {started && (
-          <div className="flex items-center gap-2">
-            <span className={`shrink-0 text-lg ${voice.listening ? "" : "opacity-30"}`} title={voice.listening ? "listening" : "mic idle"}>🎙</span>
-            <input value={input} onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { const v = e.currentTarget.value; if (e.key === "Enter" && v.trim()) { void studio.send(v); setInput(""); } }}
-              placeholder={voice.listening ? "talk, or type here…" : "type here…"}
-              className="w-full rounded-full bg-zinc-900 px-5 py-3 text-[15px] outline-none ring-1 ring-zinc-800 focus:ring-zinc-600" />
-          </div>
-        )}
-      </footer>
-
-      {showSongs && <SongsSheet library={studio.library} clips={studio.clips} onOpen={(s) => { setShowSongs(false); void studio.loadSaved(s); }} onDownload={(s) => void studio.download(s)} onClose={() => setShowSongs(false)} />}
-      {studio.toast && <div className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-full bg-zinc-800 px-5 py-2.5 text-sm font-semibold shadow-xl">{studio.toast}</div>}
-      <style>{`@keyframes pulse-beat { 0% { transform: scale(1.06); } 35% { transform: scale(1); } 100% { transform: scale(1); } }`}</style>
+      {studio.toast && (
+        <div
+          role="status"
+          className="panel fixed bottom-24 left-1/2 z-50 -translate-x-1/2 animate-slide-up rounded-full px-5 py-2.5 text-sm font-medium shadow-panel"
+        >
+          {studio.toast}
+        </div>
+      )}
     </main>
   );
 }

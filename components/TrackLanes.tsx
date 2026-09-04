@@ -23,7 +23,7 @@ export function TrackLanes({ song, beat, sectionIdx }: { song: Song; beat: numbe
   const audible = useMemo(() => audibleTracks(song), [song]);
 
   return (
-    <div className="mt-3 space-y-1.5">
+    <div className="space-y-1">
       {song.tracks.map((tr: Track) => {
         const activeNow = cur?.sec ? cur.sec.active.includes(tr.id) && audible.has(tr.id) : audible.has(tr.id);
         const color = colorOf(tr.role);
@@ -38,41 +38,66 @@ export function TrackLanes({ song, beat, sectionIdx }: { song: Song; beat: numbe
         const loop = Math.max(0.25, tr.loopBeats);
         const local = beat !== null && cur && activeNow ? ((beat - cur.startBeat) % loop + loop) % loop : null;
         const autos = cur?.sec?.automation?.filter((a) => a.track === tr.id) ?? [];
+
         return (
-          <div key={tr.id} className="flex items-center gap-2" style={{ opacity: activeNow ? 1 : 0.28 }}>
-            <span className="w-16 shrink-0 truncate text-[10px] font-bold uppercase tracking-wide" style={{ color }} title={tr.name}>
-              {tr.name}{tr.solo ? " S" : ""}{tr.mute ? " M" : ""}
+          <div key={tr.id} className="flex items-center gap-2.5 transition-opacity duration-300" style={{ opacity: activeNow ? 1 : 0.3 }}>
+            <span className="flex w-[92px] shrink-0 items-center gap-1.5 sm:w-[112px]" title={tr.name}>
+              <span className="h-2.5 w-[3px] shrink-0 rounded-full" style={{ background: color }} />
+              <span className="truncate text-xs font-semibold uppercase tracking-[0.03em] text-ink-2">{tr.name}</span>
+              {tr.solo && <span className="shrink-0 text-[10px] font-bold text-cool">S</span>}
+              {tr.mute && <span className="shrink-0 text-[10px] font-bold text-accent">M</span>}
             </span>
-            <div className="relative h-7 flex-1 overflow-hidden rounded-md bg-zinc-950/70">
+
+            <div className="relative h-8 flex-1 overflow-hidden rounded-lg border border-line/35 bg-base/70">
               {Array.from({ length: Math.min(64, Math.ceil(loop)) }, (_, b) => (
-                <div key={b} className="absolute top-0 h-full w-px bg-zinc-800" style={{ left: `${(b / loop) * 100}%` }} />
+                <div key={b} className={`absolute top-0 h-full w-px ${b % 4 === 0 ? "bg-line/70" : "bg-line/30"}`} style={{ left: `${(b / loop) * 100}%` }} />
               ))}
+
               {tr.role === "audio" && !tr.clip?.oneShot && (
-                <div className="absolute inset-y-1 left-0 right-0 rounded-sm" style={{ background: `${color}55` }}>
-                  <span className="pl-1 text-[9px] text-white/80">{tr.clip?.name ?? "audio"}{tr.clip?.bpm ? ` · warped ${tr.clip.bpm}→${song.bpm}` : ""}</span>
+                <div className="absolute inset-y-1 left-0 right-0 rounded" style={{ background: `${color}44` }}>
+                  <span className="pl-1.5 text-[10px] leading-6 text-ink">{tr.clip?.name ?? "audio"}{tr.clip?.bpm ? ` · warped ${tr.clip.bpm} to ${song.bpm}` : ""}</span>
                 </div>
               )}
+
               {notes.map((n, i) => {
                 const lit = local !== null && local >= n[1] && local < n[1] + Math.max(0.24, n[2]);
                 return (
-                  <div key={i} className="absolute rounded-[2px]" style={{
-                    left: `${(n[1] / loop) * 100}%`,
-                    width: `${Math.max((n[2] / loop) * 100, 1.4)}%`,
-                    top: melodic ? `${(1 - (n[0] - pMin) / span) * 70 + 8}%` : `${86 - (n[3] / 127) * 74}%`,
-                    height: melodic ? "22%" : `${(n[3] / 127) * 74}%`,
-                    background: color,
-                    opacity: lit ? 1 : 0.35 + (n[3] / 127) * 0.35,
-                    boxShadow: lit ? `0 0 6px ${color}` : "none",
-                  }} />
+                  <div
+                    key={i}
+                    className="absolute rounded-[2px] transition-[opacity,box-shadow] duration-75"
+                    style={{
+                      left: `${(n[1] / loop) * 100}%`,
+                      width: `${Math.max((n[2] / loop) * 100, 1.6)}%`,
+                      top: melodic ? `${(1 - (n[0] - pMin) / span) * 68 + 10}%` : `${86 - (n[3] / 127) * 72}%`,
+                      height: melodic ? "15%" : `${(n[3] / 127) * 72}%`,
+                      background: color,
+                      opacity: lit ? 1 : 0.32 + (n[3] / 127) * 0.3,
+                      boxShadow: lit ? `0 0 8px ${color}, 0 0 2px ${color}` : "none",
+                      outline: "1px solid rgb(var(--c-base))",
+                    }}
+                  />
                 );
               })}
+
               {autos.map((a, i) => {
                 const up = a.to > a.from;
-                return <div key={`a${i}`} className="pointer-events-none absolute inset-x-0 bottom-0 h-full" title={`${a.param} ${a.from} → ${a.to}`}
-                  style={{ background: `linear-gradient(to ${up ? "right" : "left"}, transparent, ${color}33)` }} />;
+                return (
+                  <div
+                    key={`a${i}`}
+                    className="pointer-events-none absolute inset-0"
+                    title={`${a.param} ${a.from} to ${a.to}`}
+                    style={{ background: `linear-gradient(to ${up ? "right" : "left"}, transparent, ${color}30)` }}
+                  />
+                );
               })}
-              {variant && <span className="absolute right-1 top-0.5 rounded bg-black/50 px-1 text-[9px] text-zinc-300">{variant}</span>}
-              {local !== null && <div className="absolute top-0 h-full w-[2px] bg-white/80" style={{ left: `${(local / loop) * 100}%` }} />}
+
+              {variant && (
+                <span className="absolute right-1 top-1 rounded bg-base/85 px-1 text-[10px] font-medium leading-4 text-ink-2">{variant}</span>
+              )}
+
+              {local !== null && (
+                <div className="absolute top-0 h-full w-px bg-ink shadow-[0_0_6px_rgba(255,255,255,0.8)]" style={{ left: `${(local / loop) * 100}%` }} />
+              )}
             </div>
           </div>
         );

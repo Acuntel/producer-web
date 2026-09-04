@@ -1,61 +1,114 @@
 "use client";
 // What the producer hears, shown: tempo, key, loudness, chords, structure, the reference and the deltas.
+// Two single-series charts, one hue each; labels wear text tokens, never the series color.
 import type { MusicFacts } from "@/lib/ears";
+import { Empty } from "./ui";
 
 export type Reference = { name: string; facts: MusicFacts };
 
 function fmtTime(s: number) { const m = Math.floor(s / 60); return `${m}:${String(Math.floor(s - m * 60)).padStart(2, "0")}`; }
 
-export function EarsPanel({ facts, reference, deltaText, hearing }: { facts: MusicFacts | null; reference: Reference | null; deltaText: string | null; hearing: boolean }) {
-  return (
-    <div className="mt-2 rounded-2xl bg-zinc-950/60 p-3 text-[12px] text-zinc-300">
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">What I hear</span>
-        {hearing && <span className="text-[10px] text-amber-400">listening to the render…</span>}
+export function EarsPanel({
+  facts, reference, deltaText, hearing,
+}: { facts: MusicFacts | null; reference: Reference | null; deltaText: string | null; hearing: boolean }) {
+  if (hearing && !facts) {
+    return (
+      <div className="space-y-2 pt-1">
+        <div className="skeleton h-14 rounded-xl" />
+        <div className="skeleton h-16 rounded-xl" />
+        <p className="text-center text-xs text-ink-3">Rendering the song and listening back…</p>
       </div>
-      {!facts && !hearing && <p className="mt-1 text-zinc-500">Nothing measured yet. The ears run after every change.</p>}
-      {facts && <Facts f={facts} />}
+    );
+  }
+  if (!facts) {
+    return <Empty icon="ear" title="Nothing measured yet" hint="After every change the producer renders the song and listens back. The numbers land here." />;
+  }
+  return (
+    <div className="space-y-3 pt-1">
+      {hearing && <p className="text-xs text-accent animate-breathe">Listening back to the new render…</p>}
+      <Stats f={facts} />
+      <Spectrum f={facts} />
+      <Energy f={facts} />
+      {facts.chords.progression.length > 0 && (
+        <p className="text-xs text-ink-2">
+          <span className="eyebrow mr-1.5 !inline">Chords</span>{" "}
+          <span className="font-mono">{facts.chords.progression.join("  ")}</span>
+        </p>
+      )}
+      <p className="text-sm leading-relaxed text-ink-2">{facts.read}</p>
       {reference && (
-        <div className="mt-2 border-t border-zinc-800 pt-2">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-sky-400">Reference: {reference.name}</div>
-          <div className="text-zinc-400">{Math.round(reference.facts.tempo.bpm)} BPM · {reference.facts.key.name} · {reference.facts.loudness.integrated.toFixed(1)} LUFS · drop {reference.facts.structure.dropAt !== null ? fmtTime(reference.facts.structure.dropAt) : "none"}</div>
-          {deltaText && <div className="mt-1 text-zinc-300">{deltaText}</div>}
+        <div className="border-t border-line/50 pt-2.5">
+          <div className="eyebrow !text-cool">Reference · {reference.name}</div>
+          <p className="tnum mt-1 text-xs text-ink-2">
+            {Math.round(reference.facts.tempo.bpm)} BPM · {reference.facts.key.name} · {reference.facts.loudness.integrated.toFixed(1)} LUFS
+            {reference.facts.structure.dropAt !== null ? ` · drop ${fmtTime(reference.facts.structure.dropAt)}` : ""}
+          </p>
+          {deltaText && <p className="mt-1.5 text-sm text-ink">{deltaText}</p>}
         </div>
       )}
     </div>
   );
 }
 
-function Facts({ f }: { f: MusicFacts }) {
-  const b = f.spectrum.bands;
-  const bars = [["sub", b.sub], ["low", b.low], ["lowMid", b.lowMid], ["mid", b.mid], ["highMid", b.highMid], ["air", b.air]] as [string, number][];
-  const energy = f.structure.energy;
+function Stats({ f }: { f: MusicFacts }) {
+  const items: [string, string][] = [
+    ["Tempo", `${Math.round(f.tempo.bpm)}`],
+    ["Key", f.key.name],
+    ["Loudness", `${f.loudness.integrated.toFixed(1)}`],
+    ["Swing", `${Math.round(f.groove.swing * 100)}%`],
+    ["Pump", f.groove.pump.toFixed(2)],
+    ...(f.structure.dropAt !== null ? ([["Drop", fmtTime(f.structure.dropAt)]] as [string, string][]) : []),
+  ];
   return (
-    <div className="mt-1 space-y-1.5">
-      <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-        <span><b className="text-white">{Math.round(f.tempo.bpm)}</b> BPM</span>
-        <span><b className="text-white">{f.key.name}</b> <span className="text-zinc-500">({Math.round(f.key.confidence * 100)}%)</span></span>
-        <span><b className="text-white">{f.loudness.integrated.toFixed(1)}</b> LUFS</span>
-        <span>swing <b className="text-white">{Math.round(f.groove.swing * 100)}%</b></span>
-        <span>pump <b className="text-white">{f.groove.pump.toFixed(2)}</b></span>
-        {f.structure.dropAt !== null && <span>drop at <b className="text-white">{fmtTime(f.structure.dropAt)}</b></span>}
-      </div>
-      {f.chords.progression.length > 0 && <div className="text-zinc-400">chords: {f.chords.progression.join(" · ")}</div>}
-      <div className="flex items-end gap-1" title="spectrum balance">
-        {bars.map(([n, v]) => (
-          <div key={n} className="flex flex-col items-center" style={{ width: 34 }}>
-            <div className="w-full rounded-t bg-zinc-800" style={{ height: 26 }}><div className="w-full rounded-t bg-emerald-400/80" style={{ height: `${Math.min(1, v * 2) * 100}%`, marginTop: `${(1 - Math.min(1, v * 2)) * 100}%` }} /></div>
-            <span className="text-[9px] text-zinc-500">{n}</span>
+    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+      {items.map(([label, value]) => (
+        <div key={label} className="rounded-lg bg-s2/70 px-2 py-1.5">
+          <div className="tnum truncate text-[15px] font-semibold leading-5 text-ink">{value}</div>
+          <div className="truncate text-[10px] font-medium uppercase tracking-wider text-ink-3">{label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Six ordered frequency bands, one series, one hue. Values labelled directly. */
+function Spectrum({ f }: { f: MusicFacts }) {
+  const b = f.spectrum.bands;
+  const bands: [string, number][] = [["Sub", b.sub], ["Low", b.low], ["Lo-mid", b.lowMid], ["Mid", b.mid], ["Hi-mid", b.highMid], ["Air", b.air]];
+  const max = Math.max(0.2, ...bands.map(([, v]) => v));
+  return (
+    <div>
+      <div className="eyebrow mb-1.5">Spectrum balance</div>
+      <div className="flex items-end gap-[2px]">
+        {bands.map(([name, v]) => (
+          <div key={name} className="flex flex-1 flex-col items-center gap-1">
+            <span className="tnum text-[10px] font-medium text-ink-3">{v.toFixed(2)}</span>
+            <div className="flex h-14 w-full items-end rounded-t bg-s2/60">
+              <div className="w-full rounded-t-[4px] bg-cool transition-[height] duration-500 ease-snap" style={{ height: `${Math.max(2, (v / max) * 100)}%` }} />
+            </div>
+            <span className="truncate text-[10px] text-ink-3">{name}</span>
           </div>
         ))}
-        <div className="ml-2 text-[10px] text-zinc-500">mud {f.spectrum.mud.toFixed(2)} · harsh {f.spectrum.harshness.toFixed(2)} · width {f.spectrum.width.toFixed(2)}</div>
       </div>
-      {energy.length > 0 && (
-        <div className="flex h-6 items-end gap-px" title="energy per bar">
-          {energy.slice(0, 160).map((e, i) => <div key={i} className="flex-1 rounded-t bg-amber-400/70" style={{ height: `${Math.max(4, e * 100)}%` }} />)}
-        </div>
-      )}
-      <div className="text-zinc-400">{f.read}</div>
+      <p className="tnum mt-1.5 text-[11px] text-ink-3">
+        mud {f.spectrum.mud.toFixed(2)} · harsh {f.spectrum.harshness.toFixed(2)} · width {f.spectrum.width.toFixed(2)}
+      </p>
+    </div>
+  );
+}
+
+/** Energy per bar over the arrangement: one series, change over time. */
+function Energy({ f }: { f: MusicFacts }) {
+  const e = f.structure.energy;
+  if (!e.length) return null;
+  return (
+    <div>
+      <div className="eyebrow mb-1.5">Energy across the song</div>
+      <div className="flex h-9 items-end gap-px rounded-lg bg-s2/50 p-1">
+        {e.slice(0, 160).map((v, i) => (
+          <div key={i} className="flex-1 rounded-t-[2px] bg-accent/75" style={{ height: `${Math.max(6, v * 100)}%` }} />
+        ))}
+      </div>
     </div>
   );
 }

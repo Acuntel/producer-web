@@ -1,3 +1,138 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+   Tokens. One surface ramp, one ink ramp, one accent. Every ink value below is
+   checked against --c-base for WCAG AA at our 12px floor.
+--------------------------------------------------------------------------- */
+:root {
+  --c-base: 9 10 12;
+  --c-s1: 18 19 23;
+  --c-s2: 26 28 33;
+  --c-s3: 37 39 46;
+  --c-line: 46 48 57;
+
+  --c-ink: 244 244 245;    /* 18.4:1 */
+  --c-ink-2: 168 168 178;  /* 8.1:1  */
+  --c-ink-3: 138 138 150;  /* 5.2:1  */
+
+  --c-accent: 245 176 66;
+  --c-accent-ink: 28 18 3;
+  --c-live: 52 211 153;
+  --c-cool: 110 168 254;
+  --c-warn: 251 146 60;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scrollbar-color: rgb(var(--c-s3)) transparent;
+  }
+  body {
+    background: rgb(var(--c-base));
+    color: rgb(var(--c-ink));
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
+    /* A very soft top-light so the page has a direction, not a flat void. */
+    background-image: radial-gradient(120% 68% at 50% -14%, rgb(var(--c-s2) / 0.85) 0%, transparent 62%);
+    background-attachment: fixed;
+  }
+  ::selection { background: rgb(var(--c-accent) / 0.3); color: rgb(var(--c-ink)); }
+
+  /* One visible focus treatment everywhere, keyboard only. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--c-accent));
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  button, [role="button"] { -webkit-tap-highlight-color: transparent; }
+  button:disabled { cursor: not-allowed; }
+
+  /* Slim, quiet scrollbars. The default macOS/Windows bars read as debug chrome. */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--c-s3));
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--c-line)); background-clip: content-box; }
+}
+
+@layer components {
+  /* Horizontal scrollers fade at the edges instead of hard-clipping their
+     content. This is what made the mixer and the arrangement look broken. */
+  .scroll-x {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 18px), transparent 100%);
+  }
+  .scroll-x::-webkit-scrollbar { height: 6px; }
+  .scroll-x > * { scroll-snap-align: start; }
+
+  .scroll-y { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+
+  /* A vertical scroller that is taller than its box fades at the bottom, so a
+     cut-off panel reads as "more below" rather than as broken rendering. */
+  .scroll-fade-y {
+    mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 28px), transparent 100%);
+  }
+  @media (min-width: 1024px) { .scroll-fade-y { mask-image: none; } }
+
+  /* A panel: raised surface, hairline edge, inner top highlight. */
+  .panel {
+    background: rgb(var(--c-s1));
+    border: 1px solid rgb(var(--c-line) / 0.55);
+    box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.035) inset, 0 8px 30px -14px rgb(0 0 0 / 0.9);
+  }
+  .panel-sunken {
+    background: rgb(var(--c-base) / 0.6);
+    border: 1px solid rgb(var(--c-line) / 0.4);
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.35) inset;
+  }
+
+  /* Section label used above every group of controls. */
+  .eyebrow {
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: rgb(var(--c-ink-3));
+  }
+
+  .skeleton {
+    background: linear-gradient(90deg, rgb(var(--c-s2)) 25%, rgb(var(--c-s3)) 37%, rgb(var(--c-s2)) 63%);
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+
+  /* Numbers in a UI must not shift width as they tick. */
+  .tnum { font-variant-numeric: tabular-nums; }
+}
+
+/* The orb pulses on the beat. Kept in CSS so the tempo can drive it by variable. */
+@keyframes orb-beat {
+  0% { transform: scale(1.055); }
+  36% { transform: scale(1); }
+  100% { transform: scale(1); }
+}
+@keyframes orb-ring {
+  0% { transform: scale(1); opacity: 0.45; }
+  70% { transform: scale(1.5); opacity: 0; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

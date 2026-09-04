@@ -43,3 +43,42 @@ Nothing. Every merge passed all three objective gates.
 ### Not proven in this round
 - Real-browser playback of library kits and sample clips (fetch + decodeAudioData + Tone.Player against the actual files); the e2e run did not exercise "use real drums".
 - Groove map extraction on real DJ-tagged tracks (only synthetic mixes so far).
+
+## 2026-09-03 — Consumer UI/UX rebuild
+
+Brady's verdict on V9: "extremely glitchy... probably the worst music product I've ever seen. nothing works right." He asked for it to read as $10,000 software and work as a standalone consumer product.
+
+### The testing gap that let this happen
+Three harnesses were green (brain battery 11/11 local and live, e2e ALL PASSED, unit tests) while the UI was genuinely bad. They proved endpoints answer, ops apply, and audio measures. **Not one of them rendered a page and looked at it.** `tests/cdp-shot.mjs` already existed and caught every defect in one run. Screenshot at 390 and 1440 before calling any UI round done.
+
+### Defects measured in headless Chrome (not opinions)
+- Four elements hard-clipped: mixer sliced mid-channel, arrangement cut a chip in half, track names truncated to "TAMBOUR…", mobile header wrapped "The / Producer".
+- Text at 8, 9, 10 and 11px throughout.
+- Contrast failed AA: `zinc-500` on near-black ≈ 4:1 for section names and metadata.
+- Emoji used as interface icons throughout. The loudest "generated UI" tell.
+- `max-w-2xl` column stranded in a 1440px viewport with a `flex-1` chat box stretching into a void.
+- All four expert panels expanded by default: a wall of dense numbers on first paint.
+- Missing favicon (real 404 every load).
+
+### Shipped
+- Design system in `tailwind.config.ts` + `app/globals.css`: one surface ramp, one AA-checked ink ramp (18.4 / 8.1 / 5.2 : 1), one accent plus live/cool/warn, a type scale with a 12px floor, `.panel`, `.scroll-x` edge fades, `.scroll-fade-y`, skeletons, tabular numerals, reduced-motion support. Inter + JetBrains Mono.
+- `components/Icon.tsx`: 23 hand-drawn stroke icons. Zero emoji remain.
+- `components/ui.tsx`: Button, IconButton (tooltip + aria-label), Panel, Disclosure, Chip, ScrollX, Empty.
+- `components/Orb.tsx`: hero control. `running` (audio moving) is independent of `phase` (idle/starting/listening/thinking/speaking/hearing/playing/paused) because the mic is open while the track plays.
+- Layout split into `StudioPanel` + `Conversation` under a thin `page.tsx` shell. Desktop two-pane, mobile stacked with the studio capped at 52dvh. Every file under 300 lines.
+- Only "The music" opens by default. Producer's notes auto-opens the first time a note arrives.
+- Measured read ("Measured 126 BPM · D minor · -9.2 LUFS · peak") moved into the song header, because collapsing the ears panel had made the proof invisible.
+- Opener chips, composer attach menu, capped reading measure, real empty and loading states, arrangement auto-scrolls to follow the playhead, `app/icon.svg`.
+
+### Gates
+- `tsc --noEmit` clean · `next build` green · 46/46 unit tests (styles 5, incl. three new regression guards: no text under 10px, no emoji in any .tsx, every IconButton labelled).
+- DOM audit: tiny-text list empty, no console errors, no 404s, only the two intentional scrollers report overflow.
+- `node tests/e2e.mjs http://localhost:3111` ALL PASSED.
+- Screenshots reviewed at 390, 768 and 1440, idle and mid-session, plus every panel expanded.
+
+### Traps
+- `tests/e2e.mjs` hard-codes markup. `button[aria-label="Start"]` and `document.querySelector('footer input')` both broke; updated to `"Start the session"` and `input[aria-label="Message the producer"]`, and the critic anchor moved off the copy string "Suggested:" onto the `Do it` button. A markup change surfaces as "timeout waiting for orb", which is a harness selector, not a product bug.
+- Flex children are blockified, so `innerText` breaks a flex row of spans into one line each. The header metadata is deliberately plain text.
+- A collapsed disclosure removes its text from `innerText` and any text-scraping step fails.
+- `JSX.Element` is not global under React 19 + TS 5.7; use `ReactElement`.
+- A `-mx-1` bleed on a scroller caused a real 8px horizontal overflow. Pad, do not bleed.
