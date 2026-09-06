@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SEED_SONG, applyOps, migrateSong, withReferenceGroove, History, diffSongs, type Song, type Note, type Role } from "@/lib/song";
 import { levelOps, levelLine } from "@/lib/song/level";
 import { exchange } from "@/lib/brain/stream";
+import { stripWake, quickGate, classify } from "@/lib/brain/attend";
 import type { Engine, Position } from "@/lib/engine";
 import type { MusicFacts } from "@/lib/ears";
 import { logMove, setVerdict, inferVerdictFromUtterance, tasteSummary, logPair } from "@/lib/taste";
@@ -56,6 +57,10 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const [rendering, setRendering] = useState(false);
   const [ab, setAb] = useState<AB>(null); const [score, setScore] = useState("");
   const [canUndo, setCanUndo] = useState(false); const [canRedo, setCanRedo] = useState(false);
+  const [ignored, setIgnored] = useState<{ text: string; at: number } | null>(null);
+  const [ignoredCount, setIgnoredCount] = useState(0);
+  const lastMoveAtRef = useRef(0);
+  const pausedRef = useRef(false);
 
   const engineRef = useRef<Engine | null>(null);
   const songRef = useRef(song); const messagesRef = useRef(messages);
@@ -68,7 +73,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const abRef = useRef<AB>(null);
   const localMovesRef = useRef<string[]>([]);
   const verifyingRef = useRef(false);
-  useEffect(() => { songRef.current = song; }, [song]); useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => { songRef.current = song; }, [song]); useEffect(() => { messagesRef.current = messages; }, [messages]); useEffect(() => { pausedRef.current = paused; }, [paused]);
 
   useEffect(() => {
     try {
@@ -247,7 +252,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       await runAction(li.action ?? null, ns, text);
       if (li.say) say(li.say);
     }
-    localMovesRef.current.push(li.note);
+    localMovesRef.current.push(li.note); lastMoveAtRef.current = Date.now();
     setMessages((m) => [...m, { role: "user", content: text }, ...(li.say ? [{ role: "assistant" as const, content: li.say }] : [])]);
     logMoveScore({ at: Date.now(), ask: text, kind: "local", latencyMs: Math.round(performance.now() - t0), opsApplied: li.ops?.length ?? 0, skipped: 0 });
     setScore(scoreLine());
@@ -315,7 +320,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       } else if (ns) { abRef.current = null; setAb(null); }
       setListenHint(data.listen ?? null);
       const entry = logMove({ title: (ns ?? cur).title, said: t, move: data.say, listen: data.listen, factsSummary: before ? `${Math.round(before.tempo.bpm)}bpm ${before.key.name} ${before.loudness.integrated.toFixed(1)}LUFS` : undefined });
-      lastMoveRef.current = entry.id; setLastMoveId(entry.id);
+      lastMoveRef.current = entry.id; setLastMoveId(entry.id); lastMoveAtRef.current = Date.now();
       if (early === null) say(data.say);
       await runAction(data.action, ns ?? songRef.current, t);
       // Verify: re-hear the changed sections and hold the brain to its word, once per move.
@@ -339,6 +344,26 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       if (p) void send(p);
     }
   }, [clips, compactFacts, deltasFor, hearNow, runAction, say, setSong, tryLocal, registerClip, flash]);
+
+  // Voice goes through the attention layer: was that for the producer? Typed text never does.
+  const noteIgnored = useCallback((t: string) => { setIgnored({ text: t, at: Date.now() }); setIgnoredCount((n) => n + 1); }, []);
+  const sendVoice = useCallback(async (raw: string) => {
+    const { text: t, woke } = stripWake(raw);
+    if (!t) { if (woke) say("Yes?"); return; }
+    setIgnored(null);
+    if (woke) return send(t);                                                       // named, always for me
+    if (localIntent(t, songRef.current) || rolloutIntent(t, !!referenceRef.current)) return send(t);   // transport, mixer, new song: instant
+    const recentMove = !!lastMoveRef.current && Date.now() - lastMoveAtRef.current < 25000;
+    const gate = quickGate(t, { paused: pausedRef.current, recentMove });
+    if (gate === "send") return send(t);
+    if (gate === "ignore") return noteIgnored(t);
+    const lastProducer = [...messagesRef.current].reverse().find((m) => m.role === "assistant")?.content ?? "";
+    const lastAsk = [...messagesRef.current].reverse().find((m) => m.role === "user")?.content ?? "";
+    const intent = await classify(t, { paused: pausedRef.current, lastProducer, lastAsk, section: engineRef.current?.getPosition()?.section ?? "" });
+    if (intent === "ignore") return noteIgnored(t);
+    return send(t);
+  }, [noteIgnored, say, send]);
+  const thatWasForMe = useCallback(() => { const i = ignored; if (!i) return; setIgnored(null); void send(i.text); }, [ignored, send]);
 
   const boot = useCallback(async () => {
     if (starting) return;
@@ -367,5 +392,5 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const { addReference, addClip } = useUploads({ flash, send, setSong, setClips, factsRef, referenceRef, setReference, setDeltaText, getSong: () => songRef.current });
 
   return { song, messages, busy, started, starting, paused, nowSection, beat, library, clips, facts, hearing, reference, deltaText, listenHint, toast, lastMoveId, rendering, ab, score, canUndo, canRedo, rollout,
-    boot, send, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, setVolume, toggleTrack };
+    boot, send, sendVoice, ignored, ignoredCount, thatWasForMe, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, setVolume, toggleTrack };
 }

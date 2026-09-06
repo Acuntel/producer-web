@@ -134,3 +134,9 @@ The prod origin's microphone permission was still "prompt" and the app swallowed
 - innerText breaks flex chips into lines and uppercases eyebrows: anchor on data-role attributes.
 - A background chain piped through grep buffers until exit: use --line-buffered.
 - With the mic open during speech, a headless fake microphone floods the brain with transcribed static: harness mode (?e2e=1 / ?typed=1) no longer auto-opens the mic.
+
+### Attention layer (Brady: "the voice listens all the time whether paused or playing" and "it needs to understand the difference between conversation and action words")
+- lib/brain/attend.ts: wake word ("producer" / "hey producer") always gets through; local transport and mixer intents always get through; a quick gate drops fillers and long non-studio sentences, sends clear studio commands, and treats a reaction right after a move as a verdict; everything else goes to /api/attend (Haiku 4.5, one word: COMMAND / TALK / IGNORE, about 0.7 s) which knows whether the music is paused. Paused = the room is talking unless the sentence is clearly for the studio. Fails open.
+- The listen side shows what it heard and chose to ignore ("took it as room talk, not for me") with a one-tap "That was for you" override, counts ignored sentences, and says while paused: "I only act on studio words, or say producer first."
+- Persona: CONVERSATION IS NOT AN ORDER. Reactions, questions and thinking aloud get an answer with ops null; only requests change the song.
+- Probes: "that hook is insane though" = talk; "this reminds me of a summit record, can you push it that way" = command; "yeah I think we should just go tomorrow after class" (paused) = ignore; "what did you just change" = talk. 59/59 unit tests, e2e passed.

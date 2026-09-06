@@ -18,6 +18,7 @@ export function ListenPanel({
   interim, lastHeard, messages, speaking, busy, onHush,
   humming, humCountIn, canVerdict, onVerdict, ab, onPickAb,
   onAnalyze, onReference, onSample, typed, onSend,
+  paused, ignored, ignoredCount, onThatWasForMe,
 }: {
   started: boolean; starting: boolean; phase: Phase; running: boolean; beatSec: number; onOrb: () => void;
   micLevel: number; micPeak: number; micStatus: MicStatus; voiceStatus: VoiceStatus; heardSomething: boolean; onRetryMic: () => void; muted: boolean; onMute: (m: boolean) => void;
@@ -25,13 +26,14 @@ export function ListenPanel({
   humming: boolean; humCountIn: number; canVerdict: boolean; onVerdict: (v: "liked" | "killed") => void;
   ab: { playing: string } | null; onPickAb: (k: string) => void;
   onAnalyze?: () => void; onReference: (f: File) => void; onSample: (f: File) => void; typed?: boolean; onSend?: (t: string) => void;
+  paused?: boolean; ignored?: { text: string; at: number } | null; ignoredCount?: number; onThatWasForMe?: () => void;
 }) {
   const refInput = useRef<HTMLInputElement>(null);
   const clipInput = useRef<HTMLInputElement>(null);
   const logEnd = useRef<HTMLDivElement>(null);
   useEffect(() => { logEnd.current?.scrollIntoView({ block: "end" }); }, [messages.length]);
   const lastProducer = [...messages].reverse().find((m) => m.role === "assistant")?.content ?? "";
-  const mic = micLine(micStatus, voiceStatus, micLevel, heardSomething, muted);
+  const mic = micLine(micStatus, voiceStatus, micLevel, heardSomething, muted, !!paused);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -64,9 +66,14 @@ export function ListenPanel({
           {/* You, then the producer. Large, live. */}
           <div className="space-y-3 px-5">
             <div>
-              <div className="eyebrow flex items-center gap-1.5"><Icon name="mic" size={12} /> You</div>
+              <div className="eyebrow flex items-center gap-1.5"><Icon name="mic" size={12} /> You{ignoredCount ? <span className="ml-1 font-normal normal-case tracking-normal text-ink-3">· {ignoredCount} not for me</span> : null}</div>
               {interim ? (
                 <p data-role="you-line" className="mt-1 text-lg leading-snug text-cool">{interim}<span className="animate-breathe">…</span></p>
+              ) : ignored && (!lastHeard || ignored.at > 0) && ignored.text !== lastHeard ? (
+                <div className="mt-1">
+                  <p className="text-base leading-snug text-ink-3">Heard <span className="italic">“{ignored.text}”</span> and took it as room talk, not for me.</p>
+                  {onThatWasForMe && <button onClick={onThatWasForMe} className="mt-1 text-sm font-medium text-accent hover:underline">That was for you</button>}
+                </div>
               ) : lastHeard ? (
                 <p data-role="you-line" className="mt-1 text-lg leading-snug text-ink">{lastHeard}</p>
               ) : humming ? (
@@ -129,7 +136,7 @@ export function ListenPanel({
   );
 }
 
-function micLine(mic: MicStatus, voice: VoiceStatus, level: number, heard: boolean, muted: boolean): { text: string; tone: "warn" | "live" | "quiet"; retry?: boolean } {
+function micLine(mic: MicStatus, voice: VoiceStatus, level: number, heard: boolean, muted: boolean, paused: boolean): { text: string; tone: "warn" | "live" | "quiet"; retry?: boolean } {
   if (mic === "blocked" || voice === "blocked") return { text: "Microphone blocked. Click the lock icon in the address bar, allow the mic, then retry.", tone: "warn", retry: true };
   if (mic === "nodevice" || voice === "nodevice") return { text: "No microphone found. Plug one in, then retry.", tone: "warn", retry: true };
   if (voice === "unsupported") return { text: "This browser cannot do live speech. Use Chrome.", tone: "warn" };
@@ -137,6 +144,7 @@ function micLine(mic: MicStatus, voice: VoiceStatus, level: number, heard: boole
   if (mic === "opening") return { text: "Opening the microphone.", tone: "quiet" };
   if (voice === "network") return { text: "Speech service reconnecting.", tone: "warn" };
   if (mic === "error" || voice === "error") return { text: "Mic trouble. Retry, or reload.", tone: "warn", retry: true };
+  if (paused) return { text: level > 0.12 ? "Paused. Hearing the room; say play, or say producer first." : "Paused. I only act on studio words, or say producer first.", tone: "quiet" };
   if (level > 0.12) return { text: "Hearing you.", tone: "live" };
   if (heard) return { text: "Listening.", tone: "quiet" };
   return { text: "Mic is live. Say something.", tone: "quiet" };

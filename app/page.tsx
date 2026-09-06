@@ -33,7 +33,7 @@ export default function Studio() {
   snapshotRef.current = projects.snapshot;
   const stems = useStems({ user: account.user, projectId: projects.current?.id ?? null, flash: studio.flash, edit: studio.edit, send: studio.send, registerClip: studio.registerClip, getSong: studio.getSong });
   analyzeRef.current = async (url) => { setShowAnalyze(true); await stems.start({ url }); };
-  useEffect(() => { sendRef.current = (t) => void studio.send(t); }, [studio]);
+  useEffect(() => { sendRef.current = (t) => void studio.sendVoice(t); }, [studio]);
   const critic = useCritic({ song: studio.song, facts: studio.facts, reference: studio.reference, paused: !!studio.rollout, send: studio.send, started: studio.started });
   const mic = useMicLevel(studio.started);
   const [muted, setMuted] = useState(false);
@@ -101,6 +101,7 @@ export default function Studio() {
             micLevel={mic.level} micPeak={mic.peak} micStatus={mic.status} voiceStatus={voice.status} heardSomething={mic.heardSomething || voice.heardCount > 0}
             onRetryMic={() => { voice.retry(); }} muted={muted} onMute={(m) => { setMuted(m); voice.setMuted(m); }}
             interim={voice.interim} lastHeard={voice.lastHeard} messages={studio.messages} speaking={voice.speaking} busy={studio.busy} onHush={voice.hush}
+            paused={paused} ignored={studio.ignored} ignoredCount={studio.ignoredCount} onThatWasForMe={studio.thatWasForMe}
             humming={hum.recording} humCountIn={hum.countIn} canVerdict={!!studio.lastMoveId} onVerdict={studio.verdict}
             ab={studio.ab} onPickAb={(k) => studio.pickAb(k as never)}
             onAnalyze={account.enabled ? () => setShowAnalyze(true) : undefined}
