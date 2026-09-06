@@ -112,6 +112,31 @@ async function main() {
   assert.ok(await clickText("Sign out"), "sign out");
   await waitFor(`document.body.innerText.includes('Try it without an account')`, 15000, "gate back after sign out");
   console.log("[acct] signed out, gate is back");
+  // Sign back in as an existing user: the gate should open on Sign in with the email remembered, and the session must survive a reload.
+  const remembered = await js(`document.querySelector('input[type="email"]')?.value ?? ''`);
+  const onSignInTab = await js(`document.body.innerText.includes('You stay signed in on this device')`);
+  console.log(`[acct] gate after sign-out: tab=${onSignInTab ? "Sign in" : "Create account"} email=${remembered}`);
+  assert.equal(remembered, EMAIL, "email remembered on the gate");
+  assert.ok(onSignInTab, "gate defaults to Sign in for a returning user");
+  await setInput('input[type="password"]', PASSWORD);
+  assert.ok(await js(`(() => { const b = document.querySelector('form button[type="submit"]'); if (!b) return false; b.click(); return true; })()`), "sign in submit");
+  await waitFor(`!document.body.innerText.includes('Try it without an account')`, 30000, "gate closes after sign-in");
+  const cookiesBefore = await js(`document.cookie.split(';').map((c) => c.trim().split('=')[0]).filter((n) => n.startsWith('sb-')).length`);
+  await call("Page.navigate", { url: `${BASE}/?typed=1` });
+  await waitFor(`!!document.querySelector('button[aria-label="Your account"]')`, 30000, "still signed in after reload");
+  const cookiesAfter = await js(`document.cookie.split(';').map((c) => c.trim().split('=')[0]).filter((n) => n.startsWith('sb-')).length`);
+  console.log(`[acct] signed back in; session cookies before reload ${cookiesBefore}, after ${cookiesAfter}; account icon present after reload`);
+  assert.ok(cookiesAfter > 0, "session cookie persisted");
+  // Wrong password gets a clear message, not a silent failure.
+  await js(`document.querySelector('button[aria-label="Your account"]')?.click(); true`);
+  await waitFor(`document.body.innerText.includes('Your Anthropic API key')`, 10000, "account sheet again");
+  assert.ok(await clickText("Sign out"), "sign out again");
+  await waitFor(`document.body.innerText.includes('Try it without an account')`, 15000, "gate back");
+  await setInput('input[type="password"]', "definitely-wrong-1");
+  assert.ok(await js(`(() => { const b = document.querySelector('form button[type="submit"]'); if (!b) return false; b.click(); return true; })()`), "wrong sign in");
+  const err = await waitFor(`(document.querySelector('[role="alert"]')?.textContent ?? '')`, 15000, "wrong password message");
+  console.log(`[acct] wrong password says: ${err}`);
+  assert.ok(/do not match/i.test(err), "wrong password is named");
   // cleanup
   const del = await adminFetch(`/auth/v1/admin/users/${user.id}`, { method: "DELETE" });
   console.log(`[acct] cleanup user: HTTP ${del.status}`);

@@ -38,8 +38,9 @@ export function AccountSheet({ account, mode, onClose }: { account: Account; mod
 }
 
 function SignIn({ account, gate, onClose }: { account: Account; gate: boolean; onClose: () => void }) {
-  const [tab, setTab] = useState<"in" | "up">(gate ? "up" : "in");
-  const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
+  const remembered = account.rememberedEmail;
+  const [tab, setTab] = useState<"in" | "up">(remembered || !gate ? "in" : "up");
+  const [email, setEmail] = useState(remembered ?? ""); const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null); const [busy, setBusy] = useState(false);
 
   async function submit(e: FormEvent) {
@@ -74,10 +75,11 @@ function SignIn({ account, gate, onClose }: { account: Account; gate: boolean; o
         </label>
         <label className="block">
           <span className="eyebrow mb-1 block">Password</span>
-          <input type="password" required minLength={8} autoComplete={tab === "in" ? "current-password" : "new-password"} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-xl border border-line/60 bg-base px-3 py-2.5 text-base text-ink placeholder:text-ink-3 focus:border-accent/60 focus:outline-none" placeholder={tab === "up" ? "At least 8 characters" : "Your password"} />
+          <input type="password" required minLength={8} autoFocus={!!remembered} autoComplete={tab === "in" ? "current-password" : "new-password"} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-xl border border-line/60 bg-base px-3 py-2.5 text-base text-ink placeholder:text-ink-3 focus:border-accent/60 focus:outline-none" placeholder={tab === "up" ? "At least 8 characters" : "Your password"} />
         </label>
         {err && <p role="alert" className="rounded-lg bg-warn/10 px-3 py-2 text-sm text-warn">{err}</p>}
         <Button tone="accent" type="submit" disabled={busy} className="w-full justify-center">{busy ? "One moment" : tab === "up" ? "Create my account" : "Sign in"}</Button>
+        {tab === "in" && <p className="text-center text-xs text-ink-3">You stay signed in on this device until you sign out.</p>}
       </form>
       {gate && (
         <button onClick={account.continueAsGuest} className="mt-4 w-full text-center text-sm text-ink-3 transition-colors hover:text-ink-2">
