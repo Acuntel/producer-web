@@ -122,3 +122,15 @@ The prod origin's microphone permission was still "prompt" and the app swallowed
 - Voice loop: recognition errors classified and surfaced; network drops back off and retry; mute; barge-in kept.
 - Studio at two thirds (lg:grid-cols-[1fr_minmax(300px,24rem)]): live stereo master meter and spectrum from Tone.Meter and Tone.FFT on the master (components/Meters.tsx, engine.getLevels), a proportional arrangement timeline with bar ruler and moving playhead (components/Timeline.tsx), a transport row, lanes with mute, solo and a live level per lane, an interactive mixer (drag faders move the voice live with no graph rebuild, commit on release; M and S press) all through song ops so the brain gets LOCAL MOVES.
 - Producer capabilities: op "slice" (lib/engine/slice.ts: transient search, zero-crossing snap, decay end at -40 dB, fades, -1 dBFS) resolved in the browser from any clip; action "analyze" with a url; stems and one-shots pre-loaded into the clip store after analysis so the brain can slice them; contract and sampling skill updated. Links ON (ALLOW_LINK_DOWNLOAD=1 on Vercel and Railway, Brady's call after the constraint was stated once). Worker slicer: two per role, -40 dB trim end, zero-crossing end.
+
+### Gates (round B)
+- tsc clean, next build, 58/58 unit tests (voice echo test added), screenshots at 1440 idle and live and 390 live looked at.
+- Local: e2e ALL PASSED, accounts e2e ALL PASSED, stems e2e ALL PASSED including "take one second of the vocal at 0:30" by voice producing a 0.98 s one-shot track from the separated vocal.
+- Prod (deployment producer-q0ol2l6p1, commit ac07519): e2e ALL PASSED, accounts ALL PASSED, stems ALL PASSED (8 one-shots, two per role, kick tuned -2 semitones, cloud project carries the clip, producer breakdown, voice slice "Vocal 0:30" 0.98 s). Verified in Brady's own Chrome: new layout, no text box, orb, timeline, 11 faders; his mic permission for the site is still at "prompt" and will be asked for on the first orb press.
+- YouTube from Railway: worked once at 20:19, then "Sign in to confirm you're not a bot" on two later runs (21:39, 21:50). Links from a datacenter are intermittent, as the research predicted. Failures now tell the user to capture the tab or upload, and the brain is told to say so.
+
+### Traps
+- Two elements shared aria-label "Analyze a record" (the button and its dialog): scope harness selectors with [role="dialog"].
+- innerText breaks flex chips into lines and uppercases eyebrows: anchor on data-role attributes.
+- A background chain piped through grep buffers until exit: use --line-buffered.
+- With the mic open during speech, a headless fake microphone floods the brain with transcribed static: harness mode (?e2e=1 / ?typed=1) no longer auto-opens the mic.
