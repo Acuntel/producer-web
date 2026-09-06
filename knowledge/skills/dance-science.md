@@ -1,0 +1,25 @@
+# SKILL: the science of what makes a human dance (and how the studio applies it)
+
+Groove is the measurable urge to move. The research below is what the numbers in MEASURED SOUND are for. Every rule ends with the studio move that follows from it.
+
+## What the research says (sources at the end)
+1. Syncopation follows an inverted U. Medium syncopation in the drums produces the most wanting-to-move and the most pleasure; none is boring, too much breaks the beat (Witek et al. 2014). MOVE: keep the kick straight and put the syncopation in hats, perc, ghost snares and the bass offbeats; ghost hits at chance 0.5-0.8 give medium complexity without a busy grid.
+2. Low frequencies carry the beat. People time their movement to the bass, and the auditory system times low pitches more precisely than high ones (Hove et al. 2014). Low-frequency spectral flux predicts head and hip movement (Burger et al. 2013); a louder kick drum makes people move more (Van Dyck et al. 2013); very-low-frequency bass people cannot consciously hear still raised dancing by about 12 percent (Cameron et al. 2022). MOVE: kick every beat at velocity 120 or more, sub on the roots, drop sub+low share 0.55-0.8, sidechain pump 0.3-0.6 so the kick owns its moment.
+3. Tempo has a body. Preferred movement tempo sits around 2 Hz, which is 120 BPM, the tempo of a brisk walk (MacDougall and Moore 2005); groove ratings and spontaneous movement peak in the 100-130 BPM band and stay high to about 140 (Janata et al. 2012; Etani et al. 2018). MOVE: house lives 122-130, tech-house 124-128, hard-house and speed garage 138-145 work because the half-time feel (claps and stabs on 2 and 4 at 71 BPM) keeps the body at walking pace.
+4. Microtiming is not the magic. Systematic millisecond offsets do not raise groove ratings and often lower them; quantized versions were rated as high or higher (Senn et al. 2016; Frühauf et al. 2013; Davies et al. 2013). What listeners call swing comes from accent patterns, event density and where the offbeats sit, not from random lateness. MOVE: shape velocities (accents, ladders), use the Groove Pool templates at moderate amounts, never random jitter above a few milliseconds; a clap 10-20 ms late is a pocket, 60 ms late is a mistake.
+5. Expectation is the engine. Pleasure comes from predictions that are confirmed with a twist (Huron 2006). Repetition builds the prediction; the variation every 8 bars pays it off. MOVE: every 8 bars something mutates (variant, automation, an element in or out); the hook repeats at bar 1 and bar 5 of the drop.
+6. The drop works because of the build. In EDM the breakdown-build-drop shape produces the largest peaks of movement and pleasure, and the size of the drop's effect scales with the tension before it (Solberg and Jensenius 2017, 2019). MOVE: breakdowns lose the kick and drop under 0.45 energy, builds end in a cut with a riser and a half beat of silence, drop 2 is denser or louder than drop 1.
+7. Loud bass is felt as well as heard. Above roughly 90 dB the vestibular system responds to bass and adds to the sense of motion (Todd and Cody 2000). MOVE: the club master targets -10 to -7 LUFS with a clean sub; a crushed master (above -6 LUFS) removes the very dynamics the pump depends on.
+8. Moving together feels good. Synchrony with others raises affiliation and pleasure (Hove and Risen 2009). MOVE: the four-on-the-floor kick and a clear downbeat every bar are the shared clock; never obscure bar one.
+
+## The dance checklist the studio scores against
+- Kick density 4 per bar in house lanes (halved in broken lanes), velocity 120 or more.
+- sub+low share 0.55-0.8 in the drop; mids present (lowMid+mid 0.12-0.3) so the record is not only weight.
+- Medium syncopation: offbeat hats, ghost notes with chance, bass on the offbeat eighths; kick and clap straight.
+- Pump 0.3-0.6 (tech-house) or 0.4-0.7 (hard-house).
+- Contrast: breakdown energy under 0.45, drop 1.0, drop 2 above drop 1.
+- Mutation every 8 bars; hook repetition at bars 1 and 5.
+- Master -10 to -7 LUFS, peak at or under 0 dBFS, never crushed.
+
+## Sources (verify page numbers before quoting in print)
+Witek, Clarke, Wallentin, Kringelbach, Vuust (2014) PLoS ONE 9(4) e94446 · Hove, Marie, Bruce, Trainor (2014) PNAS 111(28) · Burger, Thompson, Luck, Saarikallio, Toiviainen (2013) Frontiers in Psychology 4:183 · Van Dyck et al. (2013) Music Perception 30(4) · Cameron, Dotov, Flaten, Bosnyak, Hove, Trainor (2022) Current Biology 32(21) · MacDougall and Moore (2005) J Appl Physiol 99 · Janata, Tomic, Haberman (2012) JEP: General 141(1) · Etani, Marui, Kawase, Keller (2018) Frontiers in Psychology 9:462 · Senn, Kilchenmann, von Georgi, Bullerjahn (2016) Frontiers in Psychology 7:1487 · Frühauf, Kopiez, Platz (2013) Musicae Scientiae 17(2) · Davies, Madison, Silva, Gouyon (2013) Music Perception 30(5) · Huron (2006) Sweet Anticipation, MIT Press · Solberg and Jensenius (2017) Empirical Musicology Review 12(1-2); (2019) Music Perception 36(3) · Todd and Cody (2000) J Acoust Soc Am 107(1) · Hove and Risen (2009) Social Cognition 27(6).

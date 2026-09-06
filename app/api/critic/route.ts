@@ -1,5 +1,5 @@
 // Background critic: fast model, low effort, recommendations only. Never touches the song.
-import Anthropic from "@anthropic-ai/sdk";
+import { brainClient } from "@/lib/brain/client";
 import { PROCESS } from "@/lib/brain/process";
 import { CONTRACT } from "@/lib/brain/contract";
 import { extractJson } from "@/lib/brain/parse";
@@ -16,8 +16,8 @@ const ROLE = `You are the studio's CRITIC: a second producer listening in the ba
 
 export async function POST(req: Request) {
   const x = (await req.json()) as { song: { lane?: string; title?: string; sections?: unknown[]; tracks?: unknown[] }; facts?: unknown; reference?: { name: string; facts: unknown } | null; deltas?: unknown; recent?: string[]; dismissed?: string[]; taste?: string };
-  if (!process.env.ANTHROPIC_API_KEY) return Response.json({ headline: "", notes: [] });
-  const client = new Anthropic({ defaultHeaders: process.env.ANTHROPIC_WORKSPACE_ID ? { "anthropic-workspace-id": process.env.ANTHROPIC_WORKSPACE_ID } : undefined });
+  const { client } = await brainClient(req);
+  if (!client) return Response.json({ headline: "", notes: [] });
   const song = x.song as never;
   const parts = [
     `SONG "${x.song.title}" lane ${x.song.lane}: sections ${JSON.stringify((x.song.sections as { id: string; name: string; bars: number; active: string[]; fill?: string; automation?: unknown[] }[] | undefined)?.map((s) => [s.id, s.bars, s.active.length, s.fill, (s.automation ?? []).length]))}`,

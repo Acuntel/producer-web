@@ -1,33 +1,45 @@
 "use client";
 // The Producer. Two panes: the song on one side, the conversation on the other.
-// On phones they stack, the song staying visible above the talk.
+// On phones they stack, the song staying visible above the talk. An account gate
+// sits in front for new visitors so every record lands in their projects.
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "@/hooks/useStudio";
 import { useVoiceLoop } from "@/hooks/useVoiceLoop";
 import { useHum } from "@/hooks/useHum";
 import { useCritic } from "@/hooks/useCritic";
+import { useAccount } from "@/hooks/useAccount";
+import { useProjects, type SnapshotMeta } from "@/hooks/useProjects";
 import { StudioPanel } from "@/components/StudioPanel";
 import { Conversation } from "@/components/Conversation";
-import { SongsSheet } from "@/components/SongsSheet";
+import { ProjectsSheet } from "@/components/ProjectsSheet";
+import { AccountSheet } from "@/components/AccountSheet";
 import { IconButton } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import type { Phase } from "@/components/Orb";
+import type { Song } from "@/lib/song/types";
+import { SEED_SONG } from "@/lib/song";
 
 export default function Studio() {
   const sendRef = useRef<(t: string) => void>(() => {});
+  const snapshotRef = useRef<(s: Song, m: SnapshotMeta) => void>(() => {});
   const voice = useVoiceLoop((t) => sendRef.current(t));
   const hum = useHum();
-  const studio = useStudio(voice.say, (bpm, beats) => hum.record(bpm, beats));
+  const account = useAccount();
+  const studio = useStudio(voice.say, (bpm, beats) => hum.record(bpm, beats), (s, m) => snapshotRef.current(s, m));
+  const projects = useProjects({ user: account.user, loadSong: studio.loadSong, getSong: studio.getSong, localLibrary: studio.library, flash: studio.flash });
+  snapshotRef.current = projects.snapshot;
   useEffect(() => { sendRef.current = (t) => void studio.send(t); }, [studio]);
   const critic = useCritic({
     song: studio.song, facts: studio.facts, reference: studio.reference,
     paused: !!studio.rollout, send: studio.send, started: studio.started,
   });
 
-  const [showSongs, setShowSongs] = useState(false);
+  const [showProjects, setShowProjects] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
   const { song, started, paused, starting } = studio;
   const beatSec = 60 / song.bpm;
   const playing = started && !paused;
+  const gate = account.ready && account.enabled && !account.user && !account.guest;
 
   async function orb() {
     const wasStarted = started;
@@ -53,11 +65,12 @@ export default function Studio() {
             <Icon name="logo" size={16} />
           </span>
           <span className="truncate">The Producer</span>
+          {projects.syncing && <span className="hidden text-xs font-normal text-ink-3 sm:inline">Saving</span>}
         </h1>
         <div className="flex shrink-0 items-center gap-0.5">
           <IconButton name="undo" label="Undo" onClick={studio.undo} disabled={!studio.canUndo} />
           <IconButton name="redo" label="Redo" onClick={studio.redo} disabled={!studio.canRedo} />
-          <IconButton name="library" label="My songs" onClick={() => setShowSongs(true)} />
+          <IconButton name="folder" label="Projects" onClick={() => setShowProjects(true)} />
           <IconButton
             name="download"
             label={studio.rendering ? "Rendering WAV…" : "Download WAV"}
@@ -65,6 +78,9 @@ export default function Studio() {
             disabled={studio.rendering}
             className={studio.rendering ? "animate-breathe" : ""}
           />
+          {account.enabled && (
+            <IconButton name="user" label={account.user ? "Your account" : "Sign in"} tone={account.user ? "solid" : "ghost"} onClick={() => setShowAccount(true)} />
+          )}
         </div>
       </header>
 
@@ -119,15 +135,28 @@ export default function Studio() {
         </div>
       </div>
 
-      {showSongs && (
-        <SongsSheet
-          library={studio.library}
+      {showProjects && (
+        <ProjectsSheet
+          signedIn={projects.signedIn}
+          projects={projects.projects}
+          currentId={projects.current?.id ?? null}
+          loading={projects.loading}
+          localLibrary={studio.library}
           clips={studio.clips}
-          onOpen={(s) => { setShowSongs(false); void studio.loadSaved(s); }}
-          onDownload={(s) => void studio.download(s)}
-          onClose={() => setShowSongs(false)}
+          onOpen={(id) => { setShowProjects(false); void projects.open(id); }}
+          onOpenLocal={(s) => { setShowProjects(false); void studio.loadSaved(s); }}
+          onNew={() => { setShowProjects(false); void projects.create({ ...SEED_SONG, title: "Untitled record" }); }}
+          onRename={(id, t) => void projects.rename(id, t)}
+          onDelete={(id) => void projects.remove(id)}
+          onDuplicate={(id) => void projects.duplicate(id)}
+          onDownloadLocal={(s) => void studio.download(s)}
+          onSignIn={() => { setShowProjects(false); setShowAccount(true); }}
+          onClose={() => setShowProjects(false)}
         />
       )}
+
+      {showAccount && <AccountSheet account={account} mode="sheet" onClose={() => setShowAccount(false)} />}
+      {gate && <AccountSheet account={account} mode="gate" onClose={() => {}} />}
 
       {studio.toast && (
         <div

@@ -1,11 +1,11 @@
 // One rollout step = one inference with only its context. Fast steps route to
 // Sonnet, deep steps to Opus. Same persona, same contract, same cached Mind.
-import Anthropic from "@anthropic-ai/sdk";
+import { brainClient } from "@/lib/brain/client";
 import { MIND } from "@/lib/mind";
 import { PERSONA } from "@/lib/brain/persona";
 import { CONTRACT } from "@/lib/brain/contract";
 import { PROCESS } from "@/lib/brain/process";
-import { parseBrain } from "@/lib/brain/parse";
+import { parseBrain, looksTruncated } from "@/lib/brain/parse";
 import { compactSong, mixerLine } from "@/lib/brain/context";
 import { dnaForBrain } from "@/lib/brain/dna";
 import { laneRecipe } from "@/lib/brain/lanes";
@@ -23,8 +23,8 @@ type StepInput = {
 
 export async function POST(req: Request) {
   const x = (await req.json()) as StepInput;
-  if (!process.env.ANTHROPIC_API_KEY) return Response.json({ say: "Brain not connected.", ops: null, song: null });
-  const client = new Anthropic({ defaultHeaders: process.env.ANTHROPIC_WORKSPACE_ID ? { "anthropic-workspace-id": process.env.ANTHROPIC_WORKSPACE_ID } : undefined });
+  const { client } = await brainClient(req);
+  if (!client) return Response.json({ say: "Brain not connected.", ops: null, song: null });
   const lane = x.askedLane || x.lane;
   const dna = dnaForBrain(dnaLaneFor(lane));
   const recipe = laneRecipe(lane);
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     `Respond with the usual JSON. "say" must be ONE short sentence of progress for this step (it may be spoken); keep it natural.`,
   ].filter(Boolean).join("\n\n");
   try {
-    const resp = await client.messages.create({
+    const ask = (content: string) => client.messages.create({
       model: x.step.tier === "deep" ? DEEP : FAST,
       max_tokens: x.step.fullSong ? 12000 : 14000,
       output_config: { effort: "low" },
@@ -58,11 +58,20 @@ export async function POST(req: Request) {
         { type: "text", text: PROCESS },
         { type: "text", text: `YOUR MIND (compiled producer knowledge):\n\n${MIND}`, cache_control: { type: "ephemeral" } },
       ],
-      messages: [{ role: "user", content: parts }],
+      messages: [{ role: "user", content }],
     } as never);
-    const text = (resp as { content: { type: string; text?: string }[] }).content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("");
+    const textOf = (resp: unknown) => (resp as { content: { type: string; text?: string }[] }).content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("");
+    let resp = await ask(parts);
+    let text = textOf(resp);
+    let stop = (resp as { stop_reason?: string }).stop_reason;
+    // A cut-off reply is worse than a smaller one: ask again, terser, before the client ever sees it.
+    if (stop === "max_tokens" || looksTruncated(text)) {
+      console.warn("step reply truncated, retrying terse", x.step.id, stop, text.length);
+      resp = await ask(`${parts}\n\nYOUR PREVIOUS REPLY WAS CUT OFF (too long). Reply again with AT MOST 8 ops, short note lists (use "grid" for drums), no production notes, valid JSON only.`);
+      text = textOf(resp);
+      stop = (resp as { stop_reason?: string }).stop_reason;
+    }
     const reply = parseBrain(text);
-    const stop = (resp as { stop_reason?: string }).stop_reason;
     if (stop === "max_tokens" || (!reply.ops && !reply.song && !reply.say)) console.warn("step reply problem", x.step.id, stop, text.length, text.slice(0, 200));
     const usage = (resp as { usage?: { output_tokens?: number; output_tokens_details?: { thinking_tokens?: number } } }).usage;
     return Response.json({ say: reply.say, ops: reply.ops, song: reply.song, listen: reply.listen, model: x.step.tier === "deep" ? DEEP : FAST, usage, thinking: usage?.output_tokens_details?.thinking_tokens, stop, textLength: text.length, head: reply.ops || reply.song ? undefined : text.slice(0, 300) });

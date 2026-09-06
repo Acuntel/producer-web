@@ -1,11 +1,13 @@
 // The producer's voice: ElevenLabs low-latency TTS, streamed back as MP3.
 // No key = 503, and the client falls back to the browser voice.
+import { userElevenLabsKey } from "@/lib/account/keys";
+
 export const maxDuration = 30;
 
 const VOICE = () => process.env.ELEVENLABS_VOICE_ID || "CwhRBWXzGAHq8TQ4Fs17";
 
 export async function POST(req: Request) {
-  const key = process.env.ELEVENLABS_API_KEY;
+  const key = (await userElevenLabsKey(req).catch(() => null)) ?? process.env.ELEVENLABS_API_KEY;
   if (!key) return new Response("no voice configured", { status: 503 });
   const { text } = (await req.json()) as { text?: string };
   const clean = (text ?? "").toString().slice(0, 600).trim();

@@ -29,7 +29,9 @@ export function TrackLanes({ song, beat, sectionIdx }: { song: Song; beat: numbe
         const color = colorOf(tr.role);
         const barNow = beat !== null && cur ? Math.max(0, Math.floor((beat - cur.startBeat) / 4)) : 0;
         const notes = cur?.sec ? patternFor(tr, cur.sec, barNow, song.humanize.seed) : tr.notes;
-        const variant = planLabel(cur?.sec?.variants?.[tr.id]);
+        // Only real playlists earn a chip ("A B A C", "fill every 8"); a single named pattern is already visible as its notes.
+        const plan = cur?.sec?.variants?.[tr.id];
+        const variant = plan && typeof plan !== "string" ? planLabel(plan) : "";
         const melodic = isMelodic(tr.role);
         const pitches = melodic ? notes.map((n) => n[0]) : [];
         const pMin = pitches.length ? Math.min(...pitches) : 0;
@@ -92,7 +94,7 @@ export function TrackLanes({ song, beat, sectionIdx }: { song: Song; beat: numbe
               })}
 
               {variant && (
-                <span className="absolute right-1 top-1 rounded bg-base/85 px-1 text-[10px] font-medium leading-4 text-ink-2">{variant}</span>
+                <span className="absolute right-1 top-1 rounded bg-base/85 px-1 text-[10px] font-medium leading-4 text-ink-3">{variant}</span>
               )}
 
               {local !== null && (

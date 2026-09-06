@@ -59,14 +59,19 @@ export function useRollout(deps: Deps) {
         if (!r) { failure = "no reply"; attempt++; continue; }
         // Apply against the FRESHEST song (a sibling step may have landed meanwhile).
         const base = deps.getSong();
-        let next: Song | null = null, applied = 0, skipped = 0;
+        let next: Song | null = null, applied = 0, skipped = 0, rejected: string[] = [];
         if (r.song) { next = migrateSong(r.song); if (next && lane) next.lane = lane; if (next && next.tracks.length === 0) next = withStarterBeat(next); }
-        else if (Array.isArray(r.ops)) { const res = applyOps(base, withReferenceGroove(r.ops, ref?.facts.groove.template)); next = res.song; applied = res.applied; skipped = res.skipped.length; if (res.skipped.length) console.warn("rollout skipped ops", step.id, res.skipped); }
+        else if (Array.isArray(r.ops)) { const res = applyOps(base, withReferenceGroove(r.ops, ref?.facts.groove.template)); next = res.song; applied = res.applied; skipped = res.skipped.length; rejected = res.skipped; if (res.skipped.length) console.warn("rollout skipped ops", step.id, res.skipped); }
         if (next) await deps.applySong(next, { silent: true });
         status(step.title, "listening");
         const after = next ? await deps.hearNow(next).catch(() => null) : facts;
         facts = after;
-        const problem = step.check({ song: deps.getSong(), facts: after, reference: ref?.facts ?? null, lane: deps.getSong().lane, section: section ?? undefined });
+        let problem = step.check({ song: deps.getSong(), facts: after, reference: ref?.facts ?? null, lane: deps.getSong().lane, section: section ?? undefined });
+        // Rejected ops are a failure the model can fix only if it is told exactly what bounced.
+        if (rejected.length && (problem || applied === 0)) {
+          const ids = `${deps.getSong().sections.map((s) => s.id).join(",")} | tracks ${deps.getSong().tracks.map((t) => t.id).join(",")}`;
+          problem = `${problem ?? "every op was rejected"}. REJECTED OPS (wrong shape or unknown ids; the real section ids are ${ids}): ${rejected.slice(0, 4).join(" ;; ")}`;
+        }
         const entry: StepLog = { step: step.id, attempt, ms: Date.now() - ts, model: r.model, applied, skipped, check: problem, say: r.say ?? "", tracks: deps.getSong().tracks.length };
         log.push(entry); console.log("rollout step", JSON.stringify(entry));
         logMoveScore({ at: Date.now(), ask: `${kind}/${step.id}`, kind: "rollout", latencyMs: entry.ms, opsApplied: applied, skipped, verified: problem ? "fail" : "pass" });

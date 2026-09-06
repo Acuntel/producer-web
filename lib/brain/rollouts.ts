@@ -50,7 +50,12 @@ const harmony: Step = {
 const hook: Step = {
   id: "hook", title: "Hook and ear candy", tier: "fast", group: "color", scope: ["lead", "pluck", "arp", "fx", "audio"],
   goal: `Add the memorable element as ops: a lead/pluck/arp phrase (call and response with the bass, repetition with one variation), plus ear candy that mutates every 8 bars (a pattern variant for drop2, a perc accent, an fx hit). Library sounds from SAMPLES AVAILABLE may be dropped in as audio tracks with clip.sampleId (a vocal shout on the offbeat, an impact on the drop downbeat, a riser under the build). Keep at most 6 sounding elements in the drop. Stay in key.`,
-  check: ({ song }) => (!has(song, ["lead", "pluck", "arp", "audio"]) ? "no hook element (need a lead, pluck, arp or audio track with notes)" : null),
+  // In stab-led lanes (hard-house, rave, garage) the hoover or organ stab IS the hook when it carries a real phrase.
+  check: ({ song, lane }) => {
+    if (has(song, ["lead", "pluck", "arp", "audio"])) return null;
+    const stabHook = /hard|rave|garage|jersey|trance/i.test(lane) && song.tracks.some((t) => t.role === "stab" && (t.notes.length >= 3 || Object.values(t.patterns ?? {}).some((p) => p.length >= 3)));
+    return stabHook ? null : "no hook element (need a lead, pluck, arp or audio track with notes)";
+  },
 };
 const craft: Step = {
   id: "craft", title: "Arrangement craft", tier: "fast", group: "finish", scope: "arrangement",
@@ -60,7 +65,7 @@ const craft: Step = {
 const mix: Step = {
   id: "mix", title: "Mix", tier: "fast", group: "finish", scope: "mix",
   goal: `Mix as ops on volumes, pans, sends, EQ, drive, master (compThreshold, makeup, limiter): kick and bass own the low end, pads sit low, hats and percussion give the top its life, stabs and leads pan for width. Use the measured facts: hit the lane's LUFS and band targets without clipping (peak <= 0).`,
-  check: ({ song, facts }) => { const d = dropFacts(facts); if (!d) return null; if (d.peak !== undefined && d.peak > 0.2) return `drop peaks at ${d.peak.toFixed(1)} dBFS, clipping`; if (d.lufs < -12) return `drop at ${d.lufs.toFixed(1)} LUFS, want -10 to -7`; const sl = d.bands.sub + d.bands.low; if (sl > 0.9) return `drop mids and top missing, sub+low ${sl.toFixed(2)} (collection p50 0.57): raise stabs, chords, hats; open filters`; if (sl < 0.45) return `drop low end thin, sub+low ${sl.toFixed(2)}`; return null; },
+  check: ({ song, facts }) => { const d = dropFacts(facts); if (!d) return null; if (d.peak !== undefined && d.peak > 0.2) return `drop peaks at ${d.peak.toFixed(1)} dBFS, clipping`; if (d.lufs < -12) return `drop at ${d.lufs.toFixed(1)} LUFS, want -10 to -7`; if (d.lufs > -5.5) return `drop at ${d.lufs.toFixed(1)} LUFS, crushed against the limiter, want -10 to -7: lower master.makeup or the loudest tracks (bass, stab, kick) by 3-6 dB`; const sl = d.bands.sub + d.bands.low; if (sl > 0.9) return `drop mids and top missing, sub+low ${sl.toFixed(2)} (collection p50 0.57): raise stabs, chords, hats; open filters`; if (sl < 0.45) return `drop low end thin, sub+low ${sl.toFixed(2)}`; return null; },
 };
 const verdict: Step = {
   id: "verdict", title: "Verdict", tier: "deep", scope: "all",

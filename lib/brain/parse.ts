@@ -8,8 +8,20 @@ export type BrainAction = { type: "play" | "pause" | "goto" | "loop" | "unloop" 
 export type Expectation = { section?: string; metric: string; dir: "up" | "down" };
 export type BrainReply = { say: string; ops: unknown[] | null; song: Song | null; action: BrainAction | null; listen: string | null; expect: Expectation[] | null; alternative: unknown[] | null; raw?: string };
 
+// When the JSON is cut off or malformed, never speak the raw text: pull the "say"
+// sentence out by hand, or say something honest and short.
+export function safeSay(text: string): string {
+  const t = text.trim();
+  const m = t.match(/"say"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (m) { try { return JSON.parse(`"${m[1]}"`).slice(0, 500); } catch { return m[1].slice(0, 500); } }
+  if (!t || t.startsWith("{") || t.startsWith("[") || t.startsWith("```") || /"op"\s*:/.test(t)) return "I lost my words halfway through that move. Say it again and I will land it.";
+  return t.slice(0, 500);
+}
+
+export const looksTruncated = (text: string): boolean => { const t = text.trim(); return t.startsWith("{") && !extractJson(t); };
+
 export function parseBrain(text: string): BrainReply {
-  const fallback: BrainReply = { say: text.trim().slice(0, 500), ops: null, song: null, action: null, listen: null, expect: null, alternative: null, raw: text };
+  const fallback: BrainReply = { say: safeSay(text), ops: null, song: null, action: null, listen: null, expect: null, alternative: null, raw: text };
   const obj = extractJson(text);
   if (!obj) return fallback;
   const say = typeof obj.say === "string" && obj.say.trim() ? obj.say.trim() : fallback.say;

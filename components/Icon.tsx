@@ -5,7 +5,8 @@ import type { ReactElement, SVGProps } from "react";
 export type IconName =
   | "logo" | "headphones" | "mic" | "undo" | "redo" | "library" | "download"
   | "play" | "pause" | "loop" | "ear" | "notes" | "up" | "down" | "close"
-  | "sliders" | "waveform" | "chevron" | "spark" | "stop" | "send" | "check" | "plus";
+  | "sliders" | "waveform" | "chevron" | "spark" | "stop" | "send" | "check" | "plus"
+  | "user" | "folder" | "key" | "trash" | "copy" | "edit" | "logout" | "search" | "more" | "link" | "scissors" | "cloud";
 
 const P: Record<IconName, ReactElement> = {
   // Three faders — the product mark.
@@ -32,6 +33,18 @@ const P: Record<IconName, ReactElement> = {
   send: <path d="M20 4 3.5 10.2a.5.5 0 0 0 0 .93L10 13.5m10-9.5-6.2 16.4a.5.5 0 0 1-.93.02L10 13.5m10-9.5L10 13.5" />,
   check: <path d="m5 12.5 4.5 4.5L19 7" />,
   plus: <path d="M12 5v14M5 12h14" />,
+  user: <><circle cx="12" cy="8.5" r="3.5" /><path d="M4.5 20a7.5 7.5 0 0 1 15 0" /></>,
+  folder: <path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4.2l2 2.2H19a1.5 1.5 0 0 1 1.5 1.5v8.3A1.5 1.5 0 0 1 19 19.5H5a1.5 1.5 0 0 1-1.5-1.5Z" />,
+  key: <><circle cx="8" cy="14" r="4" /><path d="M11 11 20 2M16 6l2.5 2.5M13.5 8.5 16 11" /></>,
+  trash: <><path d="M4.5 6.5h15M9.5 6.5V4.8A1.3 1.3 0 0 1 10.8 3.5h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" /><path d="M6.5 6.5 7.3 19a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4l.8-12.5" /><path d="M10 10.5v6M14 10.5v6" /></>,
+  copy: <><rect x="8.5" y="8.5" width="11" height="11" rx="1.8" /><path d="M5.5 15.5h-.7A1.3 1.3 0 0 1 3.5 14.2V4.8A1.3 1.3 0 0 1 4.8 3.5h9.4a1.3 1.3 0 0 1 1.3 1.3v.7" /></>,
+  edit: <><path d="M4 20h4.2L19.5 8.7a2 2 0 0 0 0-2.8l-1.4-1.4a2 2 0 0 0-2.8 0L4 15.8Z" /><path d="m13.5 6.5 4 4" /></>,
+  logout: <><path d="M10 4.5H6.5A2 2 0 0 0 4.5 6.5v11a2 2 0 0 0 2 2H10" /><path d="M14.5 8 18.5 12l-4 4M18.5 12h-9" /></>,
+  search: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></>,
+  more: <><circle cx="6" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="18" cy="12" r="1.4" fill="currentColor" stroke="none" /></>,
+  link: <><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2" /></>,
+  scissors: <><circle cx="6.5" cy="6.5" r="2.5" /><circle cx="6.5" cy="17.5" r="2.5" /><path d="M8.5 8.3 20 19M8.5 15.7 20 5" /></>,
+  cloud: <path d="M7 18.5A4 4 0 0 1 6.6 10.5a5.5 5.5 0 0 1 10.6 1.2A3.5 3.5 0 0 1 17.5 18.5Z" />,
 };
 
 export function Icon({ name, size = 18, ...rest }: { name: IconName; size?: number } & SVGProps<SVGSVGElement>) {

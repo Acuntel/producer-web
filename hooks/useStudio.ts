@@ -4,6 +4,8 @@
 // history and the scorecard. The page only renders.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SEED_SONG, applyOps, migrateSong, withReferenceGroove, History, diffSongs, type Song, type Note, type Role } from "@/lib/song";
+import { levelOps, levelLine } from "@/lib/song/level";
+import { exchange } from "@/lib/brain/stream";
 import type { Engine, Position } from "@/lib/engine";
 import type { MusicFacts } from "@/lib/ears";
 import { logMove, setVerdict, inferVerdictFromUtterance, tasteSummary, logPair } from "@/lib/taste";
@@ -28,7 +30,11 @@ const loadLibrary = (): SavedSong[] => { try { return JSON.parse(localStorage.ge
 const persistLibrary = (lib: SavedSong[]) => { try { localStorage.setItem(LIB_KEY, JSON.stringify(lib.slice(0, 30))); } catch {} };
 const isE2E = () => typeof window !== "undefined" && window.location.search.includes("e2e");
 
-export function useStudio(say: (t: string) => void, recordHum: (bpm: number, beats: number) => Promise<{ notes: Note[] } | null>) {
+export type SnapshotMeta = { label?: string; newProject?: boolean; facts?: unknown };
+
+export function useStudio(say: (t: string) => void, recordHum: (bpm: number, beats: number) => Promise<{ notes: Note[] } | null>, onSnapshot?: (s: Song, meta: SnapshotMeta) => void) {
+  const onSnapshotRef = useRef(onSnapshot); onSnapshotRef.current = onSnapshot;
+  const newProjectRef = useRef(false);
   const [song, setSongState] = useState<Song>(SEED_SONG);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [busy, setBusy] = useState(false);
@@ -56,6 +62,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const busyRef = useRef(false); const pendingRef = useRef<string | null>(null);
   const lastMoveRef = useRef<string | null>(null);
   const hearSeq = useRef(0);
+  const setSongRef = useRef<((s: Song, o?: { silent?: boolean; label?: string; noHistory?: boolean }) => Promise<void>) | null>(null);
   const historyRef = useRef(new History(60));
   const abRef = useRef<AB>(null);
   const localMovesRef = useRef<string[]>([]);
@@ -103,21 +110,38 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       if (seq !== hearSeq.current) return f;
       factsRef.current = f; setFacts(f);
       if (referenceRef.current) { const { compare } = await import("@/lib/ears"); setDeltaText(compare(f, referenceRef.current.facts).text); }
+      // The leveler: a crushed drop hides every other judgement, so the studio pulls the master back
+      // before the brain or the user listens. Only on the version that was actually heard.
+      if (s === songRef.current) {
+        const lv = levelOps(s, f);
+        if (lv) {
+          const { song: leveled } = applyOps(s, lv.ops);
+          localMovesRef.current.push(`studio leveled master ${lv.delta > 0 ? "+" : ""}${lv.delta.toFixed(1)} dB (drop read ${lv.from.toFixed(1)} LUFS)`);
+          flash(levelLine(lv));
+          void setSongRef.current?.(leveled, { noHistory: true, label: "level" });
+        }
+      }
       return f;
     } catch { return null; }
     finally { if (seq === hearSeq.current) setHearing(false); }
   }, []);
   const refreshEars = useCallback((s: Song) => { void hearNow(s); }, [hearNow]);
 
-  const setSong = useCallback(async (s: Song, opts?: { silent?: boolean; label?: string; noHistory?: boolean }) => {
+  const setSong = useCallback(async (s: Song, opts?: { silent?: boolean; label?: string; noHistory?: boolean; noSnapshot?: boolean }) => {
     if (!opts?.noHistory) historyRef.current.push(songRef.current, opts?.label ?? "change");
     setCanUndo(historyRef.current.canUndo); setCanRedo(historyRef.current.canRedo);
     songRef.current = s; setSongState(s);
     const eng = await getEngine();
     if (started || engineRef.current) await eng.update(s);
     autoSave(s);
+    // The cloud hears about every save too; a new record (rollout, full song) opens a new project.
+    if (!opts?.noSnapshot) { const fresh = newProjectRef.current; newProjectRef.current = false; onSnapshotRef.current?.(s, { label: opts?.label, newProject: fresh }); }
     if (!opts?.silent) refreshEars(s);
   }, [autoSave, getEngine, refreshEars, started]);
+  setSongRef.current = setSong;
+  // Opening a saved project or version: no history entry, no re-save of what was just loaded.
+  const loadSong = useCallback(async (s: Song) => { await setSong(migrateSong(s) ?? s, { label: `open ${s.title}`, noHistory: true, noSnapshot: true }); flash(`Opened ${s.title}`); if (started) say(`Opened ${s.title}. Where were we?`); }, [flash, say, setSong, started]);
+  const getSong = useCallback(() => songRef.current, []);
 
   const compactFacts = useCallback(async (f: MusicFacts | null) => { if (!f) return null; try { const ears = await import("@/lib/ears"); return ears.factsForBrain(f); } catch { return null; } }, []);
   const deltasFor = useCallback(async (f: MusicFacts | null) => { if (!f || !referenceRef.current) return null; try { const ears = await import("@/lib/ears"); return ears.compare(f, referenceRef.current.facts).deltas; } catch { return null; } }, []);
@@ -149,6 +173,8 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     else if (a.type === "rollout") {
       const kind = (["newSong", "emulate", "finish", "fixSection"].includes(a.kind ?? "") ? a.kind : referenceRef.current ? "emulate" : "newSong") as RolloutKind;
       historyRef.current.push(songRef.current, `before ${kind}`); setCanUndo(true);
+      // A new record starts clean: no hint, no A/B, no verdict buttons from the last song.
+      if (kind === "newSong" || kind === "emulate") { setListenHint(null); abRef.current = null; setAb(null); lastMoveRef.current = null; setLastMoveId(null); newProjectRef.current = true; }
       const res = await runRollout(kind, ask, a.section ?? null, a.lane ?? null);
       refreshEars(songRef.current);
       if (res) { setMessages((m) => [...m, { role: "assistant", content: res.say }]); messagesRef.current = [...messagesRef.current, { role: "assistant", content: res.say }]; setListenHint(res.listen); say(res.say); }
@@ -227,14 +253,20 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       const refFacts = referenceRef.current ? await compactFacts(referenceRef.current.facts) : null;
       const deltas = await deltasFor(factsRef.current);
       const localMoves = localMovesRef.current.splice(0);
-      const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: next, song: cur, facts: factsCompact, reference: referenceRef.current ? { name: referenceRef.current.name, facts: refFacts } : null, deltas, nowPlaying, taste: tasteSummary(cur.title), clips, localMoves, verify: opts?.verify ?? null, score: scoreLine(), critic: notesForBrain() }) });
-      const data = (await r.json()) as Reply;
+      // Streamed: the producer starts talking the moment its first sentence closes; the ops land right after.
+      let early: string | null = null;
+      const data = await exchange({ messages: next, song: cur, facts: factsCompact, reference: referenceRef.current ? { name: referenceRef.current.name, facts: refFacts } : null, deltas, nowPlaying, taste: tasteSummary(cur.title), clips, localMoves, verify: opts?.verify ?? null, score: scoreLine(), critic: notesForBrain() }, (s) => {
+        early = s;
+        setMessages((m) => [...m, { role: "assistant", content: s }]);
+        say(s);
+      }) as Reply;
       if (isE2E()) { const w = window as unknown as { __brain?: unknown[] }; (w.__brain ??= []).push(data); }
-      setMessages((m) => [...m, { role: "assistant", content: data.say }]);
+      if (early === null) setMessages((m) => [...m, { role: "assistant", content: data.say }]);
+      else if (early !== data.say) setMessages((m) => { const c = [...m]; for (let i = c.length - 1; i >= 0; i--) if (c[i].role === "assistant") { c[i] = { role: "assistant", content: data.say }; break; } return c; });
       let ns: Song | null = null, applied = 0, skipped = 0;
       const refGroove = referenceRef.current?.facts.groove.template; // {"op":"groove","from":"reference"} borrows the reference's measured timing
       if (data.ops && Array.isArray(data.ops)) { const res = applyOps(songRef.current, withReferenceGroove(data.ops, refGroove)); ns = res.song; applied = res.applied; skipped = res.skipped.length; }
-      else if (data.song) ns = migrateSong(data.song);
+      else if (data.song) { ns = migrateSong(data.song); if (ns && ns.title !== cur.title) newProjectRef.current = true; }
       if (ns) await setSong(ns, { silent: !!data.expect, label: data.say.slice(0, 40) });
       if (ns && data.alternative && Array.isArray(data.alternative)) {
         const b = applyOps(cur, withReferenceGroove(data.alternative, refGroove)).song;
@@ -243,7 +275,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       setListenHint(data.listen ?? null);
       const entry = logMove({ title: (ns ?? cur).title, said: t, move: data.say, listen: data.listen, factsSummary: before ? `${Math.round(before.tempo.bpm)}bpm ${before.key.name} ${before.loudness.integrated.toFixed(1)}LUFS` : undefined });
       lastMoveRef.current = entry.id; setLastMoveId(entry.id);
-      say(data.say);
+      if (early === null) say(data.say);
       await runAction(data.action, ns ?? songRef.current, t);
       // Verify: re-hear the changed sections and hold the brain to its word, once per move.
       let verified: "pass" | "fail" | "na" = "na";
@@ -294,5 +326,5 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const { addReference, addClip } = useUploads({ flash, send, setSong, setClips, factsRef, referenceRef, setReference, setDeltaText, getSong: () => songRef.current });
 
   return { song, messages, busy, started, starting, paused, nowSection, beat, library, clips, facts, hearing, reference, deltaText, listenHint, toast, lastMoveId, rendering, ab, score, canUndo, canRedo, rollout,
-    boot, send, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash };
+    boot, send, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong };
 }
