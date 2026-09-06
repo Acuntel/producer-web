@@ -4,10 +4,12 @@
 // by comparing what was heard with what is being said. Every recognition error
 // is surfaced as a named status; nothing is swallowed.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { makeRecognizer, type RecognitionLike, type RecognitionError } from "@/lib/voice/recognition";
+import { makeRecognizer, type RecognitionLike, type RecognitionError, type Handlers } from "@/lib/voice/recognition";
+import { makeScribeRecognizer, scribeAvailable } from "@/lib/voice/scribe";
 import { speak as ttsSpeak, stop as ttsStop } from "@/lib/voice/tts";
 
 export type VoiceStatus = "off" | "listening" | "muted" | "blocked" | "nodevice" | "network" | "unsupported" | "error";
+export type Engine = "scribe" | "webspeech" | null;
 
 const words = (t: string) => t.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/\s+/).filter((w) => w.length > 2);
 // Heard text that is mostly the producer's own sentence is echo, not the user.
@@ -26,6 +28,8 @@ export function useVoiceLoop(onUtterance: (text: string) => void) {
   const [status, setStatus] = useState<VoiceStatus>("off");
   const [lastHeard, setLastHeard] = useState("");
   const [heardCount, setHeardCount] = useState(0);
+  const [engine, setEngine] = useState<Engine>(null);
+  const engineRef = useRef<Engine>(null);
   const recRef = useRef<RecognitionLike | null>(null);
   const sessionRef = useRef(false);
   const mutedRef = useRef(false);
@@ -37,7 +41,7 @@ export function useVoiceLoop(onUtterance: (text: string) => void) {
 
   const startListening = useCallback(() => {
     if (!sessionRef.current || mutedRef.current || recRef.current) return;
-    const rec = makeRecognizer({
+    const handlers: Handlers = {
       onStart: () => { retryRef.current = 0; setStatus("listening"); },
       onInterim: (t) => { if (!(speakingRef.current && looksLikeEcho(t, spokenRef.current))) setInterim(t); },
       onFinal: (t) => {
@@ -51,8 +55,8 @@ export function useVoiceLoop(onUtterance: (text: string) => void) {
       onError: (kind: RecognitionError) => {
         if (kind === "blocked") { setStatus("blocked"); sessionRef.current = false; }
         else if (kind === "nodevice") { setStatus("nodevice"); sessionRef.current = false; }
-        else if (kind === "network") { setStatus("network"); retryRef.current++; }
-        else setStatus("error");
+        else if (kind === "network") { setStatus("network"); retryRef.current++; if (engineRef.current === "scribe" && retryRef.current >= 2) { engineRef.current = "webspeech"; setEngine("webspeech"); } }
+        else { setStatus("error"); if (engineRef.current === "scribe") { engineRef.current = "webspeech"; setEngine("webspeech"); } }
       },
       onEnd: () => {
         recRef.current = null; setListening(false);
@@ -60,10 +64,18 @@ export function useVoiceLoop(onUtterance: (text: string) => void) {
         const wait = Math.min(8000, 300 * Math.pow(2, Math.min(5, retryRef.current)));   // back off on repeated network drops
         setTimeout(startListening, wait);
       },
-    });
-    if (!rec) { setStatus("unsupported"); return; }
-    recRef.current = rec;
-    try { rec.start(); setListening(true); } catch { recRef.current = null; }
+    };
+    // The real engine first; the browser's own recognizer if no token can be had.
+    const begin = (useScribe: boolean) => {
+      if (!sessionRef.current || mutedRef.current || recRef.current) return;
+      const rec = useScribe ? makeScribeRecognizer(handlers) : makeRecognizer(handlers);
+      if (!rec) { setStatus("unsupported"); return; }
+      engineRef.current = useScribe ? "scribe" : "webspeech"; setEngine(engineRef.current);
+      recRef.current = rec;
+      try { rec.start(); setListening(true); } catch { recRef.current = null; }
+    };
+    if (engineRef.current) begin(engineRef.current === "scribe");
+    else void scribeAvailable().then((ok) => begin(ok));
   }, []);
 
   const stopListening = useCallback(() => {
@@ -85,5 +97,5 @@ export function useVoiceLoop(onUtterance: (text: string) => void) {
   // After the user fixes a blocked mic in the browser, one tap retries.
   const retry = useCallback(() => { sessionRef.current = true; retryRef.current = 0; setStatus("listening"); startListening(); }, [startListening]);
 
-  return { listening, interim, speaking, status, lastHeard, heardCount, say, begin, end, hush, setMuted, retry, startListening, stopListening };
+  return { listening, interim, speaking, status, engine, lastHeard, heardCount, say, begin, end, hush, setMuted, retry, startListening, stopListening };
 }

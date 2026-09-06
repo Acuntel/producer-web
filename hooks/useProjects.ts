@@ -5,13 +5,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { Song } from "@/lib/song/types";
 import { supabaseBrowser } from "@/lib/account/supabase";
-import { listProjects, getProject, createProject, saveSnapshot, renameProject, deleteProject, duplicateProject, listVersions, type ProjectCard, type VersionRow } from "@/lib/account/projects";
+import { listProjects, getProject, createProject, saveSnapshot, renameProject, deleteProject, duplicateProject, listVersions, type ProjectCard, type VersionRow, type ChatMsg } from "@/lib/account/projects";
 import type { SavedSong } from "@/components/SongsSheet";
 
 const CUR_KEY = "producer.project.v1";
-export type SnapshotMeta = { label?: string; newProject?: boolean; facts?: unknown };
+export type SnapshotMeta = { label?: string; newProject?: boolean; facts?: unknown; chat?: ChatMsg[]; blank?: boolean };
 
-type Deps = { user: User | null; loadSong: (s: Song) => Promise<void>; getSong: () => Song; localLibrary: SavedSong[]; flash: (t: string) => void };
+type Deps = { user: User | null; loadSong: (s: Song) => Promise<void>; loadChat?: (chat: ChatMsg[], summary: string | null) => void; getSong: () => Song; localLibrary: SavedSong[]; flash: (t: string) => void };
 
 export function useProjects(d: Deps) {
   const [projects, setProjects] = useState<ProjectCard[]>([]);
@@ -63,11 +63,12 @@ export function useProjects(d: Deps) {
     setSyncing(true);
     try {
       const cur = currentRef.current;
+      if (p.meta.blank) return;   // an empty new session is not a record yet
       if (p.meta.newProject || !cur) {
-        const row = await createProject(sb, uid, p.song, p.meta.facts, p.meta.label ?? "new record");
+        const row = await createProject(sb, uid, p.song, p.meta.facts, p.meta.label ?? "new record", p.meta.chat ?? []);
         setCur({ id: row.id, title: row.title });
       } else {
-        await saveSnapshot(sb, uid, cur.id, p.song, p.meta.facts, p.meta.label);
+        await saveSnapshot(sb, uid, cur.id, p.song, p.meta.facts, p.meta.label, p.meta.chat);
         if (cur.title !== p.song.title) setCur({ id: cur.id, title: p.song.title });
       }
       setProjects(await listProjects(sb));
@@ -91,13 +92,15 @@ export function useProjects(d: Deps) {
     if (!row) { d.flash("That project is gone"); return; }
     if (timer.current) { window.clearTimeout(timer.current); pending.current = null; }
     setCur({ id: row.id, title: row.title });
+    d.loadChat?.((row.chat ?? []) as ChatMsg[], row.summary ?? null);
     await d.loadSong(row.song);
   }, [sb, d, setCur]);
 
   const create = useCallback(async (song: Song) => {
     if (!sb || !uid) return;
-    const row = await createProject(sb, uid, song, undefined, "new project");
+    const row = await createProject(sb, uid, song, undefined, "new project", []);
     setCur({ id: row.id, title: row.title });
+    d.loadChat?.([], null);
     await d.loadSong(row.song);
     setProjects(await listProjects(sb));
   }, [sb, uid, d, setCur]);
@@ -107,6 +110,8 @@ export function useProjects(d: Deps) {
   const duplicate = useCallback(async (id: string) => { if (!sb || !uid) return; await duplicateProject(sb, uid, id); setProjects(await listProjects(sb)); }, [sb, uid]);
   const versions = useCallback(async (id: string): Promise<VersionRow[]> => (sb ? listVersions(sb, id) : []), [sb]);
   const openVersion = useCallback(async (v: VersionRow) => { await d.loadSong(v.song); }, [d]);
+  /** A brand new session: no record yet; the first real change creates one. */
+  const startFresh = useCallback(() => { if (timer.current) { window.clearTimeout(timer.current); pending.current = null; } setCur(null); }, [setCur]);
 
-  return { projects, current, loading, syncing, refresh, snapshot, open, create, rename, remove, duplicate, versions, openVersion, signedIn: !!uid };
+  return { projects, current, loading, syncing, refresh, snapshot, open, create, rename, remove, duplicate, versions, openVersion, startFresh, signedIn: !!uid };
 }

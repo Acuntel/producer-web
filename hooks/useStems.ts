@@ -29,6 +29,7 @@ export function useStems(d: Deps) {
   const dRef = useRef(d); dRef.current = d;
   const ensureClipRef = useRef<(path: string, id: string, name: string, meta: { durationSec?: number; bpm?: number; key?: string }) => Promise<string>>(async () => "");
 
+  const autoPlaceRef = useRef<string | null>(null);   // a stem name to place automatically when the job lands (vocal renders)
   const stopPolling = () => { if (pollRef.current) { window.clearTimeout(pollRef.current); pollRef.current = null; } };
   useEffect(() => () => stopPolling(), []);
 
@@ -53,6 +54,13 @@ export function useStems(d: Deps) {
             const ids: string[] = [];
             for (const s of res?.stems ?? []) { try { ids.push(await ensureClipRef.current(s.path, `stem_${id}_${s.stem}`, `${name} · ${s.stem}`, { durationSec: f?.durationSec, bpm: f?.bpm, key: f?.key })); } catch {} }
             for (const o of res?.oneshots ?? []) { try { ids.push(await ensureClipRef.current(o.path, `shot_${id}_${o.role}${o.path.includes("-2") ? "_2" : ""}`, `${name} · ${o.role}`, { durationSec: o.durationSec })); } catch {} }
+            if (autoPlaceRef.current) {
+              const want = autoPlaceRef.current; autoPlaceRef.current = null;
+              const st = (res?.stems ?? []).find((x) => x.stem === want);
+              if (st && f) { await placeStem({ id, result: res } as StemsJob, st, f, name, "hook"); }
+              if (f) void dRef.current.send(`The vocal "${name}" is rendered and its sung part is now an audio track in the drops (${Math.round(f.bpm)} BPM source, warped, key ${f.key}). Tell the user what you hear in one breath, tune it toward the song key with clip.semitones if it is off, and place the phrase where it should sit.`, { hidden: true });
+              return;
+            }
             if (f) void dRef.current.send(`I analyzed "${name}" with the studio: ${Math.round(f.bpm)} BPM, ${f.key}, ${mmss(f.durationSec)} long, drop at ${f.dropAt !== null && f.dropAt !== undefined ? mmss(f.dropAt) : "unclear"}, best 8 bars ${mmss(f.bestBars.startSec)} to ${mmss(f.bestBars.endSec)}. Its stems and one-shots are now clips you can slice from: ${ids.join(", ")} (a stem clip's time axis is the record's own time, so "the snare at 0:32" is slice from the drums stem at 32). Give me the breakdown in one breath: what carries it, what its hook does, and the ONE piece worth taking into our record and how. Do not change the song yet.`, { hidden: true });
           })();
         }
@@ -63,12 +71,12 @@ export function useStems(d: Deps) {
     pollRef.current = window.setTimeout(() => void poll(id, since), 2500);
   }, []);
 
-  const start = useCallback(async (input: { url?: string; file?: File }) => {
+  const start = useCallback(async (input: { url?: string; file?: File; query?: string; storagePath?: string; name?: string }) => {
     const sb = supabaseBrowser(); const uid = dRef.current.user?.id;
     if (!sb || !uid) { setError("Sign in to analyze a record."); return; }
     setError(null); setStarting(true); setJob(null); stopPolling();
     try {
-      let storagePath: string | undefined, name: string | undefined;
+      let storagePath: string | undefined = input.storagePath, name: string | undefined = input.name;
       if (input.file) {
         const safe = input.file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 60);
         storagePath = `${uid}/uploads/${Date.now()}-${safe}`;
@@ -76,10 +84,10 @@ export function useStems(d: Deps) {
         const { error: upErr } = await sb.storage.from("clips").upload(storagePath, input.file, { contentType: input.file.type || "audio/mpeg", upsert: true });
         if (upErr) throw new Error(upErr.message);
       }
-      const r = await fetch("/api/stems", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: input.url, storagePath, name, projectId: dRef.current.projectId }) });
+      const r = await fetch("/api/stems", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: input.url, query: input.query, storagePath, name: name ?? input.query, projectId: dRef.current.projectId }) });
       const j = await r.json();
       if (!r.ok || !j.jobId) throw new Error(j.error ?? "could not start");
-      setJob({ id: j.jobId, status: "queued", progress: 0, result: null, error: null, source: { url: input.url, storage_path: storagePath, name } });
+      setJob({ id: j.jobId, status: "queued", progress: 0, result: null, error: null, source: { url: input.url, storage_path: storagePath, name: name ?? input.query } });
       void poll(j.jobId, Date.now());
     } catch (e) { setError(friendly(e instanceof Error ? e.message : "could not start")); }
     finally { setStarting(false); }
@@ -134,24 +142,42 @@ export function useStems(d: Deps) {
     if (ok) dRef.current.flash(`${shot.role[0].toUpperCase() + shot.role.slice(1)} is now from ${job.result?.name ?? "the record"}`);
   }, [job, ensureClip]);
 
-  /** The best eight bars of a stem, warped to the song, as an audio track in the drops and groove. */
-  const addStemLoop = useCallback(async (stem: StemOut) => {
-    if (!job?.result?.facts) return;
-    const f = job.result.facts;
-    const name = `${job.result.name ?? "record"} · ${stem.stem}`;
-    const id = await ensureClip(stem.path, `stem_${job.id}_${stem.stem}`, name, { durationSec: f.durationSec, bpm: f.bpm, key: f.key });
+  /** A stem as an audio track: its best eight bars (or the whole thing for a short vocal render), warped to the song, in the drops and groove. */
+  const placeStem = useCallback(async (j: StemsJob, stem: StemOut, f: StemsFacts, recordName: string, mode: "best8" | "hook") => {
+    const name = `${recordName} · ${stem.stem}`;
+    const id = await ensureClipRef.current(stem.path, `stem_${j.id}_${stem.stem}`, name, { durationSec: f.durationSec, bpm: f.bpm, key: f.key });
     const song = dRef.current.getSong();
-    const trackId = `stem_${stem.stem}`;
-    const ops: unknown[] = [{ op: "addTrack", track: { id: trackId, name, role: "audio", volume: -6, duck: stem.stem !== "drums", loopBeats: 32, notes: [], clip: { clipId: id, name, bpm: f.bpm, warp: true, startSec: f.bestBars.startSec, lengthBeats: 32, gainDb: 0, durationSec: f.durationSec } } }];
+    const trackId = mode === "hook" ? `vocal_${j.id.slice(0, 6)}` : `stem_${stem.stem}`;
+    const beats = mode === "hook" ? Math.max(4, Math.min(32, Math.round((f.durationSec * song.bpm / 60) / 4) * 4)) : 32;
+    const clip = mode === "hook"
+      ? { clipId: id, name, bpm: song.bpm, warp: false, startSec: 0, lengthBeats: beats, gainDb: 0, durationSec: f.durationSec }
+      : { clipId: id, name, bpm: f.bpm, warp: true, startSec: f.bestBars.startSec, lengthBeats: 32, gainDb: 0, durationSec: f.durationSec };
+    const ops: unknown[] = [{ op: "addTrack", track: { id: trackId, name: mode === "hook" ? recordName.slice(0, 24) : name, role: "audio", volume: mode === "hook" ? -4 : -6, duck: stem.stem !== "drums", loopBeats: beats, notes: [], clip, fx: mode === "hook" ? { filter: { type: "highpass", cutoff: 160 }, delay: { time: "8n", feedback: 0.25, wet: 0.2 }, reverb: 0.18 } : undefined } }];
     for (const s of song.sections) if (/drop|groove/i.test(s.name)) ops.push({ op: "active", section: s.id, add: [trackId] });
-    const ok = await dRef.current.edit(ops, `looped the best 8 bars of the ${stem.stem} stem from ${job.result.name ?? "the record"}`);
-    if (ok) dRef.current.flash(`${stem.stem} loop is in the drops`);
-  }, [job, ensureClip]);
+    const ok = await dRef.current.edit(ops, mode === "hook" ? `placed the rendered vocal ${recordName} in the drops` : `looped the best 8 bars of the ${stem.stem} stem from ${recordName}`);
+    if (ok) dRef.current.flash(mode === "hook" ? "Vocal is in the drops" : `${stem.stem} loop is in the drops`);
+  }, []);
+  const addStemLoop = useCallback(async (stem: StemOut) => { if (!job?.result?.facts) return; await placeStem(job, stem, job.result.facts, job.result.name ?? "record", "best8"); }, [job, placeStem]);
+
+  /** Real sung vocals: compose with the music engine, separate the vocal, place it. */
+  const renderVocal = useCallback(async (prompt: string, lyrics?: string, lengthMs?: number) => {
+    const song = dRef.current.getSong();
+    setError(null); setStarting(true);
+    try {
+      const r = await fetch("/api/music", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, lyrics, lengthMs: lengthMs ?? 12000, bpm: song.bpm, key: song.key }) });
+      const j = await r.json();
+      if (!r.ok || !j.storagePath) throw new Error(j.error ?? "could not render");
+      dRef.current.flash("Vocal rendered, separating the voice");
+      autoPlaceRef.current = "vocals";
+      await start({ storagePath: j.storagePath as string, name: j.name as string });
+    } catch (e) { setError(friendly(e instanceof Error ? e.message : "could not render")); }
+    finally { setStarting(false); }
+  }, [start]);
 
   const reset = useCallback(() => { stopPolling(); setJob(null); setError(null); }, []);
   const askBreakdown = useCallback(() => { const n = job?.result?.name ?? "that record"; void dRef.current.send(`Break down "${n}" for me: structure, the engine, the hook, the drum language, the mix picture, and the one trick. Then say which piece we should take.`); }, [job]);
 
-  return { job, error, starting, start, useOneShot, addStemLoop, previewUrl, reset, askBreakdown };
+  return { job, error, starting, start, useOneShot, addStemLoop, renderVocal, previewUrl, reset, askBreakdown };
 }
 
 function friendly(msg: string): string {

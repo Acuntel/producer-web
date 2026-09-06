@@ -140,3 +140,19 @@ The prod origin's microphone permission was still "prompt" and the app swallowed
 - The listen side shows what it heard and chose to ignore ("took it as room talk, not for me") with a one-tap "That was for you" override, counts ignored sentences, and says while paused: "I only act on studio words, or say producer first."
 - Persona: CONVERSATION IS NOT AN ORDER. Reactions, questions and thinking aloud get an answer with ops null; only requests change the song.
 - Probes: "that hook is insane though" = talk; "this reminds me of a summit record, can you push it that way" = command; "yeah I think we should just go tomorrow after class" (paused) = ignore; "what did you just change" = talk. 59/59 unit tests, e2e passed.
+
+## 2026-09-06 C (part 1): memory and home, the real speech engine, Opus everywhere, the interview start
+
+Brady's deeper brief is in docs/ROUND_0906C_MASTERPROMPT.md. This part ships the systems that do not need new infrastructure.
+
+### Shipped
+- HOME: the app opens on your records (components/Home.tsx), not a session. Open a card and the studio starts where you left off; New session bottom right opens a blank canvas and the producer asks what we are making. Harness mode (?e2e=1 / ?typed=1) still opens the studio directly.
+- MEMORY: projects carry chat, summary and notes (supabase/migrations/0002_memory.sql). Every snapshot saves the last 40 lines of conversation; opening a record restores them and the producer greets with "Last time: ..." (the summary is its last spoken line). A blank session is not a record until the first real change. Pause on a nameless record asks for a title by voice, once; the next sentence names it.
+- BLANK START: BLANK_SONG (no tracks, one 8-bar sketch section). The greeting is the interview, not a pattern.
+- REAL SPEECH ENGINE: ElevenLabs realtime speech to text (scribe_v2_realtime) over WebSocket with a server-minted single-use token (/api/stt/token; the working endpoint is /v1/single-use-token/realtime_scribe), 16 kHz PCM from the mic, VAD commits, partial and committed transcripts; Web Speech is the fallback when no token can be had or the engine fails twice. Node probe: session in 0.5 s, "Make the bass darker and take me to the drop." exact. Browser proof: tests/voice.e2e.mjs injects a spoken WAV as the page microphone (Chrome's file-capture flag delivers zeros in this build); heard in 3 s, the producer built the bass on the blank canvas.
+- OPUS: PRODUCER_MODEL and PRODUCER_FAST_MODEL are claude-opus-5 on Vercel (rollout steps and the critic included). The attention classifier stays on Haiku (one word).
+- Sign-in remembers the email and opens on Sign in; a duplicate sign-up becomes a sign-in.
+
+### Verified with the keys on this machine
+- ElevenLabs Music API answers (a composition plan with lyrics for a tech house prompt): the partner for musical voices in part 2.
+- No Gemini or OpenAI keys exist (only empty templates), so Lyria is not reachable yet.

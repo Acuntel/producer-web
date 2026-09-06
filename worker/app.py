@@ -22,6 +22,7 @@ class Source(BaseModel):
     url: str | None = None
     storage_path: str | None = None
     name: str | None = None
+    query: str | None = None   # a song or artist name: the worker searches the public sources for it
 
 
 class Job(BaseModel):
@@ -39,8 +40,8 @@ def health():
 @app.post("/jobs")
 def submit(job: Job, x_worker_secret: str = Header(default="")):
     if not SECRET or x_worker_secret != SECRET: raise HTTPException(401, "bad secret")
-    if not (job.source.url or job.source.storage_path): raise HTTPException(400, "source.url or source.storage_path required")
-    if job.source.url and not job.source.storage_path and not ALLOW_LINKS: raise HTTPException(400, "links are not accepted; upload the file or capture it in the browser")
+    if not (job.source.url or job.source.storage_path or job.source.query): raise HTTPException(400, "source.url, source.storage_path or source.query required")
+    if (job.source.url or job.source.query) and not job.source.storage_path and not ALLOW_LINKS: raise HTTPException(400, "links are not accepted; upload the file or capture it in the browser")
     with lock: state["queued"] += 1
     pool.submit(process, job)
     return {"ok": True, "job_id": job.job_id, "queued": state["queued"]}
@@ -54,15 +55,30 @@ def fetch_source(job: Job, tmp: str) -> tuple[str, str]:
         supa.download(src.storage_path, raw)
         name = src.name or os.path.basename(src.storage_path)
     else:
-        out = os.path.join(tmp, "dl.%(ext)s")
-        cmd = ["yt-dlp", "-f", "bestaudio/best", "--no-playlist", "--max-downloads", "1", "--match-filter", f"duration < {MAX_SECONDS + 420}", "-o", out, "--print", "title", "--no-simulate", "--quiet", "--no-warnings", src.url]
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-        lines = [l for l in r.stdout.splitlines() if l.strip()]
-        files = [f for f in os.listdir(tmp) if f.startswith("dl.")]
-        if r.returncode not in (0, 101) or not files:
-            raise RuntimeError(f"download failed: {(r.stderr or r.stdout)[-300:]}")
-        raw = os.path.join(tmp, files[0])
-        name = src.name or (lines[0] if lines else "linked track")
+        # The record lives somewhere public. A link is tried as given; a name is searched source by
+        # source (SoundCloud first: it answers from datacenters; YouTube last: it usually does not).
+        targets = [src.url] if src.url else [f"scsearch1:{src.query}", f"bcsearch1:{src.query}", f"ytsearch1:{src.query}"]
+        errors = []
+        raw = None; name = src.name
+        for target in targets:
+            out = os.path.join(tmp, "dl.%(ext)s")
+            cmd = ["yt-dlp", "-f", "bestaudio/best", "--no-playlist", "--max-downloads", "1", "--match-filter", f"duration < {MAX_SECONDS + 420}", "-o", out, "--print", "title", "--no-simulate", "--quiet", "--no-warnings", "--socket-timeout", "20"]
+            proxy = os.environ.get("YTDLP_PROXY")
+            if proxy: cmd += ["--proxy", proxy]
+            r = subprocess.run(cmd + [target], capture_output=True, text=True, timeout=600)
+            lines = [l for l in r.stdout.splitlines() if l.strip()]
+            files = [f for f in os.listdir(tmp) if f.startswith("dl.")]
+            if r.returncode in (0, 101) and files:
+                raw = os.path.join(tmp, files[0]); name = name or (lines[0] if lines else "linked track")
+                supa_note = target.split(":")[0] if ":" in target and not target.startswith("http") else "link"
+                print(f"resolved via {supa_note}: {name}", flush=True)
+                break
+            errors.append(f"{target.split(':')[0]}: {(r.stderr or r.stdout)[-160:].strip()}")
+            for f in files:
+                try: os.remove(os.path.join(tmp, f))
+                except OSError: pass
+        if not raw:
+            raise RuntimeError("download failed: " + " | ".join(errors)[-600:])
     wav = os.path.join(tmp, "src.wav")
     analysis.ffmpeg_to_wav(raw, wav, MAX_SECONDS)
     os.remove(raw)

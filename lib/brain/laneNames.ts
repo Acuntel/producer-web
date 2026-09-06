@@ -26,6 +26,12 @@ export const LANE_INDEX: LaneInfo[] = [
     aliases: ["techno", "peak time", "peak-time", "adam beyer", "eli brown", "charlotte de witte", "drumcode", "berlin", "hypnotic techno"] },
   { id: "trance", name: "Trance, uplifting and hard", home: 138, range: [136, 150], dnaLane: "hard-house", kicksPerBar: 4, blurb: "uplifting at 136-140, hard trance revival at 145-150",
     aliases: ["trance", "uplifting trance", "hard trance", "psytrance", "psy trance", "tiesto", "armin", "sandstorm", "darude", "eurodance"] },
+  { id: "pop", name: "Pop", home: 110, range: [96, 128], dnaLane: "tech-house", kicksPerBar: 2, blurb: "modern radio and dance pop; verse, pre, chorus, not drops",
+    aliases: ["pop", "pop song", "radio pop", "dance pop", "synth pop", "synthpop", "dua lipa", "the weeknd", "sabrina carpenter", "taylor swift", "ariana", "charli xcx"] },
+  { id: "hardstyle", name: "Hardstyle and rawstyle", home: 150, range: [145, 160], dnaLane: "hard-house", kicksPerBar: 4, blurb: "the distorted pitched kick is the bass; euphoric breakdown, screech climax",
+    aliases: ["hardstyle", "hard style", "rawstyle", "raw style", "headhunterz", "sub zero project", "d-block", "euphoric hardstyle", "defqon"] },
+  { id: "psychedelic", name: "Psychedelic pop and rock groove", home: 112, range: [100, 124], dnaLane: "tech-house", kicksPerBar: 2, blurb: "Tame Impala school: melodic round bass, swung live drums, phased wide pads, delay-drenched hooks",
+    aliases: ["psychedelic", "psych", "psych pop", "psychedelic pop", "psychedelic rock", "tame impala", "kevin parker", "mgmt", "neo psychedelia", "dreamy rock"] },
 ];
 
 export const laneInfo = (id: string): LaneInfo | null => LANE_INDEX.find((l) => l.id === id) ?? null;

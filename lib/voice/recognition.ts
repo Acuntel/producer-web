@@ -18,7 +18,10 @@ export function classifyError(code: string | undefined): RecognitionError | null
   }
 }
 
-export function makeRecognizer(handlers: { onInterim: (t: string) => void; onFinal: (t: string) => void; onEnd: () => void; onError?: (kind: RecognitionError, code: string) => void; onStart?: () => void }): RecognitionLike | null {
+export type Handlers = { onInterim: (t: string) => void; onFinal: (t: string) => void; onEnd: () => void; onError?: (kind: RecognitionError, code: string) => void; onStart?: () => void };
+
+/** The browser's built-in recognizer (Web Speech). The voice loop prefers the realtime engine when a token can be had. */
+export function makeRecognizer(handlers: Handlers): RecognitionLike | null {
   const W = window as unknown as { webkitSpeechRecognition?: new () => RecognitionLike; SpeechRecognition?: new () => RecognitionLike };
   const Ctor = W.SpeechRecognition ?? W.webkitSpeechRecognition;
   if (!Ctor) return null;

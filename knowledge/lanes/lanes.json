@@ -1152,6 +1152,437 @@
     "psy": "tempo 140-142, 16th bass res 3, kick drumDecay 0.22, no clap",
     "more drop": "counter arp, ride 8ths, strings octave"
    }
+  },
+  {
+   "id": "pop",
+   "name": "Pop: modern radio and dance pop",
+   "bpm": [
+    96,
+    110,
+    128
+   ],
+   "keys": [
+    "C major",
+    "G major",
+    "A minor",
+    "F major",
+    "E minor"
+   ],
+   "swing": [
+    0.5,
+    0.52,
+    0.54
+   ],
+   "laws": "the hook is a sung line that repeats at bar 1 and 5 of the chorus; four-chord loops; a pre-chorus lift; kick and snare, not kick and clap; the bass follows the root on 1 and the and-of-2; drums thin in verses, full in choruses; no 8-bar drop grammar, use verse / pre / chorus",
+   "drums": {
+    "kick": "X.......X..X....",
+    "snare": "....X.......X...",
+    "hat": "x.x.x.x.x.x.x.x.",
+    "openhat": "..............o.",
+    "clap": "....X.......X...",
+    "fill": "snare 16ths last half bar into the chorus"
+   },
+   "bass": {
+    "wave": "sine",
+    "unison": 1,
+    "glide": 0,
+    "cutoff": 400,
+    "resonance": 0.7,
+    "envAmount": 0.5,
+    "decay": 0.2,
+    "sustain": 0.6,
+    "release": 0.1,
+    "octave": -1,
+    "drive": 0.05,
+    "patterns": {
+     "verse": "X.......X.......",
+     "chorus": "X...X...X...X..."
+    },
+    "hint": "root on 1, fifth or octave on the and of 2 in choruses; dur 0.8 in verses"
+   },
+   "harmony": {
+    "progressions": [
+     "I-V-vi-IV",
+     "vi-IV-I-V",
+     "I-vi-IV-V",
+     "IV-I-V-vi"
+    ],
+    "pad": "fatsawtooth unison 2 spread 12 cutoff 3000 attack 0.3 -12 dB; verses only pad, choruses pad + chords",
+    "stab": "epiano chords on 1 and 3 in the chorus",
+    "lead": "pluck or epiano doubling the vocal hook rhythm an octave up, -8 dB"
+   },
+   "arrangement": [
+    {
+     "name": "Intro",
+     "bars": 4,
+     "fill": "none",
+     "energy": 0.3
+    },
+    {
+     "name": "Verse",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.45
+    },
+    {
+     "name": "Pre",
+     "bars": 8,
+     "fill": "riser",
+     "energy": 0.65
+    },
+    {
+     "name": "Chorus",
+     "bars": 16,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Verse 2",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.5
+    },
+    {
+     "name": "Pre 2",
+     "bars": 8,
+     "fill": "riser",
+     "energy": 0.7
+    },
+    {
+     "name": "Chorus 2",
+     "bars": 16,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Bridge",
+     "bars": 8,
+     "fill": "cut",
+     "energy": 0.4
+    },
+    {
+     "name": "Chorus 3",
+     "bars": 16,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Outro",
+     "bars": 4,
+     "fill": "none",
+     "energy": 0.3
+    }
+   ],
+   "mix": {
+    "lufs": [
+     -9,
+     -7
+    ],
+    "subLow": [
+     0.35,
+     0.5
+    ],
+    "midShare": [
+     0.3,
+     0.45
+    ],
+    "pump": [
+     0.15,
+     0.35
+    ],
+    "sidechainDb": 3,
+    "sidechainReleaseMs": 150
+   },
+   "references": [
+    "Dua Lipa - Levitating (2020, 103, B minor): disco-pop groove, bass on the root and octave",
+    "The Weeknd - Blinding Lights (2019, 171 felt 85, F minor): synth pop, straight eighths",
+    "Sabrina Carpenter - Espresso (2024, 104, A major): tight verse, big chorus lift"
+   ],
+   "feelWords": {
+    "bigger chorus": "pad width 1, chords +3 dB, snare +2, add the lead double",
+    "stripped": "verse pad only, kick and snare, bass dur 0.9",
+    "dance pop": "tempo 120-124, four on the floor kick in choruses, open hat offbeats",
+    "sad": "vi-IV-I-V, epiano, tempo 92, slower attack pads",
+    "anthem": "half-time snare in the bridge, chorus 3 transpose +2"
+   }
+  },
+  {
+   "id": "hardstyle",
+   "name": "Hardstyle and rawstyle",
+   "bpm": [
+    145,
+    150,
+    160
+   ],
+   "keys": [
+    "F minor",
+    "G minor",
+    "A minor",
+    "E minor",
+    "D minor"
+   ],
+   "swing": [
+    0.5,
+    0.5,
+    0.5
+   ],
+   "laws": "the kick IS the bass: a distorted pitched kick with a long tail carries the low end; euphoric melody in the breakdown, screech leads in the climax; reverse bass on the offbeats in the intro; kick roll into the drop; everything straight, no swing",
+   "drums": {
+    "kick": "X...X...X...X...",
+    "clap": "....X.......X...",
+    "hat": "..x...x...x...x.",
+    "openhat": "....o.......o...",
+    "snare": "....X.......X...",
+    "roll": "kick 8ths 2 bars, 16ths 1 bar, 32nds half bar, silence half bar"
+   },
+   "bass": {
+    "wave": "sawtooth",
+    "unison": 1,
+    "glide": 0,
+    "cutoff": 250,
+    "resonance": 1.5,
+    "envAmount": 1.2,
+    "decay": 0.18,
+    "sustain": 0.2,
+    "release": 0.05,
+    "octave": -2,
+    "drive": 0.6,
+    "patterns": {
+     "reverse": "..X...X...X...X.",
+     "climax": "X...X...X...X..."
+    },
+    "hint": "in the climax the bass doubles the kick pitch (drumTune the kick to the root, drumDecay 0.5); the offbeat reverse bass lives in intros and mid-intros only"
+   },
+   "harmony": {
+    "progressions": [
+     "i-bVI-bVII-i",
+     "i-bVII-bVI-bVII",
+     "i-v-bVI-bVII"
+    ],
+    "pad": "fatsawtooth unison 4 spread 30 cutoff 1200-8000 attack 0.5 -10 dB in the breakdown",
+    "stab": "none; the melody is the lead",
+    "lead": "fatsawtooth unison 4 spread 40 cutoff 2500-9000, resonance 3 for the screech, delay 8n wet 0.3, plays the melody in the climax over the kick"
+   },
+   "arrangement": [
+    {
+     "name": "Intro",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.5
+    },
+    {
+     "name": "Mid intro",
+     "bars": 16,
+     "fill": "riser",
+     "energy": 0.6
+    },
+    {
+     "name": "Break",
+     "bars": 8,
+     "fill": "none",
+     "energy": 0.35
+    },
+    {
+     "name": "Breakdown",
+     "bars": 32,
+     "fill": "none",
+     "energy": 0.4
+    },
+    {
+     "name": "Build",
+     "bars": 8,
+     "fill": "cut",
+     "energy": 0.85
+    },
+    {
+     "name": "Climax",
+     "bars": 32,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Mid intro 2",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.55
+    },
+    {
+     "name": "Outro",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.4
+    }
+   ],
+   "mix": {
+    "lufs": [
+     -7,
+     -5
+    ],
+    "subLow": [
+     0.5,
+     0.7
+    ],
+    "midShare": [
+     0.2,
+     0.3
+    ],
+    "pump": [
+     0.6,
+     0.85
+    ],
+    "sidechainDb": 12,
+    "sidechainReleaseMs": 180
+   },
+   "references": [
+    "Headhunterz - Dragonborn (2012, 150, F minor): euphoric melody over the kick",
+    "Sub Zero Project - The Project (2018, 150, G minor): rawstyle screeches",
+    "D-Block & S-te-Fan - Angels and Demons (2013, 150, A minor): classic climax build"
+   ],
+   "feelWords": {
+    "harder": "kick drive 0.8, drumTune +2, tempo 155, screech lead resonance 4",
+    "euphoric": "breakdown +16 bars, pad width 1, lead +1 octave in the climax",
+    "raw": "tempo 150, kick drumDecay 0.6 drive 0.9, no pad, lead resonance 5",
+    "old school": "tempo 145, reverse bass in every non-climax section, pitched kick tail 0.4"
+   }
+  },
+  {
+   "id": "psychedelic",
+   "name": "Psychedelic pop and rock groove (Tame Impala school)",
+   "bpm": [
+    100,
+    112,
+    124
+   ],
+   "keys": [
+    "A minor",
+    "C major",
+    "E minor",
+    "D major",
+    "G major"
+   ],
+   "swing": [
+    0.52,
+    0.55,
+    0.58
+   ],
+   "laws": "live-feeling drums with a big room and swung 16ths on the hats; the bass is melodic and round, playing lines not roots; chords move under a static melody (borrowed chords, major to minor shifts); wide detuned pads and phased everything; the hook is a synth or vocal line drenched in delay; sections breathe, no cut fills, transitions by filter and reverb swells",
+   "drums": {
+    "kick": "X.....X.X.......",
+    "snare": "....X.......X...",
+    "hat": "x.x.x.x.x.x.x.x.",
+    "openhat": "......o.........",
+    "perc": "..x.....x...x...",
+    "fill": "snare and tom 8ths last bar with a reverb swell"
+   },
+   "bass": {
+    "wave": "triangle",
+    "unison": 1,
+    "glide": 0.03,
+    "cutoff": 700,
+    "resonance": 0.8,
+    "envAmount": 0.6,
+    "decay": 0.25,
+    "sustain": 0.7,
+    "release": 0.15,
+    "octave": -1,
+    "drive": 0.15,
+    "patterns": {
+     "groove": "X..X..X.X..X..X."
+    },
+    "hint": "melodic line on the root, fifth and sixth with passing notes; dur 0.4-0.6; glide between phrases"
+   },
+   "harmony": {
+    "progressions": [
+     "i-bVII-bVI-bVII",
+     "I-iii-vi-IV",
+     "i-IV-bVII-bVI",
+     "vi-IV-I-V"
+    ],
+    "pad": "fatsawtooth unison 4 spread 40 cutoff 2000 attack 0.6 width 1 -10 dB, chorus and long reverb send 0.4",
+    "stab": "epiano chords with delay 8n. wet 0.35",
+    "lead": "fattriangle unison 2 spread 20, delay 8n. feedback 0.45 wet 0.4, reverb 0.3; the hook line, an octave up in the chorus"
+   },
+   "arrangement": [
+    {
+     "name": "Intro",
+     "bars": 8,
+     "fill": "none",
+     "energy": 0.35
+    },
+    {
+     "name": "Verse",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.5
+    },
+    {
+     "name": "Chorus",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.8
+    },
+    {
+     "name": "Verse 2",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.55
+    },
+    {
+     "name": "Chorus 2",
+     "bars": 16,
+     "fill": "none",
+     "energy": 0.85
+    },
+    {
+     "name": "Breakdown",
+     "bars": 16,
+     "fill": "riser",
+     "energy": 0.4
+    },
+    {
+     "name": "Chorus 3",
+     "bars": 24,
+     "fill": "none",
+     "energy": 1
+    },
+    {
+     "name": "Outro",
+     "bars": 8,
+     "fill": "none",
+     "energy": 0.3
+    }
+   ],
+   "mix": {
+    "lufs": [
+     -11,
+     -8
+    ],
+    "subLow": [
+     0.35,
+     0.5
+    ],
+    "midShare": [
+     0.3,
+     0.45
+    ],
+    "pump": [
+     0.1,
+     0.3
+    ],
+    "sidechainDb": 2,
+    "sidechainReleaseMs": 200
+   },
+   "references": [
+    "Tame Impala - The Less I Know The Better (2015, 117, C major): melodic bass hook, phased guitar",
+    "Tame Impala - Let It Happen (2015, 125, A minor): long form, filter transitions",
+    "MGMT - Electric Feel (2007, 103, E minor): swung groove, round bass"
+   ],
+   "feelWords": {
+    "more psychedelic": "phaser depth via width 1 and chorus, delay feedback 0.55, pad cutoff sweep 800-6000 across the chorus",
+    "dreamier": "tempo 104, reverb send 0.5 on pads and lead, hats -6 dB",
+    "groovier": "swing 0.58, bass velDev 14, perc chance 0.7",
+    "darker": "i-bVI-bVII, cutoffs -30 percent, remove the open hat"
+   }
   }
  ]
 }

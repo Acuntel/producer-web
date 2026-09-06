@@ -27,15 +27,21 @@ type Reply = { say: string; ops?: unknown[] | null; song?: unknown; action?: Bra
 export type AB = { a: Song; b: Song; playing: "a" | "b"; label: string } | null;
 
 const LIB_KEY = "producer.library.v2", SONG_KEY = "producer.song.v4", CHAT_KEY = "producer.chat.v3", REF_KEY = "producer.reference.v1";
+// A new session starts empty: no pattern, no template. The producer asks what we are making.
+export const BLANK_SONG: Song = { version: 3, title: "Untitled", bpm: 124, key: "A minor", lane: "tech-house", humanize: { swing: 0.54, velVar: 0.1, clapLateMs: 8, seed: 7 }, tracks: [], sections: [{ id: "sketch", name: "Sketch", bars: 8, active: [], fill: "none" }], arrangement: ["sketch"] };
+export const isGenericTitle = (t: string) => /^(untitled|untitled record|new record|glow|g-town heat|northern lights|after hours|iron lung|holy water|probe)$/i.test(t.trim());
+const isBlank = (s: Song) => s.tracks.length === 0 && isGenericTitle(s.title);
 const loadLibrary = (): SavedSong[] => { try { return JSON.parse(localStorage.getItem(LIB_KEY) ?? "[]"); } catch { return []; } };
 const persistLibrary = (lib: SavedSong[]) => { try { localStorage.setItem(LIB_KEY, JSON.stringify(lib.slice(0, 30))); } catch {} };
 const isE2E = () => typeof window !== "undefined" && window.location.search.includes("e2e");
 
-export type SnapshotMeta = { label?: string; newProject?: boolean; facts?: unknown };
+export type SnapshotMeta = { label?: string; newProject?: boolean; facts?: unknown; chat?: { role: "user" | "assistant"; content: string }[]; blank?: boolean };
 
-export function useStudio(say: (t: string) => void, recordHum: (bpm: number, beats: number) => Promise<{ notes: Note[] } | null>, onSnapshot?: (s: Song, meta: SnapshotMeta) => void, onAnalyze?: (url: string) => Promise<void> | void) {
+export type StudioActions = { analyze?: (input: { url?: string; query?: string }) => Promise<void> | void; vocal?: (prompt: string, lyrics?: string, lengthMs?: number) => Promise<void> | void };
+
+export function useStudio(say: (t: string) => void, recordHum: (bpm: number, beats: number) => Promise<{ notes: Note[] } | null>, onSnapshot?: (s: Song, meta: SnapshotMeta) => void, actions?: StudioActions) {
   const onSnapshotRef = useRef(onSnapshot); onSnapshotRef.current = onSnapshot;
-  const onAnalyzeRef = useRef(onAnalyze); onAnalyzeRef.current = onAnalyze;
+  const actionsRef = useRef(actions); actionsRef.current = actions;
   const newProjectRef = useRef(false);
   const [song, setSongState] = useState<Song>(SEED_SONG);
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -61,6 +67,9 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const [ignoredCount, setIgnoredCount] = useState(0);
   const lastMoveAtRef = useRef(0);
   const pausedRef = useRef(false);
+  const resumeRef = useRef<string | null>(null);
+  const titlePendingRef = useRef(false);
+  const askedTitleRef = useRef(false);
 
   const engineRef = useRef<Engine | null>(null);
   const songRef = useRef(song); const messagesRef = useRef(messages);
@@ -141,7 +150,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     if (started || engineRef.current) await eng.update(s);
     autoSave(s);
     // The cloud hears about every save too; a new record (rollout, full song) opens a new project.
-    if (!opts?.noSnapshot) { const fresh = newProjectRef.current; newProjectRef.current = false; onSnapshotRef.current?.(s, { label: opts?.label, newProject: fresh }); }
+    if (!opts?.noSnapshot) { const fresh = newProjectRef.current; if (!isBlank(s)) newProjectRef.current = false; onSnapshotRef.current?.(s, { label: opts?.label, newProject: fresh, chat: messagesRef.current.slice(-40), blank: isBlank(s) }); }
     if (!opts?.silent) refreshEars(s);
   }, [autoSave, getEngine, refreshEars, started]);
   setSongRef.current = setSong;
@@ -171,6 +180,14 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     const op = what === "mute" ? (on ? "unmute" : "mute") : on ? "unsolo" : "solo";
     await edit([{ op, track: id }], `user ${op}d ${t.name}`);
   }, [edit]);
+  const loadChat = useCallback((chat: { role: "user" | "assistant"; content: string }[], summary: string | null) => { setMessages(chat); messagesRef.current = chat; resumeRef.current = summary; askedTitleRef.current = false; }, []);
+  const newSession = useCallback(async () => {
+    historyRef.current = new History(60); setCanUndo(false); setCanRedo(false);
+    setMessages([]); messagesRef.current = []; resumeRef.current = null; askedTitleRef.current = false; titlePendingRef.current = false;
+    setListenHint(null); abRef.current = null; setAb(null); lastMoveRef.current = null; setLastMoveId(null); setFacts(null); factsRef.current = null;
+    newProjectRef.current = true;
+    await setSong(BLANK_SONG, { label: "new session", noHistory: true, silent: true });
+  }, [setSong]);
   const loadSong = useCallback(async (s: Song) => { await setSong(migrateSong(s) ?? s, { label: `open ${s.title}`, noHistory: true, noSnapshot: true }); flash(`Opened ${s.title}`); if (started) say(`Opened ${s.title}. Where were we?`); }, [flash, say, setSong, started]);
   const getSong = useCallback(() => songRef.current, []);
 
@@ -211,8 +228,12 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       if (res) { setMessages((m) => [...m, { role: "assistant", content: res.say }]); messagesRef.current = [...messagesRef.current, { role: "assistant", content: res.say }]; setListenHint(res.listen); say(res.say); }
     }
     else if (a.type === "analyze") {
-      if (a.url && onAnalyzeRef.current) { flash("Pulling that record in"); await onAnalyzeRef.current(a.url); }
-      else flash("I need a link to pull that in");
+      if ((a.url || a.query) && actionsRef.current?.analyze) { flash("Pulling that record in"); await actionsRef.current.analyze({ url: a.url, query: a.query }); }
+      else flash("I need a name or a link to pull that in");
+    }
+    else if (a.type === "vocal") {
+      if (a.prompt && actionsRef.current?.vocal) { flash("Rendering the vocal"); await actionsRef.current.vocal(a.prompt, a.lyrics, a.lengthMs); }
+      else flash("Tell me what the vocal should be");
     }
     else if (a.type === "recordHum") {
       const beats = a.beats && a.beats > 0 ? Math.min(32, a.beats) : 8;
@@ -351,6 +372,12 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     const { text: t, woke } = stripWake(raw);
     if (!t) { if (woke) say("Yes?"); return; }
     setIgnored(null);
+    if (titlePendingRef.current) {
+      titlePendingRef.current = false;
+      const title = t.replace(/^(?:call it|name it|let'?s call it|title it|it'?s called|how about|maybe|um+|uh+)\s+/i, "").replace(/[.!?]+$/, "").trim().slice(0, 40);
+      if (title && !/^(no|nah|skip|later|nothing|not now|leave it)$/i.test(title)) { await edit([{ op: "title", title: title.toUpperCase() }], `titled ${title}`); say(`${title}. Saved.`); return; }
+      say("Untitled it stays. We can name it later."); return;
+    }
     if (woke) return send(t);                                                       // named, always for me
     if (localIntent(t, songRef.current) || rolloutIntent(t, !!referenceRef.current)) return send(t);   // transport, mixer, new song: instant
     const recentMove = !!lastMoveRef.current && Date.now() - lastMoveAtRef.current < 25000;
@@ -362,7 +389,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     const intent = await classify(t, { paused: pausedRef.current, lastProducer, lastAsk, section: engineRef.current?.getPosition()?.section ?? "" });
     if (intent === "ignore") return noteIgnored(t);
     return send(t);
-  }, [noteIgnored, say, send]);
+  }, [noteIgnored, say, send, edit]);
   const thatWasForMe = useCallback(() => { const i = ignored; if (!i) return; setIgnored(null); void send(i.text); }, [ignored, send]);
 
   const boot = useCallback(async () => {
@@ -373,7 +400,12 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
         const eng = await getEngine();
         await eng.start(songRef.current);
         setStarted(true); setPaused(false);
-        const greeting = messagesRef.current.length > 0 ? "We are back. Tell me what you are hearing." : "We are live. That is our groove. Name a vibe, or just say surprise me.";
+        const blank = isBlank(songRef.current);
+        const greeting = blank
+          ? "New record. What are we making? Give me a feel, an artist, a tempo, a first sound, or just say surprise me."
+          : resumeRef.current ? `We are back. Last time: ${resumeRef.current} Where do we pick up?`
+          : messagesRef.current.length > 0 ? "We are back. Tell me what you are hearing." : "We are live. That is our groove. Name a vibe, or just say surprise me.";
+        resumeRef.current = null;
         setMessages((m) => [...m, { role: "assistant", content: greeting }]);
         say(greeting);
         refreshEars(songRef.current);
@@ -381,7 +413,13 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       return;
     }
     const eng = await getEngine();
-    if (paused) { eng.resume(); setPaused(false); } else { eng.pause(); setPaused(true); }
+    if (paused) { eng.resume(); setPaused(false); return; }
+    eng.pause(); setPaused(true);
+    // On the way out, a record with no name gets one. Once per session, by voice.
+    if (isGenericTitle(songRef.current.title) && songRef.current.tracks.length > 0 && !askedTitleRef.current) {
+      askedTitleRef.current = true; titlePendingRef.current = true;
+      say("Paused. Before we leave it, what do we call this one?");
+    }
   }, [getEngine, paused, refreshEars, say, started, starting]);
 
   const jump = useCallback(async (sectionId: string) => { const eng = await getEngine(); if (eng.goto(sectionId)) flash(`Jumped to ${songRef.current.sections.find((s) => s.id === sectionId)?.name ?? sectionId}`); }, [flash, getEngine]);
@@ -392,5 +430,5 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const { addReference, addClip } = useUploads({ flash, send, setSong, setClips, factsRef, referenceRef, setReference, setDeltaText, getSong: () => songRef.current });
 
   return { song, messages, busy, started, starting, paused, nowSection, beat, library, clips, facts, hearing, reference, deltaText, listenHint, toast, lastMoveId, rendering, ab, score, canUndo, canRedo, rollout,
-    boot, send, sendVoice, ignored, ignoredCount, thatWasForMe, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, setVolume, toggleTrack };
+    boot, send, sendVoice, ignored, ignoredCount, thatWasForMe, loadChat, newSession, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, setVolume, toggleTrack };
 }
