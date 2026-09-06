@@ -7,6 +7,7 @@ import { locate, loopBounds, type SectionSpan } from "./schedule";
 import { loadClipsFor, clipKeysFor } from "./clips";
 import { getKit, type Kit } from "./kits";
 
+export type Levels = { master: [number, number]; spectrum: Float32Array | null; tracks: Record<string, number> };
 export type Position = { section: string; sectionId: string; index: number; barInSection: number; beatInBar: number; absBar: number; beat: number };
 
 export class Engine {
@@ -70,6 +71,19 @@ export class Engine {
     const l = locate(this.sectionStarts, beat);
     return l ? { ...l, beat } : null;
   }
+
+  /** Live meters in dB (about -100 silent, 0 full) and the master spectrum (dB per bin). Null before the graph exists. */
+  getLevels(): Levels | null {
+    const g = this.graph; if (!g) return null;
+    const m = g.analysis.meter.getValue();
+    const master: [number, number] = Array.isArray(m) ? [Number(m[0]), Number(m[1] ?? m[0])] : [Number(m), Number(m)];
+    const tracks: Record<string, number> = {};
+    for (const [id, tm] of g.analysis.tracks) { const v = tm.getValue(); tracks[id] = Array.isArray(v) ? Number(v[0]) : Number(v); }
+    return { master, spectrum: g.analysis.fft.getValue(), tracks };
+  }
+
+  /** A fader move while playing: the voice ramps, nothing is rebuilt. */
+  setTrackVolume(id: string, db: number): boolean { const v = this.graph?.voiceById.get(id); if (!v) return false; v.setVolume(db); return true; }
 
   get totalBeats() { return this.builtBeats; }
   get sections() { return this.sectionStarts; }

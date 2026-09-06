@@ -8,6 +8,8 @@ export type Voice = {
   trigger: (n: Note, time: number, bpm: number) => void;
   automate: (param: AutoParam, from: number, to: number, t0: number, t1: number, curve?: "linear" | "exp") => boolean;
   gate: Tone.Gain;
+  out: Tone.ToneAudioNode;   // post-fader output, for meters
+  setVolume: (db: number) => void;   // live fader moves, no rebuild
   dispose: () => void;
 };
 
@@ -114,7 +116,7 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: 
       if (dec) { decayGain.gain.cancelScheduledValues(t); decayGain.gain.setValueAtTime(1, t); decayGain.gain.exponentialRampToValueAtTime(0.001, t + dec); }
       try { player.start(t); } catch { /* overlapping start */ }
     };
-    return { trigger, automate, gate, dispose: () => disp.forEach((d) => d.dispose()) };
+    return { trigger, automate, gate, out: volume, setVolume: (db) => volume.volume.rampTo(db + (ROLE_TRIM[role] ?? 0), 0.03), dispose: () => disp.forEach((d) => d.dispose()) };
   }
   switch (role) {
     case "kick": {
@@ -206,5 +208,5 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: 
     }
   }
 
-  return { trigger, automate, gate, dispose: () => disp.forEach((d) => d.dispose()) };
+  return { trigger, automate, gate, out: volume, setVolume: (db) => volume.volume.rampTo(db + (ROLE_TRIM[role] ?? 0), 0.03), dispose: () => disp.forEach((d) => d.dispose()) };
 }

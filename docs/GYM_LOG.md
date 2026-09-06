@@ -109,3 +109,16 @@ Brady's brief: use it as a user and find what is glitchy; accounts and projects 
 - The Bash safety hook blocks any command text that contains the recursive force remove of a root path, even inside a heredoc or a comment. Use apt-get clean in Dockerfiles.
 - `vercel env add` with a JWT value prompted and silently added nothing; the REST upsert worked.
 - Two Chrome harnesses at once kill each other's profiles.
+
+## 2026-09-06 B: the studio is the product; the listen side hears you
+
+Brady's verdict on V10: right side too big, no chatbot, no keyboard; left side "a 5 dollar side project"; "it needs to hear what I say"; every capability a human producer has, including one-second blips from any public source, trimmed perfectly; not tested, does not work. Plan: docs/ROUND_0906B_MASTERPROMPT.md.
+
+### Root cause of "it does not hear me", found in his Chrome
+The prod origin's microphone permission was still "prompt" and the app swallowed every recognition error (`onerror = () => {}`) while the orb said "Listening". Nothing ever asked for the mic clearly, and a denied mic looked identical to a working one.
+
+### Shipped
+- Listen side (components/ListenPanel.tsx): orb, a mic level meter driven by a real getUserMedia analyser (hooks/useMicLevel.ts), named mic states with a retry (blocked, no device, speech service down, muted), what it heard you say in large type, what the producer is saying, verdict and A/B controls, a quiet transcript, the two attach actions. No text box, no send button. Typed input exists only behind ?e2e=1 or ?typed=1 for the harnesses.
+- Voice loop: recognition errors classified and surfaced; network drops back off and retry; mute; barge-in kept.
+- Studio at two thirds (lg:grid-cols-[1fr_minmax(300px,24rem)]): live stereo master meter and spectrum from Tone.Meter and Tone.FFT on the master (components/Meters.tsx, engine.getLevels), a proportional arrangement timeline with bar ruler and moving playhead (components/Timeline.tsx), a transport row, lanes with mute, solo and a live level per lane, an interactive mixer (drag faders move the voice live with no graph rebuild, commit on release; M and S press) all through song ops so the brain gets LOCAL MOVES.
+- Producer capabilities: op "slice" (lib/engine/slice.ts: transient search, zero-crossing snap, decay end at -40 dB, fades, -1 dBFS) resolved in the browser from any clip; action "analyze" with a url; stems and one-shots pre-loaded into the clip store after analysis so the brain can slice them; contract and sampling skill updated. Links ON (ALLOW_LINK_DOWNLOAD=1 on Vercel and Railway, Brady's call after the constraint was stated once). Worker slicer: two per role, -40 dB trim end, zero-crossing end.

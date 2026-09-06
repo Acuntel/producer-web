@@ -4,7 +4,7 @@ import type { Song } from "../song/types";
 import { migrateSong } from "../song/migrate";
 import { laneId } from "./laneNames";
 
-export type BrainAction = { type: "play" | "pause" | "goto" | "loop" | "unloop" | "recordHum" | "rollout" | "hear" | "none"; section?: string; bar?: number; beats?: number; track?: string; kind?: string; lane?: string };
+export type BrainAction = { type: "play" | "pause" | "goto" | "loop" | "unloop" | "recordHum" | "rollout" | "hear" | "analyze" | "none"; section?: string; bar?: number; beats?: number; track?: string; kind?: string; lane?: string; url?: string };
 export type Expectation = { section?: string; metric: string; dir: "up" | "down" };
 export type BrainReply = { say: string; ops: unknown[] | null; song: Song | null; action: BrainAction | null; listen: string | null; expect: Expectation[] | null; alternative: unknown[] | null; raw?: string };
 
@@ -43,7 +43,7 @@ export function normalizeAction(a: unknown): BrainAction | null {
   if (typeof a !== "object") return null;
   const o = a as Record<string, unknown>;
   const type = typeof o.type === "string" ? o.type : "";
-  if (!["play", "pause", "goto", "loop", "unloop", "recordHum", "rollout", "hear", "none"].includes(type)) return null;
+  if (!["play", "pause", "goto", "loop", "unloop", "recordHum", "rollout", "hear", "analyze", "none"].includes(type)) return null;
   return {
     type: type as BrainAction["type"],
     section: typeof o.section === "string" ? o.section : undefined,
@@ -52,6 +52,7 @@ export function normalizeAction(a: unknown): BrainAction | null {
     track: typeof o.track === "string" ? o.track : undefined,
     kind: typeof o.kind === "string" ? o.kind : undefined,
     ...(laneId(o.lane) ? { lane: laneId(o.lane) as string } : {}),
+    ...(typeof o.url === "string" && /^https?:\/\/\S+$/i.test(o.url) ? { url: o.url } : {}),
   };
 }
 

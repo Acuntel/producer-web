@@ -2,11 +2,23 @@
 export type RecognitionLike = {
   continuous: boolean; interimResults: boolean; lang: string;
   onresult: ((ev: { results: { [i: number]: { [j: number]: { transcript: string }; isFinal: boolean }; length: number } }) => void) | null;
-  onend: (() => void) | null; onerror: (() => void) | null;
+  onend: (() => void) | null; onerror: ((ev: { error?: string; message?: string }) => void) | null;
+  onstart?: (() => void) | null;
   start: () => void; stop: () => void; abort?: () => void;
 };
 
-export function makeRecognizer(handlers: { onInterim: (t: string) => void; onFinal: (t: string) => void; onEnd: () => void }): RecognitionLike | null {
+export type RecognitionError = "blocked" | "nodevice" | "network" | "unknown";
+export function classifyError(code: string | undefined): RecognitionError | null {
+  switch (code) {
+    case "not-allowed": case "service-not-allowed": return "blocked";
+    case "audio-capture": return "nodevice";
+    case "network": return "network";
+    case "no-speech": case "aborted": return null;   // quiet room or our own restart: not an error
+    default: return code ? "unknown" : null;
+  }
+}
+
+export function makeRecognizer(handlers: { onInterim: (t: string) => void; onFinal: (t: string) => void; onEnd: () => void; onError?: (kind: RecognitionError, code: string) => void; onStart?: () => void }): RecognitionLike | null {
   const W = window as unknown as { webkitSpeechRecognition?: new () => RecognitionLike; SpeechRecognition?: new () => RecognitionLike };
   const Ctor = W.SpeechRecognition ?? W.webkitSpeechRecognition;
   if (!Ctor) return null;
@@ -25,7 +37,8 @@ export function makeRecognizer(handlers: { onInterim: (t: string) => void; onFin
     }
   };
   rec.onend = handlers.onEnd;
-  rec.onerror = () => {};
+  rec.onerror = (ev) => { const kind = classifyError(ev?.error); if (kind) handlers.onError?.(kind, ev?.error ?? "unknown"); };
+  rec.onstart = () => handlers.onStart?.();
   return rec;
 }
 

@@ -1,11 +1,13 @@
 "use client";
 // The conversation loop: the mic stays open even while the producer speaks, so
 // the user can cut in (barge-in). Echo of the producer's own voice is filtered
-// by comparing what was heard with what is being said. Queued utterances,
-// spoken replies, live interim transcription.
+// by comparing what was heard with what is being said. Every recognition error
+// is surfaced as a named status; nothing is swallowed.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { makeRecognizer, type RecognitionLike } from "@/lib/voice/recognition";
+import { makeRecognizer, type RecognitionLike, type RecognitionError } from "@/lib/voice/recognition";
 import { speak as ttsSpeak, stop as ttsStop } from "@/lib/voice/tts";
+
+export type VoiceStatus = "off" | "listening" | "muted" | "blocked" | "nodevice" | "network" | "unsupported" | "error";
 
 const words = (t: string) => t.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/\s+/).filter((w) => w.length > 2);
 // Heard text that is mostly the producer's own sentence is echo, not the user.
@@ -21,27 +23,45 @@ export function useVoiceLoop(onUtterance: (text: string) => void) {
   const [listening, setListening] = useState(false);
   const [interim, setInterim] = useState("");
   const [speaking, setSpeaking] = useState(false);
+  const [status, setStatus] = useState<VoiceStatus>("off");
+  const [lastHeard, setLastHeard] = useState("");
+  const [heardCount, setHeardCount] = useState(0);
   const recRef = useRef<RecognitionLike | null>(null);
   const sessionRef = useRef(false);
+  const mutedRef = useRef(false);
   const speakingRef = useRef(false);
   const spokenRef = useRef<string | null>(null);
+  const retryRef = useRef(0);
   const onUtteranceRef = useRef(onUtterance);
   useEffect(() => { onUtteranceRef.current = onUtterance; }, [onUtterance]);
 
   const startListening = useCallback(() => {
-    if (!sessionRef.current || recRef.current) return;
+    if (!sessionRef.current || mutedRef.current || recRef.current) return;
     const rec = makeRecognizer({
+      onStart: () => { retryRef.current = 0; setStatus("listening"); },
       onInterim: (t) => { if (!(speakingRef.current && looksLikeEcho(t, spokenRef.current))) setInterim(t); },
       onFinal: (t) => {
         if (speakingRef.current) {
           if (looksLikeEcho(t, spokenRef.current)) return;   // our own voice coming back through the speakers
           ttsStop(); speakingRef.current = false; setSpeaking(false);   // the user cut in: stop talking, listen
         }
+        setLastHeard(t); setHeardCount((n) => n + 1); setInterim("");
         onUtteranceRef.current(t);
       },
-      onEnd: () => { recRef.current = null; setListening(false); if (sessionRef.current) setTimeout(startListening, 300); },
+      onError: (kind: RecognitionError) => {
+        if (kind === "blocked") { setStatus("blocked"); sessionRef.current = false; }
+        else if (kind === "nodevice") { setStatus("nodevice"); sessionRef.current = false; }
+        else if (kind === "network") { setStatus("network"); retryRef.current++; }
+        else setStatus("error");
+      },
+      onEnd: () => {
+        recRef.current = null; setListening(false);
+        if (!sessionRef.current || mutedRef.current) return;
+        const wait = Math.min(8000, 300 * Math.pow(2, Math.min(5, retryRef.current)));   // back off on repeated network drops
+        setTimeout(startListening, wait);
+      },
     });
-    if (!rec) return;
+    if (!rec) { setStatus("unsupported"); return; }
     recRef.current = rec;
     try { rec.start(); setListening(true); } catch { recRef.current = null; }
   }, []);
@@ -49,7 +69,7 @@ export function useVoiceLoop(onUtterance: (text: string) => void) {
   const stopListening = useCallback(() => {
     const rec = recRef.current; recRef.current = null;
     try { rec?.abort?.(); rec?.stop(); } catch {}
-    setListening(false);
+    setListening(false); setInterim("");
   }, []);
 
   const say = useCallback((text: string) => {
@@ -58,9 +78,12 @@ export function useVoiceLoop(onUtterance: (text: string) => void) {
     if (sessionRef.current && !recRef.current) startListening();
   }, [startListening]);
 
-  const begin = useCallback(() => { sessionRef.current = true; startListening(); }, [startListening]);
-  const end = useCallback(() => { sessionRef.current = false; ttsStop(); stopListening(); }, [stopListening]);
+  const begin = useCallback(() => { sessionRef.current = true; mutedRef.current = false; startListening(); }, [startListening]);
+  const end = useCallback(() => { sessionRef.current = false; ttsStop(); stopListening(); setStatus("off"); }, [stopListening]);
   const hush = useCallback(() => { ttsStop(); speakingRef.current = false; setSpeaking(false); spokenRef.current = null; if (!recRef.current) startListening(); }, [startListening]);
+  const setMuted = useCallback((m: boolean) => { mutedRef.current = m; if (m) { stopListening(); setStatus("muted"); } else { setStatus("listening"); startListening(); } }, [startListening, stopListening]);
+  // After the user fixes a blocked mic in the browser, one tap retries.
+  const retry = useCallback(() => { sessionRef.current = true; retryRef.current = 0; setStatus("listening"); startListening(); }, [startListening]);
 
-  return { listening, interim, speaking, say, begin, end, hush, startListening, stopListening };
+  return { listening, interim, speaking, status, lastHeard, heardCount, say, begin, end, hush, setMuted, retry, startListening, stopListening };
 }

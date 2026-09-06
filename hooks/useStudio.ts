@@ -32,8 +32,9 @@ const isE2E = () => typeof window !== "undefined" && window.location.search.incl
 
 export type SnapshotMeta = { label?: string; newProject?: boolean; facts?: unknown };
 
-export function useStudio(say: (t: string) => void, recordHum: (bpm: number, beats: number) => Promise<{ notes: Note[] } | null>, onSnapshot?: (s: Song, meta: SnapshotMeta) => void) {
+export function useStudio(say: (t: string) => void, recordHum: (bpm: number, beats: number) => Promise<{ notes: Note[] } | null>, onSnapshot?: (s: Song, meta: SnapshotMeta) => void, onAnalyze?: (url: string) => Promise<void> | void) {
   const onSnapshotRef = useRef(onSnapshot); onSnapshotRef.current = onSnapshot;
+  const onAnalyzeRef = useRef(onAnalyze); onAnalyzeRef.current = onAnalyze;
   const newProjectRef = useRef(false);
   const [song, setSongState] = useState<Song>(SEED_SONG);
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -149,6 +150,22 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     return true;
   }, [flash, setSong]);
   const registerClip = useCallback((c: ClipMeta) => setClips((x) => (x.some((y) => y.id === c.id) ? x : [...x, c])), []);
+  // Live meters for the studio surfaces; a fader drag moves the voice directly and commits once on release.
+  const getLevels = useCallback(() => engineRef.current?.getLevels() ?? null, []);
+  const setVolume = useCallback(async (id: string, db: number, commit: boolean) => {
+    const res = applyOps(songRef.current, [{ op: "set", track: id, path: "volume", value: db }]);
+    if (!res.applied) return;
+    if (!commit) { engineRef.current?.setTrackVolume(id, db); songRef.current = res.song; setSongState(res.song); return; }
+    const name = res.song.tracks.find((t) => t.id === id)?.name ?? id;
+    await setSong(res.song, { label: `${name} to ${db} dB` });
+    localMovesRef.current.push(`user moved the ${name} fader to ${db} dB`);
+  }, [setSong]);
+  const toggleTrack = useCallback(async (id: string, what: "mute" | "solo") => {
+    const t = songRef.current.tracks.find((x) => x.id === id); if (!t) return;
+    const on = what === "mute" ? !!t.mute : !!t.solo;
+    const op = what === "mute" ? (on ? "unmute" : "mute") : on ? "unsolo" : "solo";
+    await edit([{ op, track: id }], `user ${op}d ${t.name}`);
+  }, [edit]);
   const loadSong = useCallback(async (s: Song) => { await setSong(migrateSong(s) ?? s, { label: `open ${s.title}`, noHistory: true, noSnapshot: true }); flash(`Opened ${s.title}`); if (started) say(`Opened ${s.title}. Where were we?`); }, [flash, say, setSong, started]);
   const getSong = useCallback(() => songRef.current, []);
 
@@ -187,6 +204,10 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       const res = await runRollout(kind, ask, a.section ?? null, a.lane ?? null);
       refreshEars(songRef.current);
       if (res) { setMessages((m) => [...m, { role: "assistant", content: res.say }]); messagesRef.current = [...messagesRef.current, { role: "assistant", content: res.say }]; setListenHint(res.listen); say(res.say); }
+    }
+    else if (a.type === "analyze") {
+      if (a.url && onAnalyzeRef.current) { flash("Pulling that record in"); await onAnalyzeRef.current(a.url); }
+      else flash("I need a link to pull that in");
     }
     else if (a.type === "recordHum") {
       const beats = a.beats && a.beats > 0 ? Math.min(32, a.beats) : 8;
@@ -274,7 +295,18 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       else if (early !== data.say) setMessages((m) => { const c = [...m]; for (let i = c.length - 1; i >= 0; i--) if (c[i].role === "assistant") { c[i] = { role: "assistant", content: data.say }; break; } return c; });
       let ns: Song | null = null, applied = 0, skipped = 0;
       const refGroove = referenceRef.current?.facts.groove.template; // {"op":"groove","from":"reference"} borrows the reference's measured timing
-      if (data.ops && Array.isArray(data.ops)) { const res = applyOps(songRef.current, withReferenceGroove(data.ops, refGroove)); ns = res.song; applied = res.applied; skipped = res.skipped.length; }
+      if (data.ops && Array.isArray(data.ops)) {
+        let opsIn: unknown[] = data.ops;
+        // Precise blips: "slice" ops cut audio in the browser first, then become ordinary ops.
+        if (opsIn.some((o) => (o as { op?: string } | null)?.op === "slice")) {
+          const { resolveSliceOps } = await import("@/lib/engine/slice");
+          const r = await resolveSliceOps(opsIn, songRef.current, registerClip);
+          opsIn = r.ops;
+          if (r.made.length) { localMovesRef.current.push(`studio sliced ${r.made.join(", ")}`); flash(`Sliced ${r.made[0]}`); }
+          if (r.failed.length) localMovesRef.current.push(`slice failed: ${r.failed.join("; ")}`);
+        }
+        const res = applyOps(songRef.current, withReferenceGroove(opsIn, refGroove)); ns = res.song; applied = res.applied; skipped = res.skipped.length;
+      }
       else if (data.song) { ns = migrateSong(data.song); if (ns && ns.title !== cur.title) newProjectRef.current = true; }
       if (ns) await setSong(ns, { silent: !!data.expect, label: data.say.slice(0, 40) });
       if (ns && data.alternative && Array.isArray(data.alternative)) {
@@ -306,7 +338,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       const p = pendingRef.current; pendingRef.current = null;
       if (p) void send(p);
     }
-  }, [clips, compactFacts, deltasFor, hearNow, runAction, say, setSong, tryLocal]);
+  }, [clips, compactFacts, deltasFor, hearNow, runAction, say, setSong, tryLocal, registerClip, flash]);
 
   const boot = useCallback(async () => {
     if (starting) return;
@@ -335,5 +367,5 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const { addReference, addClip } = useUploads({ flash, send, setSong, setClips, factsRef, referenceRef, setReference, setDeltaText, getSong: () => songRef.current });
 
   return { song, messages, busy, started, starting, paused, nowSection, beat, library, clips, facts, hearing, reference, deltaText, listenHint, toast, lastMoveId, rendering, ab, score, canUndo, canRedo, rollout,
-    boot, send, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip };
+    boot, send, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, setVolume, toggleTrack };
 }

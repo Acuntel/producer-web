@@ -112,7 +112,16 @@ def _fundamental(seg: np.ndarray, sr: int) -> float | None:
     return float(freqs[band][int(np.argmax(spec[band]))])
 
 
-def slice_oneshots(drums_path: str, out_dir: str, max_per_role: int = 1) -> list[OneShot]:
+def _zero_cross(y: np.ndarray, i: int, back: int = 2000) -> int:
+    k = min(len(y) - 1, i)
+    for _ in range(back):
+        if k <= 1: break
+        if y[k - 1] <= 0 < y[k]: return k
+        k -= 1
+    return min(len(y), i)
+
+
+def slice_oneshots(drums_path: str, out_dir: str, max_per_role: int = 2) -> list[OneShot]:
     os.makedirs(out_dir, exist_ok=True)
     y, sr = librosa.load(drums_path, sr=44100, mono=True)
     if not len(y): return []
@@ -133,8 +142,10 @@ def slice_oneshots(drums_path: str, out_dir: str, max_per_role: int = 1) -> list
         low = float(spec[freqs < 150].sum()) / tot
         centroid = float((freqs * spec).sum() / tot)
         env = np.abs(seg)
-        above = np.where(env > peak * 0.1)[0]
-        dur = float((above[-1] if len(above) else len(seg)) / sr)
+        above20 = np.where(env > peak * 0.1)[0]    # -20 dB: the body of the hit, for classification
+        above40 = np.where(env > peak * 0.01)[0]   # -40 dB: where the hit really ends, for the trim
+        dur = float((above20[-1] if len(above20) else len(seg)) / sr)
+        dur40 = float((above40[-1] if len(above40) else len(seg)) / sr)
         if low > 0.45 and centroid < 600: role = "kick"
         elif centroid > 4500 and dur < 0.3: role = "hat"
         elif 700 <= centroid <= 4500: role = "snare"
@@ -142,18 +153,19 @@ def slice_oneshots(drums_path: str, out_dir: str, max_per_role: int = 1) -> list
         # A clean one-shot is loud and isolated (nothing else starts right after it).
         score = peak * (1.0 if gap >= 0.14 else 0.4) * (1.0 if dur < 0.6 else 0.7)
         f0 = _fundamental(seg, sr) if role == "kick" else None
-        shot = OneShot(role=role, path="", durationSec=round(min(dur + 0.03, 0.7), 3), fundamentalHz=round(f0, 1) if f0 else None, centroidHz=round(centroid), peakDb=round(20 * math.log10(peak), 1), atSec=round(start / sr, 3))
+        shot = OneShot(role=role, path="", durationSec=round(min(max(dur40, dur) + 0.02, 0.7), 3), fundamentalHz=round(f0, 1) if f0 else None, centroidHz=round(centroid), peakDb=round(20 * math.log10(peak), 1), atSec=round(start / sr, 3))
         cands[role].append((score, shot, seg))
     out: list[OneShot] = []
     for role, lst in cands.items():
         lst.sort(key=lambda t: -t[0])
         for score, shot, seg in lst[:max_per_role]:
-            take = seg[: int(min(len(seg), shot.durationSec * sr))].copy()
+            end = _zero_cross(seg, int(min(len(seg), shot.durationSec * sr)))
+            take = seg[:end].copy()
             fade_in = int(0.003 * sr); fade_out = int(0.02 * sr)
             if len(take) > fade_in: take[:fade_in] *= np.linspace(0, 1, fade_in)
             if len(take) > fade_out: take[-fade_out:] *= np.linspace(1, 0, fade_out)
             take = take / (np.max(np.abs(take)) + 1e-9) * 0.891  # -1 dBFS
-            p = os.path.join(out_dir, f"{role}.wav")
+            p = os.path.join(out_dir, f"{role}{'' if not any(o.role == role for o in out) else '-2'}.wav")
             sf.write(p, take.astype(np.float32), sr)
             shot.path = p
             out.append(shot)

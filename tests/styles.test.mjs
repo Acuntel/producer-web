@@ -28,7 +28,7 @@ test("every source directory is in the tailwind content globs", () => {
 
 test("arbitrary-value classes used in components survive the build", () => {
   // Guards the class shapes the layout depends on: fixed mixer channel width and lane height.
-  for (const [file, cls] of [["components/Mixer.tsx", "w-[100px]"], ["components/TrackLanes.tsx", "h-8"]]) {
+  for (const [file, cls] of [["components/Mixer.tsx", "w-[92px]"], ["components/TrackLanes.tsx", "h-8"], ["app/page.tsx", "lg:grid-cols-[1fr_minmax(300px,24rem)]"]]) {
     assert.ok(readFileSync(file, "utf8").includes(cls), `${file} should still use ${cls}`);
   }
 });

@@ -27,6 +27,7 @@ export function useStems(d: Deps) {
   const pollRef = useRef<number | null>(null);
   const announced = useRef<string | null>(null);
   const dRef = useRef(d); dRef.current = d;
+  const ensureClipRef = useRef<(path: string, id: string, name: string, meta: { durationSec?: number; bpm?: number; key?: string }) => Promise<string>>(async () => "");
 
   const stopPolling = () => { if (pollRef.current) { window.clearTimeout(pollRef.current); pollRef.current = null; } };
   useEffect(() => () => stopPolling(), []);
@@ -36,13 +37,24 @@ export function useStems(d: Deps) {
       const r = await fetch(`/api/stems?id=${encodeURIComponent(id)}`).then((x) => x.json());
       if (r?.id) setJob(r as StemsJob);
       if (r?.status === "done" || r?.status === "error") {
-        if (r.status === "error") setError(friendly(r.error ?? "The analysis failed."));
+        if (r.status === "error") {
+          const msg = friendly(r.error ?? "The analysis failed.");
+          setError(msg);
+          void dRef.current.send(`The record could not be pulled in: ${msg} Tell the user in one sentence what to do instead (play it in another tab and use Capture what is playing, or upload the file). Do not change the song.`, { hidden: true });
+        }
         if (r.status === "done" && announced.current !== id) {
           announced.current = id;
-          const f = (r.result as StemsResult | null)?.facts;
-          const name = (r.result as StemsResult | null)?.name ?? "the record";
+          const res = r.result as StemsResult | null;
+          const f = res?.facts;
+          const name = res?.name ?? "the record";
           dRef.current.flash(`Analyzed ${name}`);
-          if (f) void dRef.current.send(`I analyzed "${name}" with the studio: ${Math.round(f.bpm)} BPM, ${f.key}, ${mmss(f.durationSec)} long, drop at ${f.dropAt !== null && f.dropAt !== undefined ? mmss(f.dropAt) : "unclear"}, best 8 bars ${mmss(f.bestBars.startSec)} to ${mmss(f.bestBars.endSec)}. Its stems (drums, bass, vocals, other) and sliced one-shots (${((r.result as StemsResult).oneshots ?? []).map((o) => o.role).join(", ")}) are in the library as clips. Give me the breakdown in one breath: what carries it, what its hook does, and the ONE piece worth taking into our record and how. Do not change the song yet.`, { hidden: true });
+          // Bring every stem and one-shot into the browser so the brain can slice them by voice, then tell it the ids.
+          void (async () => {
+            const ids: string[] = [];
+            for (const s of res?.stems ?? []) { try { ids.push(await ensureClipRef.current(s.path, `stem_${id}_${s.stem}`, `${name} · ${s.stem}`, { durationSec: f?.durationSec, bpm: f?.bpm, key: f?.key })); } catch {} }
+            for (const o of res?.oneshots ?? []) { try { ids.push(await ensureClipRef.current(o.path, `shot_${id}_${o.role}${o.path.includes("-2") ? "_2" : ""}`, `${name} · ${o.role}`, { durationSec: o.durationSec })); } catch {} }
+            if (f) void dRef.current.send(`I analyzed "${name}" with the studio: ${Math.round(f.bpm)} BPM, ${f.key}, ${mmss(f.durationSec)} long, drop at ${f.dropAt !== null && f.dropAt !== undefined ? mmss(f.dropAt) : "unclear"}, best 8 bars ${mmss(f.bestBars.startSec)} to ${mmss(f.bestBars.endSec)}. Its stems and one-shots are now clips you can slice from: ${ids.join(", ")} (a stem clip's time axis is the record's own time, so "the snare at 0:32" is slice from the drums stem at 32). Give me the breakdown in one breath: what carries it, what its hook does, and the ONE piece worth taking into our record and how. Do not change the song yet.`, { hidden: true });
+          })();
         }
         return;
       }
@@ -88,6 +100,7 @@ export function useStems(d: Deps) {
     dRef.current.registerClip({ id, name, bpm: meta.bpm, key: meta.key, durationSec: meta.durationSec });
     return id;
   }, []);
+  ensureClipRef.current = ensureClip;
 
   const previewUrl = useCallback(async (path: string): Promise<string | null> => {
     const sb = supabaseBrowser(); if (!sb) return null;
@@ -143,7 +156,7 @@ export function useStems(d: Deps) {
 
 function friendly(msg: string): string {
   if (/sign in|not signed in|401/i.test(msg)) return "Sign in to analyze a record.";
-  if (/bot|Sign in to confirm|cookies|403|unavailable|Private video/i.test(msg)) return "That site blocked the download from our server. Upload the audio file instead and it will work.";
+  if (/bot|Sign in to confirm|cookies|403|unavailable|Private video/i.test(msg)) return "That site blocked the download from our server. Play it in another tab and use Capture what is playing, or upload the file, and it will work.";
   if (/duration|too long/i.test(msg)) return "That is longer than 15 minutes. Try a shorter file or a single track.";
   if (/worker|502|503|not configured/i.test(msg)) return "The analysis worker is waking up. Try again in a minute.";
   return msg;

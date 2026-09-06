@@ -99,7 +99,7 @@ async function main() {
   await evalJs(`(() => { const i = document.querySelector('input[aria-label="Message the producer"]'); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; })()`);
   await sleep(1500);
   console.log(`[e2e] after typing: input="${await evalJs(`document.querySelector('input[aria-label="Message the producer"]')?.value ?? '(no input)'`)}" userBubble=${await evalJs(`document.body.innerText.includes(${JSON.stringify(ask)})`)} chatCalls=${await evalJs(`(window.__brain ?? []).length`)}`);
-  const replyText = await waitFor(`(() => { const t = document.body.innerText; const i = t.indexOf(${JSON.stringify(ask)}); if (i < 0) return ''; const after = t.slice(i + ${ask.length}); const m = after.match(/\\n([^\\n]{8,})/); return m && !/^(talk, or type|type here)/.test(m[1]) ? m[1] : ''; })()`, 90000, "brain reply");
+  const replyText = await waitFor(`(() => { const el = document.querySelector('[data-role="producer-line"]'); const t = (el?.textContent ?? '').trim(); return t && !/^(Working on it\\.|Ready when you are\\.|We are live|We are back)/.test(t) ? t : ''; })()`, 90000, "brain reply");
   console.log(`[e2e] brain said: ${replyText.slice(0, 200)}`);
   // The first sentence streams in early; the ops land with the final reply. Wait for that, then read the song.
   await waitFor(`(window.__brain ?? []).length >= 1`, 90000, "final brain reply (ops)");
@@ -113,7 +113,7 @@ async function main() {
   console.log(`[e2e] raw brain replies: ${chat.slice(0, 900)}`);
   assert.ok(!/hiccuped|not connected|setup step|out of credits/i.test(replyText), `brain error: ${replyText}`);
   assert.ok(changed, "the brain should have changed the song");
-  const facts = await waitFor(`(() => { const t = document.body.innerText; return /LUFS/.test(t) ? t.match(/(\\d+) BPM[^\\n]*LUFS[^\\n]*/)?.[0] ?? '' : ''; })()`, 60000, "ears panel");
+  const facts = await waitFor(`(() => { const t = document.body.innerText; const l = t.match(/-?\\d+\\.\\d LUFS/); const b = t.match(/(\\d+) BPM/); return l && b ? b[0] + ' · ' + l[0] : ''; })()`, 60000, "measured chips");
   console.log(`[e2e] ears panel: ${facts}`);
   {
     const note = await waitFor(`(() => { const t = document.body.innerText; const i = t.indexOf('Do it'); return i >= 0 ? t.slice(Math.max(0, i - 420), i + 40).split(String.fromCharCode(10)).filter(Boolean).slice(-4).join(' | ') : ''; })()`, 150000, "critic note");

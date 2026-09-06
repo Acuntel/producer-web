@@ -92,7 +92,7 @@ def process(job: Job) -> None:
             stem_out.append({"stem": stem, "path": path})
             rows.append({"owner": job.owner, "project_id": job.project_id, "name": f"{name} · {stem}", "storage_path": path, "mime": "audio/mpeg", "duration_sec": facts["durationSec"], "bpm": facts["bpm"], "key": facts["key"], "source": {"kind": "stem", "stem": stem, "job_id": job.job_id, "from": name}})
         for s in shots:
-            path = supa.upload(f"{base}/oneshot-{s.role}.wav", s.path, "audio/wav")
+            path = supa.upload(f"{base}/oneshot-{os.path.basename(s.path)}", s.path, "audio/wav")
             d = asdict(s); d["path"] = path
             shot_out.append(d)
             rows.append({"owner": job.owner, "project_id": job.project_id, "name": f"{name} · {s.role}", "storage_path": path, "mime": "audio/wav", "duration_sec": s.durationSec, "bpm": None, "key": None, "source": {"kind": "oneshot", "role": s.role, "job_id": job.job_id, "from": name, "fundamentalHz": s.fundamentalHz, "centroidHz": s.centroidHz}})

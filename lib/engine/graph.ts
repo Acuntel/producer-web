@@ -8,7 +8,8 @@ import { clipBuffer } from "./clips";
 import type { Kit } from "./kits";
 
 export type Clips = Map<string, AudioBuffer>;
-export type Graph = { parts: Tone.Part[]; voices: Voice[]; nodes: { dispose: () => void }[]; schedule: Schedule };
+export type Analysis = { fft: Tone.FFT; meter: Tone.Meter; tracks: Map<string, Tone.Meter> };
+export type Graph = { parts: Tone.Part[]; voices: Voice[]; nodes: { dispose: () => void }[]; schedule: Schedule; analysis: Analysis; voiceById: Map<string, Voice> };
 
 type Transport = ReturnType<typeof Tone.getTransport>;
 
@@ -23,6 +24,11 @@ export function buildGraph(song: Song, transport: Transport, clips: Clips = new 
   // Final soft clipper: club-master glue, and a hard guarantee that nothing leaves above 0 dBFS.
   const clipper = new Tone.WaveShaper((x) => Math.tanh(x * 1.25) / Math.tanh(1.25), 4096);
   masterVol.connect(masterEq); masterEq.connect(masterFilter); masterFilter.connect(comp); comp.connect(makeup); makeup.connect(limiter); limiter.connect(clipper); clipper.toDestination();
+  // The visible proof: a spectrum and a stereo meter on what actually leaves the master.
+  const fft = new Tone.FFT({ size: 64, smoothing: 0.7 });
+  const meter = new Tone.Meter({ channelCount: 2, smoothing: 0.8 });
+  clipper.connect(fft); clipper.connect(meter);
+  const trackMeters = new Map<string, Tone.Meter>();
   const master: Tone.ToneAudioNode = masterVol;
   const duck = new Tone.Gain(1).connect(master);
   const reverb = new Tone.Freeverb({ roomSize: 0.82, dampening: 2800 });
@@ -45,6 +51,7 @@ export function buildGraph(song: Song, transport: Transport, clips: Clips = new 
     const buf = clipBuffer(clips, tr.clip);   // an upload by clipId, or a library sample by sampleId
     const voice = makeVoice(tr, buses, buf, kit);
     voices.push(voice); voiceByTrack.set(tr.id, voice);
+    const tm = new Tone.Meter({ smoothing: 0.75 }); voice.out.connect(tm); trackMeters.set(tr.id, tm);
     if (evs && evs.length) {
       // Tone sources demand strictly increasing start times per voice: nudge exact collisions by 1 ms.
       let lastTime = -1;
@@ -61,7 +68,7 @@ export function buildGraph(song: Song, transport: Transport, clips: Clips = new 
       gp.connect(voice.gate);
       const spanPart = new Tone.Part((time, s: { beats: number }) => { try { gp.start(time, c.startSec ?? 0, s.beats * beatSec); } catch { /* not loaded */ } }, spans.map((s) => [tick(s.startBeat), s] as [string, { beats: number }]));
       spanPart.start(0); parts.push(spanPart);
-      voices.push({ trigger: () => {}, automate: () => false, gate: voice.gate, dispose: () => gp.dispose() });
+      voices.push({ trigger: () => {}, automate: () => false, gate: voice.gate, out: voice.out, setVolume: () => {}, dispose: () => gp.dispose() });
     }
     // Trance gate: chop the track at N sixteenths.
     if (tr.fx?.gate && tr.fx.gate > 0) {
@@ -130,6 +137,6 @@ export function buildGraph(song: Song, transport: Transport, clips: Clips = new 
   duckPart.start(0); parts.push(duckPart);
 
   transport.bpm.value = song.bpm;
-  const nodes = [masterVol, masterEq, masterFilter, comp, makeup, limiter, clipper, duck, reverb, riserSynth, riserHp, riserGain];
-  return { parts, voices, nodes, schedule };
+  const nodes: { dispose: () => void }[] = [masterVol, masterEq, masterFilter, comp, makeup, limiter, clipper, duck, reverb, riserSynth, riserHp, riserGain, fft, meter, ...trackMeters.values()];
+  return { parts, voices, nodes, schedule, analysis: { fft, meter, tracks: trackMeters }, voiceById: voiceByTrack };
 }

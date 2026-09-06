@@ -45,7 +45,7 @@ async function main() {
 
   // 1. Gate
   console.log(`[acct] ${BASE}/ (no guest flag): expect the account gate`);
-  await call("Page.navigate", { url: `${BASE}/` });
+  await call("Page.navigate", { url: `${BASE}/?typed=1` });
   await waitFor(`document.body.innerText.includes('Create account') && document.body.innerText.includes('Try it without an account')`, 30000, "gate");
   await shot("acct-1-gate");
   // 2. Sign up
