@@ -11,6 +11,7 @@ import analysis, supa
 
 SECRET = os.environ.get("WORKER_SECRET", "")
 MAX_SECONDS = int(os.environ.get("MAX_SECONDS", "480"))
+ALLOW_LINKS = os.environ.get("ALLOW_LINK_DOWNLOAD", "0") == "1"   # server-side downloads from media sites are off by default (terms of service, unreliable from datacenter IPs)
 app = FastAPI(title="producer-stems")
 pool = ThreadPoolExecutor(max_workers=1)
 state = {"queued": 0, "running": None, "done": 0, "failed": 0, "started": time.time()}
@@ -39,6 +40,7 @@ def health():
 def submit(job: Job, x_worker_secret: str = Header(default="")):
     if not SECRET or x_worker_secret != SECRET: raise HTTPException(401, "bad secret")
     if not (job.source.url or job.source.storage_path): raise HTTPException(400, "source.url or source.storage_path required")
+    if job.source.url and not job.source.storage_path and not ALLOW_LINKS: raise HTTPException(400, "links are not accepted; upload the file or capture it in the browser")
     with lock: state["queued"] += 1
     pool.submit(process, job)
     return {"ok": True, "job_id": job.job_id, "queued": state["queued"]}

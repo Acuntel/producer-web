@@ -16,12 +16,12 @@ const OPENERS = [
 
 export function Conversation({
   started, messages, busy, interim, humming, humCountIn, listening, speaking,
-  canVerdict, onVerdict, onHush, onSend, onReference, onSample,
+  canVerdict, onVerdict, onHush, onSend, onReference, onSample, onAnalyze,
 }: {
   started: boolean; messages: Msg[]; busy: boolean; interim: string; humming: boolean;
   humCountIn: number; listening: boolean; speaking: boolean; canVerdict: boolean;
   onVerdict: (v: "liked" | "killed") => void; onHush: () => void; onSend: (t: string) => void;
-  onReference: (f: File) => void; onSample: (f: File) => void;
+  onReference: (f: File) => void; onSample: (f: File) => void; onAnalyze?: () => void;
 }) {
   const [input, setInput] = useState("");
   const [attachOpen, setAttachOpen] = useState(false);
@@ -125,6 +125,7 @@ export function Conversation({
                 <div className="panel absolute bottom-11 left-0 z-50 w-56 animate-fade-up overflow-hidden rounded-xl p-1">
                   <MenuItem icon="headphones" title="Reference track" hint="It listens and compares" onClick={() => { setAttachOpen(false); refInput.current?.click(); }} />
                   <MenuItem icon="mic" title="Sample or vocal" hint="Adds it as a track" onClick={() => { setAttachOpen(false); clipInput.current?.click(); }} />
+                  {onAnalyze && <MenuItem icon="scissors" title="Analyze a record" hint="Link or file. Stems, drums, the DNA" onClick={() => { setAttachOpen(false); onAnalyze(); }} />}
                 </div>
               </>
             )}
@@ -160,7 +161,7 @@ export function Conversation({
   );
 }
 
-function MenuItem({ icon, title, hint, onClick }: { icon: "headphones" | "mic"; title: string; hint: string; onClick: () => void }) {
+function MenuItem({ icon, title, hint, onClick }: { icon: "headphones" | "mic" | "scissors"; title: string; hint: string; onClick: () => void }) {
   return (
     <button onClick={onClick} className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-s2">
       <Icon name={icon} size={16} className="shrink-0 text-ink-3" />

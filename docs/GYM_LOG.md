@@ -82,3 +82,30 @@ Three harnesses were green (brain battery 11/11 local and live, e2e ALL PASSED, 
 - A collapsed disclosure removes its text from `innerText` and any text-scraping step fails.
 - `JSX.Element` is not global under React 19 + TS 5.7; use `ReactElement`.
 - A `-mx-1` bleed on a scroller caused a real 8px horizontal overflow. Pad, do not bleed.
+
+## 2026-09-06: V10, the "vibe music" round (accounts, streaming, stems)
+
+Brady's brief: use it as a user and find what is glitchy; accounts and projects like a drive; bring your own API key; skills that teach the model to analyze music; pull one drum or synth out of a real record; say it and it happens. Plan: docs/ROUND_0906_MASTERPROMPT.md.
+
+### Measured on prod before the round (Chrome, as a user)
+- "make the bass darker and heavier": 12.8 s of dead air, then the whole reply at once.
+- New song rollout: 11 tracks in about 2 min, measured -4.6 LUFS at peak 0.0 dBFS (crushed; the mix check had no upper bound).
+- Hook step JSON truncated and the parser's fallback SPOKE the raw JSON. Craft step: 5 ops rejected on both attempts and the retry never saw which. Hook check rejected the hoover stab hook twice.
+- Stale "listen for" hint carried onto the new song. "plain" variant chip rendered as debug text in a lane.
+
+### Shipped (commit 3205844 + this one)
+- Streaming brain: /api/chat answers NDJSON; the first sentence is spoken while the ops finish. Probe on the seed: first words 3.9 s, ops 5.5 s.
+- Glitch fixes: safeSay never speaks JSON; step route retries a truncated reply terse; useRollout feeds REJECTED OPS with the real section and track ids into the retry; hook check accepts a stab hook in stab-led lanes; mix check flags above -5.5 LUFS; lib/song/level.ts leveler pulls the master toward -8 LUFS after hearing; hint and A/B cleared on a new record; variant chips only for playlists.
+- Accounts on Supabase (new org The Producer, project eqskttzzncshzplpzwzi): email sign-in gate with a guest path, a version per auto-save, Projects sheet (search, open, rename, duplicate, delete, new), Settings with the user's own Anthropic and ElevenLabs keys validated live and AES-GCM encrypted at rest. Every brain route prefers the user's key.
+- Skills injected per intent from knowledge/skills (dance science with citations, breakdown, sampling and stems, vocals, genres), kept out of the cached system prefix.
+- Stems worker on Railway (producer-stems, FastAPI + demucs htdemucs + one-shot slicer): link or file in; four stems, kick/snare/hat/perc one-shots with the kick's fundamental, tempo, key, blocks and best 8 bars out. Analyze sheet in the composer menu; "Use this kick" puts the sliced sample on the kick track (voices.ts plays a clip on any drum role) tuned toward the song root; "Loop the best 8 bars" adds a warped audio track; the producer gets a hidden breakdown ask and the song-breakdown skill.
+
+### Gates
+- tsc clean, next build green, 57/57 unit tests, node tests/e2e.mjs ALL PASSED local and prod, node tests/accounts.e2e.mjs ALL PASSED (sign-up, adoption, version row, rename, key validation, sign-out, cascade cleanup), screenshots at 390 and 1440 looked at (gate, studio, projects, account, analyze).
+- Stems on the live worker: Demo Track 1.mp3 through the sheet, job done in about 3 min (demucs 86 s on Railway CPU vs 28 s on the Mac), 4 stems + 4 one-shots as clips rows.
+
+### Traps
+- innerText applies CSS text-transform: an `.eyebrow` heading reads back UPPERCASE to a harness. Match case-insensitively.
+- The Bash safety hook blocks any command text that contains the recursive force remove of a root path, even inside a heredoc or a comment. Use apt-get clean in Dockerfiles.
+- `vercel env add` with a JWT value prompted and silently added nothing; the REST upsert worked.
+- Two Chrome harnesses at once kill each other's profiles.

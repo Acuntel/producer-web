@@ -57,15 +57,18 @@ def analyze(path: str) -> dict:
         bar_energy.append(float(rms[m].mean()) if m.any() else 0.0)
     be = np.array(bar_energy)
     if be.max() > 0: be = be / be.max()
-    best_start, best_val = 0, -1.0
-    for b in range(0, max(1, n_bars - 7)):
-        v = float(be[b:b + 8].mean())
-        if v > best_val: best_val, best_start = v, b
+    # Best 8 bars: the loudest window; on a near tie (within 5 percent) prefer a window that starts on an
+    # 8-bar boundary after the first block, which is where a record's real hook usually lives.
+    windows = [(float(be[b:b + 8].mean()), b) for b in range(0, max(1, n_bars - 7))]
+    best_val, best_start = max(windows)
+    aligned = [(v, b) for v, b in windows if b % 8 == 0 and b >= 8 and v >= best_val - 0.05]
+    if aligned: best_val, best_start = max(aligned, key=lambda t: (t[0], -t[1]))
     # Rough structure: 8-bar blocks labelled by energy; the drop is the first block at or above 0.85 after a lower one.
     blocks = [{"bar": b, "at": round(b * bar_sec, 2), "energy": round(float(be[b:b + 8].mean()), 2)} for b in range(0, n_bars, 8)]
+    # A drop needs a quieter block before it; a record that opens at full energy has no drop to point at.
     drop_at = None
     for i, blk in enumerate(blocks):
-        if blk["energy"] >= 0.85 and (i == 0 or blocks[i - 1]["energy"] < blk["energy"] - 0.15):
+        if i > 0 and blk["energy"] >= 0.85 and blocks[i - 1]["energy"] < blk["energy"] - 0.15:
             drop_at = blk["at"]; break
     return {
         "bpm": round(bpm, 1), "key": key, "keyConfidence": key_conf, "durationSec": round(duration, 2),

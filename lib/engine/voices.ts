@@ -98,16 +98,19 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: 
 
   let trigger: Voice["trigger"];
   const kitSound: KitSound | null = ["kick", "clap", "snare", "hat", "openhat", "perc"].includes(role) ? (role as KitSound) : null;
-  if (kit && kitSound && !p.wave) {
+  // A drum track carrying its own clip (a one-shot sliced from a record) plays that sound; else the kit; else the synth.
+  const drumBuf = kitSound ? (track.clip && clip ? clip : kit && !p.wave ? kit[kitSound] : undefined) : undefined;
+  if (kitSound && drumBuf) {
     // Sampled drums: one Player per voice, velocity to gain, tune to rate, optional decay shaping.
-    const player = new Tone.Player(kit[kitSound]);
+    const player = new Tone.Player(drumBuf);
     const decayGain = new Tone.Gain(1);
     player.connect(decayGain); decayGain.connect(head); disp.push(player, decayGain);
-    const rate = Math.pow(2, (p.drumTune ?? 0) / 12);
+    const rate = Math.pow(2, ((p.drumTune ?? 0) + (track.clip && clip ? track.clip.semitones ?? 0 : 0)) / 12);
     const dec = p.drumDecay;
+    const clipGain = track.clip && clip ? track.clip.gainDb ?? 0 : 0;
     trigger = (n, t) => {
       player.playbackRate = rate;
-      player.volume.value = 20 * Math.log10(Math.max(0.03, vel(n)));
+      player.volume.value = clipGain + 20 * Math.log10(Math.max(0.03, vel(n)));
       if (dec) { decayGain.gain.cancelScheduledValues(t); decayGain.gain.setValueAtTime(1, t); decayGain.gain.exponentialRampToValueAtTime(0.001, t + dec); }
       try { player.start(t); } catch { /* overlapping start */ }
     };

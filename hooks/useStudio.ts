@@ -140,6 +140,15 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   }, [autoSave, getEngine, refreshEars, started]);
   setSongRef.current = setSong;
   // Opening a saved project or version: no history entry, no re-save of what was just loaded.
+  // Direct edits from studio surfaces (the analyze sheet, one-shot picks): ops in, saved, heard, logged for the brain.
+  const edit = useCallback(async (ops: unknown[], label: string) => {
+    const res = applyOps(songRef.current, ops);
+    if (res.applied === 0) { flash("That did not apply"); return false; }
+    await setSong(res.song, { label });
+    localMovesRef.current.push(label);
+    return true;
+  }, [flash, setSong]);
+  const registerClip = useCallback((c: ClipMeta) => setClips((x) => (x.some((y) => y.id === c.id) ? x : [...x, c])), []);
   const loadSong = useCallback(async (s: Song) => { await setSong(migrateSong(s) ?? s, { label: `open ${s.title}`, noHistory: true, noSnapshot: true }); flash(`Opened ${s.title}`); if (started) say(`Opened ${s.title}. Where were we?`); }, [flash, say, setSong, started]);
   const getSong = useCallback(() => songRef.current, []);
 
@@ -326,5 +335,5 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const { addReference, addClip } = useUploads({ flash, send, setSong, setClips, factsRef, referenceRef, setReference, setDeltaText, getSong: () => songRef.current });
 
   return { song, messages, busy, started, starting, paused, nowSection, beat, library, clips, facts, hearing, reference, deltaText, listenHint, toast, lastMoveId, rendering, ab, score, canUndo, canRedo, rollout,
-    boot, send, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong };
+    boot, send, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip };
 }

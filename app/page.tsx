@@ -13,6 +13,8 @@ import { StudioPanel } from "@/components/StudioPanel";
 import { Conversation } from "@/components/Conversation";
 import { ProjectsSheet } from "@/components/ProjectsSheet";
 import { AccountSheet } from "@/components/AccountSheet";
+import { AnalyzeSheet } from "@/components/AnalyzeSheet";
+import { useStems } from "@/hooks/useStems";
 import { IconButton } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import type { Phase } from "@/components/Orb";
@@ -28,6 +30,7 @@ export default function Studio() {
   const studio = useStudio(voice.say, (bpm, beats) => hum.record(bpm, beats), (s, m) => snapshotRef.current(s, m));
   const projects = useProjects({ user: account.user, loadSong: studio.loadSong, getSong: studio.getSong, localLibrary: studio.library, flash: studio.flash });
   snapshotRef.current = projects.snapshot;
+  const stems = useStems({ user: account.user, projectId: projects.current?.id ?? null, flash: studio.flash, edit: studio.edit, send: studio.send, registerClip: studio.registerClip, getSong: studio.getSong });
   useEffect(() => { sendRef.current = (t) => void studio.send(t); }, [studio]);
   const critic = useCritic({
     song: studio.song, facts: studio.facts, reference: studio.reference,
@@ -36,6 +39,7 @@ export default function Studio() {
 
   const [showProjects, setShowProjects] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
+  const [showAnalyze, setShowAnalyze] = useState(false);
   const { song, started, paused, starting } = studio;
   const beatSec = 60 / song.bpm;
   const playing = started && !paused;
@@ -131,6 +135,7 @@ export default function Studio() {
             onSend={(t) => void studio.send(t)}
             onReference={(f) => void studio.addReference(f)}
             onSample={(f) => void studio.addClip(f)}
+            onAnalyze={account.enabled ? () => setShowAnalyze(true) : undefined}
           />
         </div>
       </div>
@@ -156,6 +161,7 @@ export default function Studio() {
       )}
 
       {showAccount && <AccountSheet account={account} mode="sheet" onClose={() => setShowAccount(false)} />}
+      {showAnalyze && <AnalyzeSheet stems={stems} signedIn={!!account.user} onSignIn={() => { setShowAnalyze(false); setShowAccount(true); }} onClose={() => setShowAnalyze(false)} />}
       {gate && <AccountSheet account={account} mode="gate" onClose={() => {}} />}
 
       {studio.toast && (
