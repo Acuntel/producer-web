@@ -132,6 +132,7 @@ export default function Studio() {
               onRetryMic={() => { voice.retry(); }} muted={muted} onMute={(m) => { setMuted(m); voice.setMuted(m); }}
               interim={voice.interim} lastHeard={voice.lastHeard} messages={studio.messages} speaking={voice.speaking} busy={studio.busy} onHush={voice.hush}
               paused={paused} ignored={studio.ignored} ignoredCount={studio.ignoredCount} onThatWasForMe={studio.thatWasForMe}
+              brainDown={studio.brainDown} onOpenAccount={account.enabled ? () => setShowAccount(true) : undefined}
               humming={hum.recording} humCountIn={hum.countIn} canVerdict={!!studio.lastMoveId} onVerdict={studio.verdict}
               ab={studio.ab} onPickAb={(k) => studio.pickAb(k as never)}
               onAnalyze={account.enabled ? () => setShowAnalyze(true) : undefined}

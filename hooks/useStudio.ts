@@ -65,6 +65,9 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const [ab, setAb] = useState<AB>(null); const [score, setScore] = useState("");
   const [canUndo, setCanUndo] = useState(false); const [canRedo, setCanRedo] = useState(false);
   const [ignored, setIgnored] = useState<{ text: string; at: number } | null>(null);
+  const [brainDown, setBrainDownState] = useState<"credits" | "key" | null>(null);
+  const brainDownRef = useRef<"credits" | "key" | null>(null);
+  const setBrainDown = (v: "credits" | "key" | null) => { brainDownRef.current = v; setBrainDownState(v); };
   const [moves, setMoves] = useState<LaneMove[]>([]);
   const [ignoredCount, setIgnoredCount] = useState(0);
   const lastMoveAtRef = useRef(0);
@@ -342,6 +345,9 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
         say(s);
       }) as Reply;
       if (isE2E()) { const w = window as unknown as { __brain?: unknown[] }; (w.__brain ??= []).push(data); }
+      if (data.detail && /credit|billing/i.test(data.detail)) setBrainDown("credits");
+      else if (data.detail && /invalid.*api.?key|authentication|401/i.test(data.detail)) setBrainDown("key");
+      else if (brainDownRef.current) setBrainDown(null);
       if (early === null) setMessages((m) => [...m, { role: "assistant", content: data.say }]);
       else if (early !== data.say) setMessages((m) => { const c = [...m]; for (let i = c.length - 1; i >= 0; i--) if (c[i].role === "assistant") { c[i] = { role: "assistant", content: data.say }; break; } return c; });
       let ns: Song | null = null, applied = 0, skipped = 0;
@@ -472,5 +478,5 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const { addReference, addClip } = useUploads({ flash, send, setSong, setClips, factsRef, referenceRef, setReference, setDeltaText, getSong: () => songRef.current });
 
   return { song, messages, busy, started, starting, paused, nowSection, beat, library, clips, facts, hearing, reference, deltaText, listenHint, toast, lastMoveId, rendering, ab, score, canUndo, canRedo, rollout,
-    boot, send, sendVoice, ignored, ignoredCount, thatWasForMe, loadChat, newSession, setReferenceBuffer, moves, previewClip, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, setVolume, toggleTrack };
+    boot, send, sendVoice, ignored, ignoredCount, thatWasForMe, loadChat, newSession, setReferenceBuffer, moves, previewClip, brainDown, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, setVolume, toggleTrack };
 }

@@ -18,7 +18,7 @@ export function ListenPanel({
   interim, lastHeard, messages, speaking, busy, onHush,
   humming, humCountIn, canVerdict, onVerdict, ab, onPickAb,
   onAnalyze, onReference, onSample, typed, onSend,
-  paused, ignored, ignoredCount, onThatWasForMe,
+  paused, ignored, ignoredCount, onThatWasForMe, brainDown, onOpenAccount,
 }: {
   started: boolean; starting: boolean; phase: Phase; running: boolean; beatSec: number; onOrb: () => void;
   micLevel: number; micPeak: number; micStatus: MicStatus; voiceStatus: VoiceStatus; heardSomething: boolean; onRetryMic: () => void; muted: boolean; onMute: (m: boolean) => void;
@@ -26,7 +26,7 @@ export function ListenPanel({
   humming: boolean; humCountIn: number; canVerdict: boolean; onVerdict: (v: "liked" | "killed") => void;
   ab: { playing: string } | null; onPickAb: (k: string) => void;
   onAnalyze?: () => void; onReference: (f: File) => void; onSample: (f: File) => void; typed?: boolean; onSend?: (t: string) => void;
-  paused?: boolean; ignored?: { text: string; at: number } | null; ignoredCount?: number; onThatWasForMe?: () => void;
+  paused?: boolean; ignored?: { text: string; at: number } | null; ignoredCount?: number; onThatWasForMe?: () => void; brainDown?: "credits" | "key" | null; onOpenAccount?: () => void;
 }) {
   const refInput = useRef<HTMLInputElement>(null);
   const clipInput = useRef<HTMLInputElement>(null);
@@ -61,6 +61,13 @@ export function ListenPanel({
         )}
       </div>
 
+      {started && brainDown && (
+        <div className="mx-4 mb-3 rounded-xl border border-warn/40 bg-warn/10 px-3.5 py-3">
+          <div className="text-sm font-semibold text-warn">{brainDown === "credits" ? "The producer's brain is out of credits." : "The producer's API key is not working."}</div>
+          <p className="mt-1 text-xs leading-relaxed text-ink-2">{brainDown === "credits" ? "The music keeps playing and every move is saved, but nothing new gets written until the account is topped up. Add credits at console.anthropic.com, or use your own key." : "Check the key in your account settings."}</p>
+          {onOpenAccount && <button onClick={onOpenAccount} className="mt-2 text-xs font-medium text-accent hover:underline">Use my own API key</button>}
+        </div>
+      )}
       {started && (
         <>
           {/* You, then the producer. Large, live. */}
