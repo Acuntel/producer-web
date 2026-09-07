@@ -8,10 +8,11 @@ from dataclasses import asdict
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 import analysis, supa
-import hearing, finder, fingerprint
+import hearing, finder, fingerprint, identify
 
 SECRET = os.environ.get("WORKER_SECRET", "")
 MAX_SECONDS = int(os.environ.get("MAX_SECONDS", "480"))
+TRACKLIST_MAX_SECONDS = int(os.environ.get("TRACKLIST_MAX_SECONDS", "7200"))   # a two hour mix, identified in cuts, never separated
 ALLOW_LINKS = os.environ.get("ALLOW_LINK_DOWNLOAD", "0") == "1"   # server-side downloads from media sites are off by default (terms of service, unreliable from datacenter IPs)
 app = FastAPI(title="producer-stems")
 pool = ThreadPoolExecutor(max_workers=int(os.environ.get("JOB_WORKERS", "2")))
@@ -37,12 +38,13 @@ class Job(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "model": "htdemucs", **state, "uptimeSec": int(time.time() - state["started"])}
+    return {"ok": True, "model": "htdemucs", "cpus": os.cpu_count(), "workers": pool._max_workers, **state, "uptimeSec": int(time.time() - state["started"])}
 
 
 @app.post("/jobs")
 def submit(job: Job, x_worker_secret: str = Header(default="")):
     if not SECRET or x_worker_secret != SECRET: raise HTTPException(401, "bad secret")
+    if job.kind not in ("stems", "hear", "tracklist"): raise HTTPException(400, "unknown job kind")
     if job.kind == "hear":
         if not job.source.stem_paths or "mix" not in job.source.stem_paths: raise HTTPException(400, "hear needs stem_paths with a mix")
     elif not (job.source.url or job.source.storage_path or job.source.query): raise HTTPException(400, "source.url, source.storage_path or source.query required")
@@ -50,6 +52,25 @@ def submit(job: Job, x_worker_secret: str = Header(default="")):
     with lock: state["queued"] += 1
     pool.submit(process, job)
     return {"ok": True, "job_id": job.job_id, "queued": state["queued"]}
+
+
+class IdentifyIn(BaseModel):
+    storage_path: str           # a short capture or upload in the clips bucket (the middle 12 s is enough)
+
+
+@app.post("/identify")
+def identify_endpoint(x: IdentifyIn, x_worker_secret: str = Header(default="")):
+    """What record is this: name, artist, ISRC, label, year, position in the record, the DJ's pitch. About a second."""
+    if not SECRET or x_worker_secret != SECRET: raise HTTPException(401, "bad secret")
+    tmp = tempfile.mkdtemp(prefix="producer-ident-")
+    try:
+        raw = os.path.join(tmp, "q.bin"); supa.download(x.storage_path, raw)
+        t0 = time.time()
+        r = identify.identify_file(raw)
+        known = supa.cache_find_identity(r["key"]) if r else None
+        return {"identity": r, "name": identify.display_name(r), "cached": bool(known), "ms": int((time.time() - t0) * 1000)}
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 class FindIn(BaseModel):
@@ -99,9 +120,10 @@ def match(m: MatchIn, x_worker_secret: str = Header(default="")):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def fetch_source(job: Job, tmp: str) -> tuple[str, str, str | None]:
+def fetch_source(job: Job, tmp: str, max_seconds: int = MAX_SECONDS, mono16: bool = False) -> tuple[str, str, str | None]:
     """Returns (wav path, display name, resolved source url or None)."""
     src = job.source
+    want = "mix" if job.kind == "tracklist" else None
     if src.storage_path:
         raw = os.path.join(tmp, "upload.bin")
         supa.download(src.storage_path, raw)
@@ -118,7 +140,7 @@ def fetch_source(job: Job, tmp: str) -> tuple[str, str, str | None]:
         if src.url:
             targets = [src.url]
         else:
-            ranked = finder.search(src.query or "", None, None)
+            ranked = finder.search(src.query or "", None, want)
             targets = []
             for c in ranked[:6]:
                 u = c.url
@@ -130,7 +152,7 @@ def fetch_source(job: Job, tmp: str) -> tuple[str, str, str | None]:
         raw = None; name = src.name; resolved = None
         for target in targets:
             out = os.path.join(tmp, "dl.%(ext)s")
-            cmd = ["yt-dlp", "-f", "bestaudio/best", "--ignore-errors", "--max-downloads", "1", "--match-filter", f"duration <? {MAX_SECONDS + 420}", "-o", out, "--print", "title", "--no-simulate", "--quiet", "--no-warnings", "--socket-timeout", "20"]
+            cmd = ["yt-dlp", "-f", "bestaudio/best", "--ignore-errors", "--max-downloads", "1", "--match-filter", f"duration <? {max_seconds + 420}", "-o", out, "--print", "title", "--no-simulate", "--quiet", "--no-warnings", "--socket-timeout", "20"]
             if not target.startswith("scsearch"): cmd.append("--no-playlist")
             proxy = os.environ.get("YTDLP_PROXY")
             if proxy: cmd += ["--proxy", proxy]
@@ -149,9 +171,27 @@ def fetch_source(job: Job, tmp: str) -> tuple[str, str, str | None]:
         if not raw:
             raise RuntimeError("download failed: " + " | ".join(errors)[-600:])
     wav = os.path.join(tmp, "src.wav")
-    analysis.ffmpeg_to_wav(raw, wav, MAX_SECONDS)
+    if mono16: subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", raw, "-t", str(max_seconds), "-ac", "1", "-ar", "16000", "-vn", wav], check=True)
+    else: analysis.ffmpeg_to_wav(raw, wav, max_seconds)
     os.remove(raw)
     return wav, name, resolved
+
+
+def process_tracklist(job: Job, tmp: str) -> None:
+    """A DJ mix in, its tracklist out: every 20 s a 12 s cut is identified, hits merge into entries with
+    timestamps, the DJ's pitch adjustment and a ready query for the finder. Nothing is separated."""
+    t0 = time.time()
+    wav, name, resolved = fetch_source(job, tmp, TRACKLIST_MAX_SECONDS, mono16=True)
+    duration = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", wav], capture_output=True, text=True).stdout.strip() or 0)
+    t_fetch = time.time() - t0
+    supa.update_job(job.job_id, progress=20, result={"kind": "tracklist", "name": name, "durationSec": round(duration, 1), "stage": "identifying"})
+    def prog(done: int, total: int):
+        try: supa.update_job(job.job_id, progress=20 + int(75 * done / max(1, total)))
+        except Exception: pass
+    entries = identify.tracklist(wav, duration, progress=prog)
+    final = {"kind": "tracklist", "name": name, "durationSec": round(duration, 1), "tracklist": entries, "sourceUrl": resolved,
+             "timing": {"fetchSec": round(t_fetch, 1), "identifySec": round(time.time() - t0 - t_fetch, 1), "cuts": len(range(0, max(1, int(duration - identify.CUT_SEC / 2)), int(identify.STEP_SEC)))}}
+    supa.update_job(job.job_id, status="done", progress=100, result=final)
 
 
 def process_hear(job: Job, tmp: str) -> None:
@@ -173,9 +213,11 @@ def process_hear(job: Job, tmp: str) -> None:
 def process(job: Job) -> None:
     tmp = tempfile.mkdtemp(prefix="producer-job-")
     with lock: state["queued"] -= 1; state["running"] = job.job_id
-    if job.kind == "hear":
+    if job.kind in ("hear", "tracklist"):
         try:
-            supa.update_job(job.job_id, status="running", progress=5); process_hear(job, tmp)
+            supa.update_job(job.job_id, status="running", progress=5)
+            if job.kind == "hear": process_hear(job, tmp)
+            else: process_tracklist(job, tmp)
             with lock: state["done"] += 1
         except Exception as e:
             traceback.print_exc()
@@ -208,21 +250,49 @@ def process(job: Job) -> None:
             supa.update_job(job.job_id, status="done", progress=100, result=result)
             with lock: state["done"] += 1
             return
-        wav, name, resolved = fetch_source(job, tmp)
-        supa.update_job(job.job_id, progress=15)
+        timing: dict[str, float] = {}; t0 = time.time()
+        def stamp(k: str):
+            timing[k] = round(time.time() - t0, 1)
+        wav, name, resolved = fetch_source(job, tmp); stamp("fetched")
+        supa.update_job(job.job_id, progress=12, result={"stage": "identifying"})
+        # Who is this: a name, artist, ISRC, label and year from the sound itself, in about a second. Uploads and
+        # captures get their true name; a record identified before is served from the cache from any copy.
+        ident = None
+        try: ident = identify.identify_file(wav)
+        except Exception as e: print("identify failed", e, flush=True)
+        stamp("identified")
+        if ident and (not job.source.name or job.source.storage_path): name = identify.display_name(ident) or name
+        known_id = supa.cache_find_identity(ident["key"]) if ident and ident.get("confident") else None
+        if known_id:
+            print(f"cache hit by identity {ident['key']} {name}", flush=True)
+            if resolved:
+                try: supa.cache_add_url(known_id["fingerprint"], resolved)
+                except Exception: pass
+            result = supa.adopt_cached(job.owner, job.project_id, name, known_id)
+            result["name"] = name; result["cached"] = True; result["facts"] = (known_id.get("result") or {}).get("facts"); result["identity"] = ident; result["timing"] = timing
+            supa.update_job(job.job_id, status="done", progress=100, result=result)
+            with lock: state["done"] += 1
+            return
+        supa.update_job(job.job_id, progress=15, result={"stage": "listening: tempo, key, structure", "identity": ident, "name": name})
         facts = analysis.analyze(wav)
         facts["name"] = name
+        if ident: facts["identity"] = ident
+        stamp("analyzed")
         # The cache: a record anyone already analyzed is served from storage, no separation.
         rawfp = fingerprint.raw_fingerprint(wav)
         cached = supa.cache_find(rawfp[0], rawfp[1]) if rawfp else None
+        stamp("fingerprinted")
         if cached:
             print("cache hit by fingerprint", flush=True)
             if resolved:
                 try: supa.cache_add_url(cached["fingerprint"], resolved)
                 except Exception: pass
+            if ident and ident.get("confident"):
+                try: supa.cache_set_identity(cached["fingerprint"], ident["key"])
+                except Exception: pass
             supa.update_job(job.job_id, progress=90, result={"facts": facts, "stage": "from cache"})
             result = supa.adopt_cached(job.owner, job.project_id, name, cached)
-            result["facts"] = facts; result["name"] = name; result["cached"] = True
+            result["facts"] = facts; result["name"] = name; result["cached"] = True; result["identity"] = ident; result["timing"] = timing
             supa.update_job(job.job_id, status="done", progress=100, result=result)
             with lock: state["done"] += 1
             return
@@ -233,7 +303,7 @@ def process(job: Job) -> None:
         start = float((facts.get("bestBars") or {}).get("startSec") or 0.0)
         pre = os.path.join(tmp, "preview.wav")
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{max(0.0, start):.3f}", "-t", f"{16 * bar_sec:.3f}", "-i", wav, pre], check=True)
-        pstems = analysis.separate(pre, os.path.join(tmp, "psep"))
+        pstems = analysis.separate(pre, os.path.join(tmp, "psep")); stamp("previewSeparated")
         pshots = analysis.slice_oneshots(pstems["drums"], os.path.join(tmp, "pshots")) if "drums" in pstems else []
         base = f"{job.owner}/stems/{job.job_id}"
         preview_out = []
@@ -243,8 +313,9 @@ def process(job: Job) -> None:
         pshot_out = []
         for sh in pshots:
             pshot_out.append({**asdict(sh), "path": supa.upload(f"{base}/preview-oneshot-{os.path.basename(sh.path)}", sh.path, "audio/wav")})
-        supa.update_job(job.job_id, progress=45, result={"facts": facts, "stage": "separating the whole record", "preview": {"stems": preview_out, "oneshots": pshot_out}})
-        stems = analysis.separate(wav, os.path.join(tmp, "sep"))
+        stamp("previewReady")
+        supa.update_job(job.job_id, progress=45, result={"facts": facts, "stage": "separating the whole record", "preview": {"stems": preview_out, "oneshots": pshot_out}, "timing": timing})
+        stems = analysis.separate(wav, os.path.join(tmp, "sep")); stamp("separated")
         supa.update_job(job.job_id, progress=75, result={"facts": facts, "stage": "slicing", "preview": {"stems": preview_out, "oneshots": pshot_out}})
         shots = analysis.slice_oneshots(stems["drums"], os.path.join(tmp, "shots")) if "drums" in stems else []
         # The ears: per-stem listening, drum and bass transcription, lyrics, descriptors, embeddings.
@@ -252,6 +323,7 @@ def process(job: Job) -> None:
         heard = {}
         try: heard = hearing.hear(wav, stems, facts)
         except Exception as e: heard = {"error": str(e)[:200], "report": ""}
+        stamp("heard")
         embeddings = heard.pop("embeddings", {}) if isinstance(heard, dict) else {}
         supa.update_job(job.job_id, progress=88, result={"facts": facts, "stage": "uploading"})
         rows, stem_out, shot_out = [], [], []
@@ -276,10 +348,11 @@ def process(job: Job) -> None:
         by_path = {c["storage_path"]: c["id"] for c in clips}
         for x in stem_out: x["clipId"] = by_path.get(x["path"])
         for x in shot_out: x["clipId"] = by_path.get(x["path"])
-        final = {"facts": facts, "stems": stem_out, "oneshots": shot_out, "name": name, "hearing": heard}
+        stamp("uploaded")
+        final = {"facts": facts, "stems": stem_out, "oneshots": shot_out, "name": name, "hearing": heard, "identity": ident, "timing": timing}
         supa.update_job(job.job_id, status="done", progress=100, result=final)
         if rawfp:
-            try: supa.cache_put(fingerprint.key_of(rawfp[0]), rawfp[0], rawfp[1], job.owner, base, final, resolved)
+            try: supa.cache_put(fingerprint.key_of(rawfp[0]), rawfp[0], rawfp[1], job.owner, base, final, resolved, ident["key"] if ident and ident.get("confident") else None)
             except Exception as e: print("cache put failed", e, flush=True)
         with lock: state["done"] += 1
     except Exception as e:

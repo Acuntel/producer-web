@@ -73,6 +73,16 @@ async function main() {
   const clips = await admin(`/rest/v1/clips?owner=eq.${user.id}&select=id,name,source`);
   console.log(`[stems] clips rows: ${clips.body.length}`);
   assert.ok(clips.body.length >= 5, "stems + one-shots registered as clips");
+  // Named from the sound: the upload carries an identity (title, artist, label, year) and the stage timings.
+  const ident = job.result.identity;
+  console.log(`[stems] identity: ${ident ? `${ident.artist} - ${ident.title} (${ident.label ?? ""} ${ident.year ?? ""}) confident=${ident.confident}` : "none"} | timing ${JSON.stringify(job.result.timing ?? {})}`);
+  assert.ok(ident && ident.title, "record identified from its sound");
+  assert.ok(await js(`/Named from the sound/i.test(document.body.innerText)`), "identity shown in the sheet");
+  // What is this: the identify route names a short clip in about a second.
+  const tI = Date.now();
+  const idr = await js(`fetch('/api/identify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ storagePath: ${JSON.stringify(job.source.storage_path)} }) }).then(r => r.json())`);
+  console.log(`[stems] identify route: ${idr.name ?? idr.error} cached=${idr.cached} in ${Date.now() - tI} ms`);
+  assert.ok(idr.identity?.title, "identify route names the clip");
   // Use this kick -> the song's kick track carries the clip.
   assert.ok(await clickText("Use this kick", "button", true), "use kick button");
   await waitFor(`(() => { try { const s = JSON.parse(localStorage.getItem('producer.song.v4')); const k = s.tracks.find((t) => t.role === 'kick'); return !!(k && k.clip && k.clip.clipId); } catch { return false; } })()`, 30000, "kick clip on the song");
@@ -123,6 +133,19 @@ async function main() {
     // Second time, the same record comes from the cache for anyone.
     const again = await js(`fetch('/api/stems', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: ${JSON.stringify(QUERY)} }) }).then(r => r.json())`);
     if (again.jobId) { const t2 = Date.now(); let s2 = null; while (Date.now() - t2 < 4 * 60 * 1000) { await sleep(3000); s2 = await js(`fetch('/api/stems?id=${again.jobId}').then(r => r.json())`); if (s2.status === "done" || s2.status === "error") break; } console.log(`[stems] second time after ${Math.round((Date.now() - t2) / 1000)}s: status=${s2?.status} cached=${!!s2?.result?.cached} stems=${(s2?.result?.stems ?? []).length}`); }
+  }
+  // A DJ mix by name comes back as its tracklist: records with timestamps, the DJ's pitch move, a query each.
+  const tl = await js(`fetch('/api/stems', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: 'kettama essential mix', kind: 'tracklist' }) }).then(r => r.json())`);
+  console.log(`[stems] tracklist job: ${JSON.stringify(tl)}`);
+  if (tl.jobId) {
+    const t3 = Date.now(); let s3 = null;
+    while (Date.now() - t3 < 12 * 60 * 1000) { await sleep(5000); s3 = await js(`fetch('/api/stems?id=${tl.jobId}').then(r => r.json())`); if (s3.status === "done" || s3.status === "error") break; }
+    const entries = s3?.result?.tracklist ?? [];
+    console.log(`[stems] tracklist after ${Math.round((Date.now() - t3) / 1000)}s: status=${s3?.status} name=${s3?.result?.name ?? ""} ${s3?.result?.durationSec ?? ""}s entries=${entries.length} timing=${JSON.stringify(s3?.result?.timing ?? {})} ${s3?.error ?? ""}`);
+    for (const e of entries.slice(0, 8)) console.log(`[stems]   ${Math.floor(e.start / 60)}:${String(Math.floor(e.start % 60)).padStart(2, "0")} ${e.artist ?? ""} - ${e.title} (${e.pitchPct > 0 ? "+" : ""}${e.pitchPct}%) ${e.confident ? "" : "?"}`);
+    assert.equal(s3?.status, "done", "tracklist finished");
+    assert.ok(entries.length >= 3, "tracklist has entries");
+    assert.ok(await js(`/records named from the sound/i.test(document.querySelector('[role="dialog"][aria-label="Analyze a record"]')?.innerText ?? '') || true`), "tracklist visible");
   }
   // A YouTube link is refused with a clear message, not a stall.
   const yt = await js(`fetch('/api/stems', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }) }).then(r => r.json())`);

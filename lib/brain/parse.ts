@@ -4,7 +4,7 @@ import type { Song } from "../song/types";
 import { migrateSong } from "../song/migrate";
 import { laneId } from "./laneNames";
 
-export type BrainAction = { type: "play" | "pause" | "goto" | "loop" | "unloop" | "recordHum" | "rollout" | "hear" | "analyze" | "vocal" | "findSound" | "none"; section?: string; bar?: number; beats?: number; track?: string; kind?: string; lane?: string; url?: string; query?: string; prompt?: string; lyrics?: string; lengthMs?: number; from?: "local" | "web" };
+export type BrainAction = { type: "play" | "pause" | "goto" | "loop" | "unloop" | "recordHum" | "rollout" | "hear" | "analyze" | "identify" | "tracklist" | "vocal" | "findSound" | "none"; section?: string; bar?: number; beats?: number; track?: string; kind?: string; lane?: string; url?: string; query?: string; prompt?: string; lyrics?: string; lengthMs?: number; from?: "local" | "web" };
 export type Expectation = { section?: string; metric: string; dir: "up" | "down" };
 export type BrainReply = { say: string; ops: unknown[] | null; song: Song | null; action: BrainAction | null; listen: string | null; expect: Expectation[] | null; alternative: unknown[] | null; raw?: string };
 

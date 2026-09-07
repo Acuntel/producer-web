@@ -80,7 +80,11 @@ def analyze(path: str) -> dict:
 
 def separate(wav_path: str, out_dir: str, model: str = "htdemucs") -> dict[str, str]:
     """Run demucs in a subprocess (its own process keeps torch memory out of the server)."""
-    subprocess.run([sys.executable, "-m", "demucs.separate", "-n", model, "-o", out_dir, "--filename", "{stem}.{ext}", wav_path], check=True)
+    # Measured on the demo record: shifts=1 79 s, shifts=0 56 s, shifts=0 + overlap 0.1 48 s, same stems for our use
+    # (one-shots, loops, listening). SEPARATE_FAST=0 restores demucs' defaults.
+    fast = os.environ.get("SEPARATE_FAST", "1") == "1"
+    extra = ["--shifts", "0", "--overlap", "0.15"] if fast else []
+    subprocess.run([sys.executable, "-m", "demucs.separate", "-n", model, "-o", out_dir, "--filename", "{stem}.{ext}", *extra, wav_path], check=True)
     base = os.path.join(out_dir, model)
     stems = {}
     for name in ("drums", "bass", "vocals", "other"):

@@ -56,6 +56,21 @@ def cache_find_url(url: str) -> dict | None:
     return row
 
 
+def cache_find_identity(identity: str) -> dict | None:
+    """The same record (Shazam key) analyzed before, from any copy or capture: no fingerprint needed."""
+    if not identity: return None
+    r = requests.get(f"{URL}/rest/v1/record_cache?identity=eq.{urllib.parse.quote(identity)}&select=fingerprint,base_path,result,hits&limit=1", headers=_h(), timeout=20)
+    if not r.ok or not r.json(): return None
+    row = r.json()[0]
+    requests.patch(f"{URL}/rest/v1/record_cache?fingerprint=eq.{row['fingerprint']}", headers=_h({"Content-Type": "application/json", "Prefer": "return=minimal"}), data=json.dumps({"hits": (row.get("hits") or 0) + 1}), timeout=10)
+    return row
+
+
+def cache_set_identity(key: str, identity: str) -> None:
+    if not identity: return
+    requests.patch(f"{URL}/rest/v1/record_cache?fingerprint=eq.{key}", headers=_h({"Content-Type": "application/json", "Prefer": "return=minimal"}), data=json.dumps({"identity": identity}), timeout=10)
+
+
 def cache_find(raw_fp: list[int], duration: float) -> dict | None:
     """Rows within a few seconds of the same duration, compared by fingerprint similarity."""
     import fingerprint as fpmod
@@ -74,7 +89,7 @@ def cache_find(raw_fp: list[int], duration: float) -> dict | None:
     return None
 
 
-def cache_put(key: str, raw_fp: list[int], duration: float, owner: str, base_path: str, result: dict, source_url: str | None = None) -> None:
+def cache_put(key: str, raw_fp: list[int], duration: float, owner: str, base_path: str, result: dict, source_url: str | None = None, identity: str | None = None) -> None:
     # Copy the finished files to the shared area so any user can read them, then record the result.
     shared = f"shared/records/{key}"
     for kind, items in (("stems", result.get("stems") or []), ("oneshots", result.get("oneshots") or [])):
@@ -82,7 +97,7 @@ def cache_put(key: str, raw_fp: list[int], duration: float, owner: str, base_pat
             src = it["path"]; dst = f"{shared}/{os.path.basename(src)}"
             rr = requests.post(f"{URL}/storage/v1/object/copy", headers=_h({"Content-Type": "application/json"}), data=json.dumps({"bucketId": BUCKET, "sourceKey": src, "destinationKey": dst}), timeout=60)
             if rr.ok: it["path"] = dst
-    body = {"fingerprint": key, "base_path": shared, "raw": raw_fp, "duration_sec": round(duration, 2), "result": {k: v for k, v in result.items() if k in ("facts", "stems", "oneshots", "hearing", "name")}, "first_owner": owner, "source_urls": [source_url] if source_url else []}
+    body = {"fingerprint": key, "base_path": shared, "raw": raw_fp, "duration_sec": round(duration, 2), "result": {k: v for k, v in result.items() if k in ("facts", "stems", "oneshots", "hearing", "name")}, "first_owner": owner, "source_urls": [source_url] if source_url else [], "identity": identity or None}
     requests.post(f"{URL}/rest/v1/record_cache", headers=_h({"Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal"}), data=json.dumps(body), timeout=30)
 
 

@@ -11,7 +11,8 @@ export async function POST(req: Request) {
   if (!user || !admin) return Response.json({ error: "Sign in to analyze a record." }, { status: 401 });
   const worker = process.env.STEMS_WORKER_URL, secret = process.env.STEMS_WORKER_SECRET;
   if (!worker || !secret) return Response.json({ error: "The analysis worker is not configured yet." }, { status: 503 });
-  const body = (await req.json().catch(() => ({}))) as { url?: string; storagePath?: string; name?: string; query?: string; projectId?: string | null; kind?: "stems" | "hear"; stemPaths?: Record<string, string> };
+  const body = (await req.json().catch(() => ({}))) as { url?: string; storagePath?: string; name?: string; query?: string; projectId?: string | null; kind?: "stems" | "hear" | "tracklist"; stemPaths?: Record<string, string> };
+  const kind = body.kind === "tracklist" ? "tracklist" : "stems";
   if (body.kind === "hear") {
     // Our own render: the browser rendered the mix and its stem groups; the worker only listens.
     const paths = body.stemPaths ?? {};
@@ -32,10 +33,10 @@ export async function POST(req: Request) {
   if (url && !/^https?:\/\/\S+$/i.test(url)) return Response.json({ error: "That does not look like a link." }, { status: 400 });
   if (storagePath && !storagePath.startsWith(`${user.id}/`)) return Response.json({ error: "That file is not yours." }, { status: 403 });
   const source = { url: url || undefined, storage_path: storagePath || undefined, query: query || undefined, name: body.name?.slice(0, 120) };
-  const { data: job, error } = await admin.from("jobs").insert({ owner: user.id, project_id: body.projectId ?? null, kind: "stems", source, status: "queued" }).select("id").single();
+  const { data: job, error } = await admin.from("jobs").insert({ owner: user.id, project_id: body.projectId ?? null, kind, source, status: "queued" }).select("id").single();
   if (error || !job) return Response.json({ error: error?.message ?? "could not create the job" }, { status: 500 });
   try {
-    const r = await fetch(`${worker.replace(/\/$/, "")}/jobs`, { method: "POST", headers: { "Content-Type": "application/json", "X-Worker-Secret": secret }, body: JSON.stringify({ job_id: job.id, owner: user.id, project_id: body.projectId ?? null, source }) });
+    const r = await fetch(`${worker.replace(/\/$/, "")}/jobs`, { method: "POST", headers: { "Content-Type": "application/json", "X-Worker-Secret": secret }, body: JSON.stringify({ job_id: job.id, owner: user.id, project_id: body.projectId ?? null, kind, source }) });
     if (!r.ok) throw new Error(`worker ${r.status}`);
   } catch (e) {
     await admin.from("jobs").update({ status: "error", error: e instanceof Error ? e.message : "worker unreachable" }).eq("id", job.id);
@@ -50,7 +51,7 @@ export async function GET(req: Request) {
   if (!user || !admin) return Response.json({ error: "not signed in" }, { status: 401 });
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return Response.json({ error: "id required" }, { status: 400 });
-  const { data, error } = await admin.from("jobs").select("id, status, progress, result, error, source, created_at").eq("id", id).eq("owner", user.id).maybeSingle();
+  const { data, error } = await admin.from("jobs").select("id, kind, status, progress, result, error, source, created_at").eq("id", id).eq("owner", user.id).maybeSingle();
   if (error) return Response.json({ error: error.message }, { status: 500 });
   if (!data) return Response.json({ error: "no such job" }, { status: 404 });
   return Response.json(data);
