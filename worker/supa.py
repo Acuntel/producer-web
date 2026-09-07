@@ -1,6 +1,6 @@
 """Supabase REST helpers for the worker (service role; never exposed to a browser)."""
 from __future__ import annotations
-import json, os
+import json, os, urllib.parse
 import requests
 
 URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
@@ -45,6 +45,17 @@ def insert_clips(rows: list[dict]) -> list[dict]:
 
 
 # --- The fingerprint cache: one analyzed record serves everyone who finds it again. ---
+def cache_find_url(url: str) -> dict | None:
+    """The same source link seen before: no download, no fingerprint."""
+    if not url or not url.startswith("http"): return None
+    q = urllib.parse.quote(json.dumps([url]))
+    r = requests.get(f"{URL}/rest/v1/record_cache?source_urls=cs.{q}&select=fingerprint,base_path,result,hits&limit=1", headers=_h(), timeout=20)
+    if not r.ok or not r.json(): return None
+    row = r.json()[0]
+    requests.patch(f"{URL}/rest/v1/record_cache?fingerprint=eq.{row['fingerprint']}", headers=_h({"Content-Type": "application/json", "Prefer": "return=minimal"}), data=json.dumps({"hits": (row.get("hits") or 0) + 1}), timeout=10)
+    return row
+
+
 def cache_find(raw_fp: list[int], duration: float) -> dict | None:
     """Rows within a few seconds of the same duration, compared by fingerprint similarity."""
     import fingerprint as fpmod
@@ -63,7 +74,7 @@ def cache_find(raw_fp: list[int], duration: float) -> dict | None:
     return None
 
 
-def cache_put(key: str, raw_fp: list[int], duration: float, owner: str, base_path: str, result: dict) -> None:
+def cache_put(key: str, raw_fp: list[int], duration: float, owner: str, base_path: str, result: dict, source_url: str | None = None) -> None:
     # Copy the finished files to the shared area so any user can read them, then record the result.
     shared = f"shared/records/{key}"
     for kind, items in (("stems", result.get("stems") or []), ("oneshots", result.get("oneshots") or [])):
@@ -71,8 +82,16 @@ def cache_put(key: str, raw_fp: list[int], duration: float, owner: str, base_pat
             src = it["path"]; dst = f"{shared}/{os.path.basename(src)}"
             rr = requests.post(f"{URL}/storage/v1/object/copy", headers=_h({"Content-Type": "application/json"}), data=json.dumps({"bucketId": BUCKET, "sourceKey": src, "destinationKey": dst}), timeout=60)
             if rr.ok: it["path"] = dst
-    body = {"fingerprint": key, "base_path": shared, "raw": raw_fp, "duration_sec": round(duration, 2), "result": {k: v for k, v in result.items() if k in ("facts", "stems", "oneshots", "hearing", "name")}, "first_owner": owner}
+    body = {"fingerprint": key, "base_path": shared, "raw": raw_fp, "duration_sec": round(duration, 2), "result": {k: v for k, v in result.items() if k in ("facts", "stems", "oneshots", "hearing", "name")}, "first_owner": owner, "source_urls": [source_url] if source_url else []}
     requests.post(f"{URL}/rest/v1/record_cache", headers=_h({"Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal"}), data=json.dumps(body), timeout=30)
+
+
+def cache_add_url(key: str, url: str) -> None:
+    """A second source link for a record already in the cache (the same track on another page)."""
+    r = requests.get(f"{URL}/rest/v1/record_cache?fingerprint=eq.{key}&select=source_urls", headers=_h(), timeout=10)
+    if not r.ok or not r.json(): return
+    urls = list(dict.fromkeys((r.json()[0].get("source_urls") or []) + [url]))[:20]
+    requests.patch(f"{URL}/rest/v1/record_cache?fingerprint=eq.{key}", headers=_h({"Content-Type": "application/json", "Prefer": "return=minimal"}), data=json.dumps({"source_urls": urls}), timeout=10)
 
 
 def adopt_cached(owner: str, project_id: str | None, name: str, cached: dict) -> dict:

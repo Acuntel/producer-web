@@ -99,13 +99,14 @@ def match(m: MatchIn, x_worker_secret: str = Header(default="")):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def fetch_source(job: Job, tmp: str) -> tuple[str, str]:
-    """Returns (wav path, display name)."""
+def fetch_source(job: Job, tmp: str) -> tuple[str, str, str | None]:
+    """Returns (wav path, display name, resolved source url or None)."""
     src = job.source
     if src.storage_path:
         raw = os.path.join(tmp, "upload.bin")
         supa.download(src.storage_path, raw)
         name = src.name or os.path.basename(src.storage_path)
+        resolved = None
     else:
         # The record lives somewhere public. A link is tried as given; a name is searched on the sources
         # that answer from a datacenter: SoundCloud, then Bandcamp. YouTube is not in the list: it bot-checks
@@ -126,7 +127,7 @@ def fetch_source(job: Job, tmp: str) -> tuple[str, str]:
             if not targets: targets = [f"scsearch5:{src.query}"]
             print(f"finder: {len(ranked)} candidates for {src.query!r}; trying {len(targets)}", flush=True)
         errors = []
-        raw = None; name = src.name
+        raw = None; name = src.name; resolved = None
         for target in targets:
             out = os.path.join(tmp, "dl.%(ext)s")
             cmd = ["yt-dlp", "-f", "bestaudio/best", "--ignore-errors", "--max-downloads", "1", "--match-filter", f"duration <? {MAX_SECONDS + 420}", "-o", out, "--print", "title", "--no-simulate", "--quiet", "--no-warnings", "--socket-timeout", "20"]
@@ -137,7 +138,7 @@ def fetch_source(job: Job, tmp: str) -> tuple[str, str]:
             lines = [l for l in r.stdout.splitlines() if l.strip()]
             files = [f for f in os.listdir(tmp) if f.startswith("dl.")]
             if r.returncode in (0, 101) and files:
-                raw = os.path.join(tmp, files[0]); name = name or (lines[0] if lines else "linked track")
+                raw = os.path.join(tmp, files[0]); name = name or (lines[0] if lines else "linked track"); resolved = target
                 supa_note = "soundcloud search" if target.startswith("scsearch") else ("archive" if "archive.org" in target else "mixcloud" if "mixcloud" in target else "soundcloud" if "soundcloud" in target else "link")
                 print(f"resolved via {supa_note}: {name}", flush=True)
                 break
@@ -150,7 +151,7 @@ def fetch_source(job: Job, tmp: str) -> tuple[str, str]:
     wav = os.path.join(tmp, "src.wav")
     analysis.ffmpeg_to_wav(raw, wav, MAX_SECONDS)
     os.remove(raw)
-    return wav, name
+    return wav, name, resolved
 
 
 def process_hear(job: Job, tmp: str) -> None:
@@ -187,7 +188,23 @@ def process(job: Job) -> None:
         return
     try:
         supa.update_job(job.job_id, status="running", progress=5)
-        wav, name = fetch_source(job, tmp)
+        # Instant path: a link (or the finder's top pick for a name) that was analyzed before, for anyone.
+        pre_url = job.source.url
+        if not pre_url and job.source.query and not job.source.storage_path:
+            try:
+                top = finder.search(job.source.query, None, None)[:1]
+                if top: pre_url = finder.archive_first_file(top[0].url) or top[0].url if top[0].source == "archive" else top[0].url
+            except Exception: pre_url = None
+        known = supa.cache_find_url(pre_url) if pre_url and not job.source.storage_path else None
+        if known:
+            print(f"cache hit by url {pre_url}", flush=True)
+            name = job.source.name or (known.get("result") or {}).get("name") or "record"
+            result = supa.adopt_cached(job.owner, job.project_id, name, known)
+            result["name"] = name; result["cached"] = True; result["facts"] = (known.get("result") or {}).get("facts")
+            supa.update_job(job.job_id, status="done", progress=100, result=result)
+            with lock: state["done"] += 1
+            return
+        wav, name, resolved = fetch_source(job, tmp)
         supa.update_job(job.job_id, progress=15)
         facts = analysis.analyze(wav)
         facts["name"] = name
@@ -195,7 +212,10 @@ def process(job: Job) -> None:
         rawfp = fingerprint.raw_fingerprint(wav)
         cached = supa.cache_find(rawfp[0], rawfp[1]) if rawfp else None
         if cached:
-            print("cache hit", flush=True)
+            print("cache hit by fingerprint", flush=True)
+            if resolved:
+                try: supa.cache_add_url(cached["fingerprint"], resolved)
+                except Exception: pass
             supa.update_job(job.job_id, progress=90, result={"facts": facts, "stage": "from cache"})
             result = supa.adopt_cached(job.owner, job.project_id, name, cached)
             result["facts"] = facts; result["name"] = name; result["cached"] = True
@@ -255,7 +275,7 @@ def process(job: Job) -> None:
         final = {"facts": facts, "stems": stem_out, "oneshots": shot_out, "name": name, "hearing": heard}
         supa.update_job(job.job_id, status="done", progress=100, result=final)
         if rawfp:
-            try: supa.cache_put(fingerprint.key_of(rawfp[0]), rawfp[0], rawfp[1], job.owner, base, final)
+            try: supa.cache_put(fingerprint.key_of(rawfp[0]), rawfp[0], rawfp[1], job.owner, base, final, resolved)
             except Exception as e: print("cache put failed", e, flush=True)
         with lock: state["done"] += 1
     except Exception as e:
