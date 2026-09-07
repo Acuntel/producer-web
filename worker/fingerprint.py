@@ -27,8 +27,8 @@ def key_of(fp: list[int]) -> str:
 def _bits(x: int) -> int: return bin(x).count("1")
 
 
-def similarity(a: list[int], b: list[int], max_offset: int = 8) -> float:
-    """Best fraction of equal bits over a small frame offset search."""
+def similarity(a: list[int], b: list[int], max_offset: int = 48) -> float:
+    """Best fraction of equal bits over an offset search of about six seconds (chromaprint runs near eight frames per second), so a rip that starts late still matches."""
     if not a or not b: return 0.0
     best = 0.0
     for off in range(-max_offset, max_offset + 1):
