@@ -35,7 +35,11 @@ def download(path_in_bucket: str, dst: str) -> str:
 
 
 def insert_clips(rows: list[dict]) -> list[dict]:
+    # PostgREST bulk inserts need every row to carry the same keys; fill the gaps with nulls.
+    keys = sorted({k for r in rows for k in r})
+    rows = [{k: r.get(k) for k in keys} for r in rows]
     r = requests.post(f"{URL}/rest/v1/clips", headers=_h({"Content-Type": "application/json", "Prefer": "return=representation"}), data=json.dumps(rows), timeout=30)
+    if not r.ok: print("insert_clips failed", r.status_code, r.text[:300], flush=True)
     r.raise_for_status()
     return r.json()
 
