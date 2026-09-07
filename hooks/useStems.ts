@@ -262,7 +262,9 @@ export function useStems(d: Deps) {
 
 function friendly(msg: string): string {
   if (/sign in|not signed in|401/i.test(msg)) return "Sign in to analyze a record.";
-  if (/bot|Sign in to confirm|cookies|403|unavailable|Private video/i.test(msg)) return "That site blocked the download from our server. Play it in another tab and use Capture what is playing, or upload the file, and it will work.";
+  if (/youtube blocked/i.test(msg)) return "YouTube does not allow server downloads. Play it in another tab and use Capture what is playing, or upload the file.";
+  if (/bot|Sign in to confirm|cookies|403|unavailable|Private/i.test(msg)) return "That source blocked the download. Try the record by name (it searches SoundCloud), capture it from a tab, or upload the file.";
+  if (/download failed/i.test(msg)) return "Could not find a downloadable copy of that record on SoundCloud. Capture it from a tab, or upload the file.";
   if (/duration|too long/i.test(msg)) return "That is longer than 15 minutes. Try a shorter file or a single track.";
   if (/worker|502|503|not configured/i.test(msg)) return "The analysis worker is waking up. Try again in a minute.";
   return msg;

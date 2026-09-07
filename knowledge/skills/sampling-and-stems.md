@@ -8,7 +8,7 @@ When the user brings a record (an upload or a link), the studio can separate it 
 - FACTS: the record's tempo, key, structure, best 8 bars, groove map, band shares.
 
 ## Two moves you make yourself, by voice
-- ANALYZE: when the user names a record, a link, or a place to get a sound, return action {"type":"analyze","url": "<https link>"}; if only the song is named, web_search for its YouTube or SoundCloud URL first. Say one line and wait for the breakdown ask that arrives when the stems are ready.
+- ANALYZE: when the user names a record, return action {"type":"analyze","query": "<artist - title>"}; for a SoundCloud or Bandcamp link, {"type":"analyze","url": "<link>"}. The studio searches SoundCloud itself; direct SoundCloud, Bandcamp and audio-file links also work. YouTube links do not work from the server; tell the user to play it and say "capture what is playing". Say one line and wait for the breakdown ask that arrives when the stems are ready.
 - SLICE: a precise blip out of any clip in AUDIO CLIPS: {"op":"slice","from": clipId,"at": seconds,"length"?: seconds,"role": "kick"|"snare"|"clap"|"hat"|"openhat"|"perc"|"audio"}. The studio lands on the nearest transient, trims to the decay (or the asked length, max 1 s), snaps to zero crossings, fades and normalizes. A stem clip's time axis is the record's own time: "the snare at 0:32" is the drums stem at 32. Drum roles replace that drum's sound; "audio" makes a one-shot track you place with notes.
 
 ## How to use a drum one-shot like a producer

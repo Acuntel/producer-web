@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 
 const BASE = process.argv[2] ?? "http://localhost:3111";
 const FILE = process.argv[3] ?? "/Users/bradyschwartz/Music/PioneerDJ/Demo Tracks/Demo Track 1.mp3";
-const YT = process.env.YT_URL ?? "https://www.youtube.com/watch?v=jNQXAC9IVRw";
+const QUERY = process.env.STEMS_QUERY ?? "john summit where you are";
 const CHROME = process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PORT = 9336; const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const env = Object.fromEntries(readFileSync(new URL("../.env.local", import.meta.url), "utf8").split("\n").filter((l) => l.includes("=")).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]));
@@ -107,14 +107,17 @@ async function main() {
     const said = await js(`(document.querySelector('[data-role="producer-line"]')?.textContent ?? '').slice(0, 200)`);
     console.log(`[stems] vocal NOT placed: ${e.message} | sheet: ${dlg.replace(/\n/g, ' ')} | producer: ${said}`);
   }
-  // YouTube through the worker (from the signed-in page so the cookie rides along).
-  const yt = await js(`fetch('/api/stems', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: ${JSON.stringify(YT)} }) }).then(r => r.json())`);
-  console.log(`[stems] youtube job: ${JSON.stringify(yt)}`);
-  if (yt.jobId) {
+  // Find a record by NAME through the worker (SoundCloud, then Bandcamp; no YouTube).
+  const byName = await js(`fetch('/api/stems', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: ${JSON.stringify(QUERY)} }) }).then(r => r.json())`);
+  console.log(`[stems] by-name job: ${JSON.stringify(byName)}`);
+  if (byName.jobId) {
     const t1 = Date.now(); let st = null;
-    while (Date.now() - t1 < 5 * 60 * 1000) { await sleep(5000); st = await js(`fetch('/api/stems?id=${yt.jobId}').then(r => r.json())`); if (st.status === "done" || st.status === "error") break; }
-    console.log(`[stems] youtube result: status=${st?.status} progress=${st?.progress} error=${st?.error ?? ""} name=${st?.result?.name ?? ""} bpm=${st?.result?.facts?.bpm ?? ""}`);
+    while (Date.now() - t1 < 6 * 60 * 1000) { await sleep(5000); st = await js(`fetch('/api/stems?id=${byName.jobId}').then(r => r.json())`); if (st.status === "done" || st.status === "error") break; }
+    console.log(`[stems] by-name result: status=${st?.status} name=${st?.result?.name ?? ""} bpm=${st?.result?.facts?.bpm ?? ""} key=${st?.result?.facts?.key ?? ""} stems=${(st?.result?.stems ?? []).length} report=${(st?.result?.hearing?.report ?? st?.error ?? "").slice(0, 160)}`);
   }
+  // A YouTube link is refused with a clear message, not a stall.
+  const yt = await js(`fetch('/api/stems', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }) }).then(r => r.json())`);
+  if (yt.jobId) { let st = null; const t2 = Date.now(); while (Date.now() - t2 < 60000) { await sleep(3000); st = await js(`fetch('/api/stems?id=${yt.jobId}').then(r => r.json())`); if (st.status === "done" || st.status === "error") break; } console.log(`[stems] youtube link: status=${st?.status} error=${(st?.error ?? "").slice(0, 120)}`); }
   // Cleanup: storage objects, then the user (cascades rows).
   const list = await admin(`/storage/v1/object/list/clips`, { method: "POST", body: JSON.stringify({ prefix: `${user.id}`, limit: 1000 }) });
   const paths = [];

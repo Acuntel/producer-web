@@ -2,7 +2,7 @@
 One CPU job at a time. Results go to Supabase storage and the jobs table; the
 original audio is deleted when the job ends."""
 from __future__ import annotations
-import os, shutil, subprocess, tempfile, threading, traceback, time
+import os, re, shutil, subprocess, tempfile, threading, traceback, time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from fastapi import FastAPI, Header, HTTPException
@@ -93,14 +93,20 @@ def fetch_source(job: Job, tmp: str) -> tuple[str, str]:
         supa.download(src.storage_path, raw)
         name = src.name or os.path.basename(src.storage_path)
     else:
-        # The record lives somewhere public. A link is tried as given; a name is searched source by
-        # source (SoundCloud first: it answers from datacenters; YouTube last: it usually does not).
-        targets = [src.url] if src.url else [f"scsearch1:{src.query}", f"bcsearch1:{src.query}", f"ytsearch1:{src.query}"]
+        # The record lives somewhere public. A link is tried as given; a name is searched on the sources
+        # that answer from a datacenter: SoundCloud, then Bandcamp. YouTube is not in the list: it bot-checks
+        # server requests, so a YouTube link gets a clear message pointing at Capture what is playing.
+        if src.url and re.search(r"(youtube\.com|youtu\.be|music\.youtube)", src.url, re.I):
+            raise RuntimeError("youtube blocked: YouTube refuses server downloads. Play it in a tab and use Capture what is playing, or upload the file.")
+        # By name: the first five SoundCloud results, skipping ones that are DRM protected (official label
+        # uploads often are) until one downloads. Bandcamp has no search extractor; its track links work directly.
+        targets = [src.url] if src.url else [f"scsearch5:{src.query}"]
         errors = []
         raw = None; name = src.name
         for target in targets:
             out = os.path.join(tmp, "dl.%(ext)s")
-            cmd = ["yt-dlp", "-f", "bestaudio/best", "--no-playlist", "--max-downloads", "1", "--match-filter", f"duration < {MAX_SECONDS + 420}", "-o", out, "--print", "title", "--no-simulate", "--quiet", "--no-warnings", "--socket-timeout", "20"]
+            cmd = ["yt-dlp", "-f", "bestaudio/best", "--ignore-errors", "--max-downloads", "1", "--match-filter", f"duration < {MAX_SECONDS + 420}", "-o", out, "--print", "title", "--no-simulate", "--quiet", "--no-warnings", "--socket-timeout", "20"]
+            if not target.startswith("scsearch"): cmd.append("--no-playlist")
             proxy = os.environ.get("YTDLP_PROXY")
             if proxy: cmd += ["--proxy", proxy]
             r = subprocess.run(cmd + [target], capture_output=True, text=True, timeout=600)
@@ -108,7 +114,7 @@ def fetch_source(job: Job, tmp: str) -> tuple[str, str]:
             files = [f for f in os.listdir(tmp) if f.startswith("dl.")]
             if r.returncode in (0, 101) and files:
                 raw = os.path.join(tmp, files[0]); name = name or (lines[0] if lines else "linked track")
-                supa_note = target.split(":")[0] if ":" in target and not target.startswith("http") else "link"
+                supa_note = "soundcloud search" if target.startswith("scsearch") else "link"
                 print(f"resolved via {supa_note}: {name}", flush=True)
                 break
             errors.append(f"{target.split(':')[0]}: {(r.stderr or r.stdout)[-160:].strip()}")
