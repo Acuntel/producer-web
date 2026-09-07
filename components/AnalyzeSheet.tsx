@@ -130,6 +130,12 @@ export function AnalyzeSheet({ stems, signedIn, onSignIn, onClose }: { stems: St
                   <p className="mt-2 text-xs text-ink-2">{stageLine(job)}.</p>
                   {job.result?.identity?.title && <p className="mt-1 text-xs text-ink-3">Named from the sound: {identityLine(job.result.identity)}</p>}
                   {job.result?.facts && <FactsLine f={job.result.facts} />}
+                  {job.result?.kind === "tracklist" && job.result.tracklist?.length ? (
+                    <div className="mt-3">
+                      <div className="eyebrow mb-1.5">Named so far{job.result.durationSec ? ` in ${mmss(job.result.durationSec)} of mix` : ""}</div>
+                      <TracklistList entries={job.result.tracklist} stems={stems} />
+                    </div>
+                  ) : null}
                   {(job.result?.oneshots?.length || job.result?.preview?.oneshots?.length) ? (
                     <div className="mt-3">
                       <div className="eyebrow mb-1.5">{job.result?.oneshots?.length ? "Ready now, the whole record is sliced; the ears are still listening" : "Ready now, from the best 16 bars"}</div>
@@ -157,22 +163,7 @@ export function AnalyzeSheet({ stems, signedIn, onSignIn, onClose }: { stems: St
                       <Button tone="quiet" onClick={stems.reset}>Analyze another</Button>
                     </div>
                   </div>
-                  {job.result.tracklist?.length ? (
-                    <ol className="space-y-1.5" aria-label="Tracklist">
-                      {job.result.tracklist.map((e, i) => (
-                        <li key={`${e.key}-${e.start}`} className="flex items-center gap-2 rounded-xl bg-s2/50 px-3 py-2">
-                          <span className="tnum w-10 shrink-0 text-xs text-ink-3">{mmss(e.start)}</span>
-                          {e.cover ? <img src={e.cover} alt="" className="h-8 w-8 shrink-0 rounded object-cover" /> : null}
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-medium text-ink">{i + 1}. {e.artist ? `${e.artist} - ` : ""}{e.title}</div>
-                            <div className="truncate text-xs text-ink-3">{[e.label, e.year].filter(Boolean).join(" · ")}{e.confident ? "" : " · not fully sure"}</div>
-                          </div>
-                          {pitchChip(e.pitchPct)}
-                          <Button tone="ghost" onClick={() => void stems.start({ query: e.query, name: `${e.artist ? `${e.artist} - ` : ""}${e.title}`.slice(0, 80) })}>Pull it</Button>
-                        </li>
-                      ))}
-                    </ol>
-                  ) : <p className="text-sm text-ink-2">{job.result.cooldownSec ? `Naming is cooling down for about ${Math.ceil(job.result.cooldownSec / 60)} minutes after too many requests. Try again then.` : "Nothing in it could be named. Unreleased edits and very quiet passages stay anonymous; capture the part you care about from the tab instead."}</p>}
+                  {job.result.tracklist?.length ? <TracklistList entries={job.result.tracklist} stems={stems} /> : <p className="text-sm text-ink-2">{job.result.cooldownSec ? `Naming is cooling down for about ${Math.ceil(job.result.cooldownSec / 60)} minutes after too many requests. Try again then.` : "Nothing in it could be named. Unreleased edits and very quiet passages stay anonymous; capture the part you care about from the tab instead."}</p>}
                 </div>
               )}
               {done && job.result && job.result.kind !== "tracklist" && (
@@ -243,6 +234,25 @@ export function AnalyzeSheet({ stems, signedIn, onSignIn, onClose }: { stems: St
         </div>
       </div>
     </div>
+  );
+}
+
+function TracklistList({ entries, stems }: { entries: NonNullable<NonNullable<NonNullable<Stems["job"]>["result"]>["tracklist"]>; stems: Stems }) {
+  return (
+    <ol className="space-y-1.5" aria-label="Tracklist">
+      {entries.map((e, i) => (
+        <li key={`${e.key}-${e.start}`} className="flex items-center gap-2 rounded-xl bg-s2/50 px-3 py-2">
+          <span className="tnum w-10 shrink-0 text-xs text-ink-3">{mmss(e.start)}</span>
+          {e.cover ? <img src={e.cover} alt="" className="h-8 w-8 shrink-0 rounded object-cover" /> : null}
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium text-ink">{i + 1}. {e.artist ? `${e.artist} - ` : ""}{e.title}</div>
+            <div className="truncate text-xs text-ink-3">{[e.label, e.year].filter(Boolean).join(" · ")}{e.confident ? "" : " · not fully sure"}</div>
+          </div>
+          {pitchChip(e.pitchPct)}
+          <Button tone="ghost" onClick={() => void stems.start({ query: e.query, name: `${e.artist ? `${e.artist} - ` : ""}${e.title}`.slice(0, 80) })}>Pull it</Button>
+        </li>
+      ))}
+    </ol>
   );
 }
 
