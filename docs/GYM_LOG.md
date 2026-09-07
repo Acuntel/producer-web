@@ -156,3 +156,16 @@ Brady's deeper brief is in docs/ROUND_0906C_MASTERPROMPT.md. This part ships the
 ### Verified with the keys on this machine
 - ElevenLabs Music API answers (a composition plan with lyrics for a tech house prompt): the partner for musical voices in part 2.
 - No Gemini or OpenAI keys exist (only empty templates), so Lyria is not reachable yet.
+
+## 2026-09-06 C (part 2): the ears, the finder, real voices, three lanes, the move visualizer
+
+### Shipped or in flight
+- HEAR LIKE A HUMAN (worker/hearing.py): per-stem energy per bar, what carries each 8-bar block and who enters or leaves, drum grids over the best bars (kick / snare / hat by onset classification), the bass line by pitch tracking (root, condensed notes, eighth rhythm), chords per bar from the chords stem, Whisper lyrics from the vocal stem (faster-whisper small, int8, CPU), CLAP descriptors and genre read plus 512-d embeddings for the mix, every stem and every one-shot (stored on the clip rows for sound search), and a plain-English report. The report rides to the brain as LISTENING REPORT and shows in the analyze sheet as "What the studio hears". Local proof on the demo track: "129 BPM, F minor. It opens at 98 percent energy with the bass carrying it ... Bass lives on F, playing F1 x32 with the rhythm XXXXXXXX in eighths. Chords move Fm C# C Fm ..." The worker image pre-downloads CLAP and Whisper; the listening stage adds about 12 s to a job on Railway.
+- The analyzed record becomes the REFERENCE: the four stems are summed in the browser and heard by the studio's own ears, so "make it like that" is an emulate rollout with real deltas.
+- FIND THE MUSIC: the worker resolves a name across SoundCloud search, Bandcamp search, then YouTube (YTDLP_PROXY honoured); the brain's analyze action takes a query and no longer needs web_search for a link.
+- REAL VOICES: /api/music composes on the ElevenLabs Music API (music_v2, composition plan with the lyrics, on the song's tempo and key), stores the mp3 in the user's library, the worker separates the voice, and the studio places the vocal stem as a hook track with a highpass, a delay and a reverb send. Brain action "vocal". Harness step added.
+- LANES: pop, hardstyle, psychedelic with full recipes and aliases (13 lanes).
+- SOUND SEARCH endpoint: worker /match takes a short recording and candidate embeddings, returns the closest sounds plus the sung pitch contour. UI not wired yet.
+- DESIGN: tighter radii, quieter shadows, a flat orb; lib/song/moves.ts turns every op batch into lane moves; the lane flashes and shows the move label ("filter 520", "sound: Demo Track 1 · kick"), and a placed sound auditions once through the master.
+- Music engine facts learned the hard way: `composition_plan` is a music_v1 feature (music_v2 rejects it with "Invalid type of composition_plan"), and `music_length_ms` may not accompany a plan. A 10 s hook composes in about 3 s on either model. The route now sends the plan on v1 (lyrics as written) and falls back to a prose prompt on v2.
+- Chrome's fake-audio-capture flag delivers silence in this build; tests/voice.e2e.mjs injects a WAV as the page microphone through getUserMedia instead.

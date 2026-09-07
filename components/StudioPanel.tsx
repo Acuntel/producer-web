@@ -7,6 +7,7 @@ import type { Song } from "@/lib/song/types";
 import type { MusicFacts } from "@/lib/ears";
 import type { Levels } from "@/lib/engine";
 import type { CriticNote } from "@/lib/critic";
+import type { LaneMove } from "@/lib/song/moves";
 import { Timeline } from "./Timeline";
 import { TrackLanes } from "./TrackLanes";
 import { Mixer } from "./Mixer";
@@ -23,7 +24,7 @@ export type Ab = { playing: string };
 export function StudioPanel({
   song, started, playing, starting, onPlayPause, nowSection, beat, onJump, getLevels, onVolume, onToggle,
   listenHint, rollout, onCancelRollout, ab, onPickAb, score,
-  facts, reference, deltaText, hearing, notes, headline, criticThinking, onApply, onDismiss,
+  facts, reference, deltaText, hearing, notes, headline, criticThinking, onApply, onDismiss, moves,
 }: {
   song: Song; started: boolean; playing: boolean; starting: boolean; onPlayPause: () => void;
   nowSection: number; beat: number | null; onJump: (id: string) => void;
@@ -31,7 +32,7 @@ export function StudioPanel({
   listenHint: string | null; rollout: Rollout | null; onCancelRollout: () => void;
   ab: Ab | null; onPickAb: (k: string) => void; score: string | null;
   facts: MusicFacts | null; reference: Reference | null; deltaText: string | null; hearing: boolean;
-  notes: CriticNote[]; headline: string; criticThinking: boolean; onApply: (n: CriticNote) => void; onDismiss: (n: CriticNote) => void;
+  notes: CriticNote[]; headline: string; criticThinking: boolean; onApply: (n: CriticNote) => void; onDismiss: (n: CriticNote) => void; moves?: LaneMove[];
 }) {
   const [open, setOpen] = useState({ music: true, mixer: true, ears: false, notes: false });
   const toggle = (k: keyof typeof open) => setOpen((o) => ({ ...o, [k]: !o[k] }));
@@ -110,7 +111,7 @@ export function StudioPanel({
       </section>
 
       <Disclosure title="The music" icon="waveform" open={open.music} onToggle={() => toggle("music")}>
-        <TrackLanes song={song} beat={beat} sectionIdx={nowSection} getLevels={getLevels} running={playing} onToggle={onToggle} />
+        <TrackLanes song={song} beat={beat} sectionIdx={nowSection} getLevels={getLevels} running={playing} onToggle={onToggle} moves={moves} />
       </Disclosure>
 
       <Disclosure title="Mixer" icon="sliders" open={open.mixer} onToggle={() => toggle("mixer")}>

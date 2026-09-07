@@ -25,10 +25,15 @@ export async function POST(req: Request) {
     sections: [{ section_name: "Hook", positive_local_styles: styles.slice(0, 3), negative_local_styles: [], duration_ms: lengthMs, lines: lyrics ? lyrics.split(/\n+/).map((l) => l.trim()).filter(Boolean).slice(0, 12) : [] }],
   };
   try {
-    const r = await fetch("https://api.elevenlabs.io/v1/music?output_format=mp3_44100_128", {
-      method: "POST", headers: { "xi-api-key": key, "Content-Type": "application/json" },
-      body: JSON.stringify({ model_id: "music_v2", composition_plan: plan, music_length_ms: lengthMs, force_instrumental: !!body.instrumental }),
-    });
+    // Composition plans (the lyrics as written, one section) are a music_v1 feature; music_v2 takes a prose prompt.
+    // Plan first for word-accurate hooks, prompt on v2 as the fallback.
+    const url = "https://api.elevenlabs.io/v1/music?output_format=mp3_44100_128";
+    const headers = { "xi-api-key": key, "Content-Type": "application/json" };
+    let r = await fetch(url, { method: "POST", headers, body: JSON.stringify({ model_id: "music_v1", composition_plan: plan, force_instrumental: !!body.instrumental }) });
+    if (!r.ok) {
+      const prose = `A ${Math.round(lengthMs / 1000)} second ${prompt}${body.bpm ? ` at ${Math.round(body.bpm)} bpm` : ""}${body.key ? ` in ${body.key}` : ""}${lyrics ? `, singing the words: ${lyrics.replace(/\n+/g, " / ")}` : ""}. Lead vocal forward, minimal backing.`;
+      r = await fetch(url, { method: "POST", headers, body: JSON.stringify({ model_id: "music_v2", prompt: prose, music_length_ms: lengthMs, force_instrumental: !!body.instrumental }) });
+    }
     if (!r.ok) { const t = await r.text(); return Response.json({ error: `Music engine ${r.status}: ${t.slice(0, 160)}` }, { status: 502 }); }
     const bytes = new Uint8Array(await r.arrayBuffer());
     const name = `Vocal ${prompt.slice(0, 28).replace(/[^\w\s-]/g, "").trim() || "hook"}`;

@@ -8,10 +8,11 @@ import type { Levels } from "@/lib/engine";
 import { patternFor, audibleTracks } from "@/lib/engine/schedule";
 import { planLabel } from "@/lib/song/pattern";
 import { colorOf } from "./colors";
+import type { LaneMove } from "@/lib/song/moves";
 
 const unit = (db: number, floor = -60) => Math.max(0, Math.min(1, (db - floor) / -floor));
 
-export function TrackLanes({ song, beat, sectionIdx, getLevels, running, onToggle }: { song: Song; beat: number | null; sectionIdx: number; getLevels?: () => Levels | null; running?: boolean; onToggle?: (id: string, what: "mute" | "solo") => void }) {
+export function TrackLanes({ song, beat, sectionIdx, getLevels, running, onToggle, moves = [] }: { song: Song; beat: number | null; sectionIdx: number; getLevels?: () => Levels | null; running?: boolean; onToggle?: (id: string, what: "mute" | "solo") => void; moves?: LaneMove[] }) {
   const starts = useMemo(() => {
     const byId = new Map(song.sections.map((s) => [s.id, s]));
     let c = 0;
@@ -53,6 +54,7 @@ export function TrackLanes({ song, beat, sectionIdx, getLevels, running, onToggl
         const loop = Math.max(0.25, tr.loopBeats);
         const local = beat !== null && cur && activeNow ? ((beat - cur.startBeat) % loop + loop) % loop : null;
         const autos = cur?.sec?.automation?.filter((a) => a.track === tr.id) ?? [];
+        const move = moves.find((m) => m.trackId === tr.id && Date.now() - m.at < 4000);
 
         return (
           <div key={tr.id} className="flex items-center gap-2 transition-opacity duration-300" style={{ opacity: activeNow ? 1 : 0.35 }}>
@@ -70,7 +72,7 @@ export function TrackLanes({ song, beat, sectionIdx, getLevels, running, onToggl
               )}
             </div>
 
-            <div className="relative h-8 flex-1 overflow-hidden rounded-lg border border-line/35 bg-base/70">
+            <div key={move ? move.at : "lane"} className={`relative h-8 flex-1 overflow-hidden rounded-lg border border-line/35 bg-base/70 ${move ? "lane-land" : ""}`}>
               {Array.from({ length: Math.min(64, Math.ceil(loop)) }, (_, b) => (
                 <div key={b} className={`absolute top-0 h-full w-px ${b % 4 === 0 ? "bg-line/70" : "bg-line/30"}`} style={{ left: `${(b / loop) * 100}%` }} />
               ))}
@@ -95,7 +97,8 @@ export function TrackLanes({ song, beat, sectionIdx, getLevels, running, onToggl
                 <div key={`a${i}`} className="pointer-events-none absolute inset-0" title={`${a.param} ${a.from} to ${a.to}`} style={{ background: `linear-gradient(to ${a.to > a.from ? "right" : "left"}, transparent, ${color}30)` }} />
               ))}
               {variant && <span className="absolute right-1 top-1 rounded bg-base/85 px-1 text-[10px] font-medium leading-4 text-ink-3">{variant}</span>}
-              {tr.clip && tr.role !== "audio" && <span className="absolute left-1 top-1 rounded bg-base/85 px-1 text-[10px] font-medium leading-4 text-ink-3" title={tr.clip.name}>sample</span>}
+              {tr.clip && tr.role !== "audio" && !move && <span className="absolute left-1 top-1 rounded bg-base/85 px-1 text-[10px] font-medium leading-4 text-ink-3" title={tr.clip.name}>sample</span>}
+              {move && <span className="absolute left-1 top-1 animate-fade-up rounded bg-accent px-1.5 text-[10px] font-semibold leading-4 text-accent-ink">{move.label}</span>}
               {local !== null && <div className="absolute top-0 h-full w-px bg-ink shadow-[0_0_6px_rgba(255,255,255,0.8)]" style={{ left: `${(local / loop) * 100}%` }} />}
             </div>
           </div>

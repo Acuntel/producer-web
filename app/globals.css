@@ -117,10 +117,16 @@
 
 /* The orb pulses on the beat. Kept in CSS so the tempo can drive it by variable. */
 @keyframes orb-beat {
-  0% { transform: scale(1.055); }
+  0% { transform: scale(1.03); }
   36% { transform: scale(1); }
   100% { transform: scale(1); }
 }
+/* A move landing on a lane: a short wash of the lane's color, then gone. */
+@keyframes lane-land {
+  0% { box-shadow: 0 0 0 1px rgb(var(--c-accent) / 0.9), 0 0 18px rgb(var(--c-accent) / 0.45); }
+  100% { box-shadow: 0 0 0 1px rgb(var(--c-accent) / 0), 0 0 0 rgb(var(--c-accent) / 0); }
+}
+.lane-land { animation: lane-land 1.6s ease-out both; }
 @keyframes orb-ring {
   0% { transform: scale(1); opacity: 0.45; }
   70% { transform: scale(1.5); opacity: 0; }

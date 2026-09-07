@@ -41,12 +41,12 @@ export default {
         "2xl": ["1.75rem", { lineHeight: "2.1rem", letterSpacing: "-0.02em" }],
         "3xl": ["2.25rem", { lineHeight: "2.5rem", letterSpacing: "-0.025em" }],
       },
-      borderRadius: { xl: "0.875rem", "2xl": "1.125rem", "3xl": "1.5rem", "4xl": "2rem" },
+      borderRadius: { lg: "0.5rem", xl: "0.625rem", "2xl": "0.75rem", "3xl": "0.875rem", "4xl": "1rem" },
       boxShadow: {
         lift: "0 1px 0 0 rgb(255 255 255 / 0.05) inset, 0 1px 2px 0 rgb(0 0 0 / 0.4)",
         panel: "0 1px 0 0 rgb(255 255 255 / 0.04) inset, 0 8px 30px -12px rgb(0 0 0 / 0.9)",
-        orb: "0 0 0 1px rgb(255 255 255 / 0.10) inset, 0 10px 40px -8px rgb(var(--c-accent) / 0.55)",
-        "orb-live": "0 0 0 1px rgb(255 255 255 / 0.10) inset, 0 10px 44px -6px rgb(var(--c-live) / 0.6)",
+        orb: "0 0 0 1px rgb(255 255 255 / 0.08) inset, 0 6px 24px -10px rgb(var(--c-accent) / 0.45)",
+        "orb-live": "0 0 0 1px rgb(255 255 255 / 0.08) inset, 0 6px 26px -8px rgb(var(--c-live) / 0.5)",
       },
       transitionTimingFunction: { snap: "cubic-bezier(0.22, 1, 0.36, 1)" },
       keyframes: {

@@ -94,6 +94,19 @@ async function main() {
   await js(`(() => { const i = document.querySelector('input[aria-label="Message the producer"]'); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; })()`);
   const sliced = await waitFor(`(() => { try { const s = JSON.parse(localStorage.getItem('producer.song.v4')); return s.tracks.some((t) => t.clip && String(t.clip.clipId).startsWith('slice_')) ? JSON.stringify(s.tracks.filter((t) => t.clip && String(t.clip.clipId).startsWith('slice_')).map((t) => [t.id, t.role, t.clip.name, t.clip.durationSec])) : ''; } catch { return ''; } })()`, 120000, "a sliced clip on the song").catch((e) => `NOT SLICED: ${e.message}`);
   console.log(`[stems] slice by voice: ${sliced}`);
+  // Real sung vocals by voice: the brain asks the music engine, the worker separates the voice, the studio places it.
+  await setInput('input[aria-label="Message the producer"]', "give me a female vocal hook singing the words lost in the strobe we fade away, eight seconds, breathy and dark");
+  await sleep(200);
+  await js(`(() => { const i = document.querySelector('input[aria-label="Message the producer"]'); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; })()`);
+  const vocalT0 = Date.now(); let vocalTrack = "";
+  try {
+    vocalTrack = await waitFor(`(() => { try { const s = JSON.parse(localStorage.getItem('producer.song.v4')); const v = s.tracks.find((t) => String(t.id).startsWith('vocal_')); return v ? JSON.stringify([v.id, v.name, v.clip && v.clip.name, v.clip && v.clip.durationSec]) : ''; } catch { return ''; } })()`, 6 * 60 * 1000, "a rendered vocal track");
+    console.log(`[stems] vocal by voice after ${Math.round((Date.now() - vocalT0) / 1000)}s: ${vocalTrack}`);
+  } catch (e) {
+    const dlg = await js(`(document.querySelector('[role="dialog"][aria-label="Analyze a record"]')?.innerText ?? '').slice(0, 300)`);
+    const said = await js(`(document.querySelector('[data-role="producer-line"]')?.textContent ?? '').slice(0, 200)`);
+    console.log(`[stems] vocal NOT placed: ${e.message} | sheet: ${dlg.replace(/\n/g, ' ')} | producer: ${said}`);
+  }
   // YouTube through the worker (from the signed-in page so the cookie rides along).
   const yt = await js(`fetch('/api/stems', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: ${JSON.stringify(YT)} }) }).then(r => r.json())`);
   console.log(`[stems] youtube job: ${JSON.stringify(yt)}`);

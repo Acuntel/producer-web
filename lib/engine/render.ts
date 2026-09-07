@@ -155,3 +155,22 @@ export function audioBufferToWav(buf: AudioBuffer): Blob {
   }
   return new Blob([out], { type: "audio/wav" });
 }
+
+// Our own stems: the same record rendered four times with one group of roles audible each
+// time, plus the mix, so the worker's ears can hear our render the way they hear a record.
+const GROUPS: Record<string, string[]> = { drums: ["kick", "clap", "snare", "hat", "openhat", "perc"], bass: ["bass", "sub"], vocals: ["audio"], other: ["chords", "stab", "pad", "lead", "pluck", "arp", "fx"] };
+export async function renderStemGroups(song: Song, sectionId?: string, bars = 8, sampleRate = 22050): Promise<Record<string, Blob>> {
+  const sec = song.sections.find((x) => x.id === sectionId) ?? song.sections.find((x) => /drop/i.test(x.name)) ?? song.sections[0];
+  if (!sec) return {};
+  const excerpt: Song = { ...song, sections: [{ ...sec, bars: Math.max(1, Math.min(sec.bars, bars)) }], arrangement: [sec.id], loop: null };
+  const secs = (excerpt.sections[0].bars * 4 * 60) / song.bpm + 0.5;
+  const clips = await clipsFor(song);
+  const out: Record<string, Blob> = {};
+  out.mix = audioBufferToWav(await renderOffline(excerpt, secs, clips, sampleRate));
+  for (const [name, roles] of Object.entries(GROUPS)) {
+    const only: Song = { ...excerpt, tracks: excerpt.tracks.map((t) => ({ ...t, mute: !roles.includes(t.role), solo: false })) };
+    if (!only.tracks.some((t) => !t.mute && sec.active.includes(t.id))) continue;
+    out[name] = audioBufferToWav(await renderOffline(only, secs, clips, sampleRate));
+  }
+  return out;
+}

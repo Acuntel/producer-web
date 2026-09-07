@@ -11,7 +11,19 @@ export async function POST(req: Request) {
   if (!user || !admin) return Response.json({ error: "Sign in to analyze a record." }, { status: 401 });
   const worker = process.env.STEMS_WORKER_URL, secret = process.env.STEMS_WORKER_SECRET;
   if (!worker || !secret) return Response.json({ error: "The analysis worker is not configured yet." }, { status: 503 });
-  const body = (await req.json().catch(() => ({}))) as { url?: string; storagePath?: string; name?: string; query?: string; projectId?: string | null };
+  const body = (await req.json().catch(() => ({}))) as { url?: string; storagePath?: string; name?: string; query?: string; projectId?: string | null; kind?: "stems" | "hear"; stemPaths?: Record<string, string> };
+  if (body.kind === "hear") {
+    // Our own render: the browser rendered the mix and its stem groups; the worker only listens.
+    const paths = body.stemPaths ?? {};
+    if (!paths.mix || Object.values(paths).some((p) => typeof p !== "string" || !p.startsWith(`${user.id}/`))) return Response.json({ error: "hear needs your own rendered files" }, { status: 400 });
+    const { data: job, error } = await admin.from("jobs").insert({ owner: user.id, project_id: body.projectId ?? null, kind: "hear", source: { stem_paths: paths, name: body.name?.slice(0, 120) ?? "our render" }, status: "queued" }).select("id").single();
+    if (error || !job) return Response.json({ error: error?.message ?? "could not create the job" }, { status: 500 });
+    try {
+      const r = await fetch(`${worker.replace(/\/$/, "")}/jobs`, { method: "POST", headers: { "Content-Type": "application/json", "X-Worker-Secret": secret }, body: JSON.stringify({ job_id: job.id, owner: user.id, project_id: body.projectId ?? null, kind: "hear", source: { stem_paths: paths, name: body.name ?? "our render" } }) });
+      if (!r.ok) throw new Error(`worker ${r.status}`);
+    } catch (e) { await admin.from("jobs").update({ status: "error", error: e instanceof Error ? e.message : "worker unreachable" }).eq("id", job.id); return Response.json({ error: "The analysis worker did not answer." }, { status: 502 }); }
+    return Response.json({ jobId: job.id });
+  }
   const url = typeof body.url === "string" ? body.url.trim() : "";
   const storagePath = typeof body.storagePath === "string" ? body.storagePath : "";
   const query = typeof body.query === "string" ? body.query.trim().slice(0, 160) : "";

@@ -97,6 +97,16 @@ export function AnalyzeSheet({ stems, signedIn, onSignIn, onClose }: { stems: St
                       <Button tone="quiet" onClick={stems.reset}>Analyze another</Button>
                     </div>
                     {job.result.facts?.blocks && <EnergyStrip blocks={job.result.facts.blocks} best={job.result.facts.bestBars.startBar} />}
+                    {job.result.hearing?.report && (
+                      <div className="mt-3 rounded-xl bg-base/60 p-3">
+                        <div className="eyebrow mb-1">What the studio hears</div>
+                        <p className="text-sm leading-relaxed text-ink-2">{job.result.hearing.report}</p>
+                        {!!job.result.hearing.clap?.descriptors?.length && (
+                          <div className="mt-2 flex flex-wrap gap-1">{job.result.hearing.clap.descriptors.slice(0, 6).map(([d]) => <span key={d} className="rounded bg-s3 px-1.5 py-0.5 text-[11px] font-medium text-ink-2">{d}</span>)}</div>
+                        )}
+                        {!!job.result.hearing.lyrics?.lines?.length && <p className="mt-2 text-xs text-ink-3">Lyrics heard: {job.result.hearing.lyrics.lines.slice(0, 3).map((l) => l.text).join(" / ")}</p>}
+                      </div>
+                    )}
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Button tone="accent" icon="notes" onClick={() => { stems.askBreakdown(); onClose(); }}>Ask the producer for the breakdown</Button>
                     </div>

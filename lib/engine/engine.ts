@@ -82,6 +82,15 @@ export class Engine {
     return { master, spectrum: g.analysis.fft.getValue(), tracks };
   }
 
+  /** Audition one clip, once, through the master. The producer's "listen to this". */
+  async previewClip(clipId: string, gainDb = -3): Promise<boolean> {
+    const bufs = await loadClipsFor([clipId]); const buf = bufs.get(clipId); if (!buf) return false;
+    const p = new Tone.Player(buf).toDestination(); p.volume.value = gainDb;
+    p.start(); p.onstop = () => p.dispose();
+    window.setTimeout(() => { try { p.dispose(); } catch {} }, Math.ceil(buf.duration * 1000) + 500);
+    return true;
+  }
+
   /** A fader move while playing: the voice ramps, nothing is rebuilt. */
   setTrackVolume(id: string, db: number): boolean { const v = this.graph?.voiceById.get(id); if (!v) return false; v.setVolume(db); return true; }
 

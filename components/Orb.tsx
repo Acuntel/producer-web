@@ -52,7 +52,7 @@ export function Orb({
             active:scale-[0.96] disabled:opacity-70
             ${live ? "bg-live shadow-orb-live" : "bg-accent shadow-orb"}`}
           style={{
-            backgroundImage: "linear-gradient(160deg, rgb(255 255 255 / 0.28), transparent 58%)",
+            backgroundImage: "linear-gradient(180deg, rgb(255 255 255 / 0.10), transparent 60%)",
             animation: running ? `orb-beat ${beatSec}s ease-out infinite` : undefined,
           }}
         >

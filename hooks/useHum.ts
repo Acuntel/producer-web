@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 import type { Note } from "@/lib/song/types";
 import { trackPitch, smoothFrames, framesToNotes } from "@/lib/engine/hum";
 
-export type HumResult = { notes: Note[]; beats: number; frames: number };
+export type HumResult = { notes: Note[]; beats: number; frames: number; samples: Float32Array; sampleRate: number };
 
 export function useHum() {
   const [recording, setRecording] = useState(false);
@@ -44,7 +44,7 @@ export function useHum() {
     for (const c of chunks) { samples.set(c, off); off += c.length; }
     const frames = smoothFrames(trackPitch(samples, ctx.sampleRate));
     const notes = framesToNotes(frames, bpm, { loopBeats: beats });
-    return { notes, beats, frames: frames.length };
+    return { notes, beats, frames: frames.length, samples, sampleRate: ctx.sampleRate };
   }
 
   return { record, recording, countIn, cancel: () => stopRef.current?.() };
