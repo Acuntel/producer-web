@@ -132,7 +132,7 @@ export function AnalyzeSheet({ stems, signedIn, onSignIn, onClose }: { stems: St
                   {job.result?.facts && <FactsLine f={job.result.facts} />}
                   {job.result?.kind === "tracklist" && job.result.tracklist?.length ? (
                     <div className="mt-3">
-                      <div className="eyebrow mb-1.5">Named so far{job.result.durationSec ? ` in ${mmss(job.result.durationSec)} of mix` : ""}</div>
+                      <div className="eyebrow mb-1.5">Named so far{job.result.durationSec ? ` in ${mmss(job.result.durationSec)} of mix` : ""}{job.result.tracklist?.length ? `, last at ${mmss(job.result.tracklist[job.result.tracklist.length - 1].start)}` : ""}</div>
                       <TracklistList entries={job.result.tracklist} stems={stems} />
                     </div>
                   ) : null}
@@ -158,9 +158,13 @@ export function AnalyzeSheet({ stems, signedIn, onSignIn, onClose }: { stems: St
                     <div className="flex items-start gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-base font-semibold text-ink">{job.result.name ?? "The mix"}</div>
-                        <p className="tnum mt-1 text-sm text-ink-2">{mmss(job.result.durationSec ?? 0)} · {job.result.tracklist?.length ?? 0} records named from the sound{job.result.timing ? ` in ${Math.round(job.result.timing.identifySec ?? 0)} s` : ""}</p>
+                        <p className="tnum mt-1 text-sm text-ink-2">{mmss(job.result.durationSec ?? 0)} · {job.result.tracklist?.length ?? 0} records named from the sound{job.result.cached ? ", read before" : job.result.timing ? ` in ${Math.round(job.result.timing.identifySec ?? 0)} s` : ""}</p>
+                        {job.result.partial && <p className="mt-1 text-xs text-warn">Named up to {mmss(job.result.coveredSec ?? 0)}. The naming service asked for a pause{job.result.cooldownSec ? ` of about ${Math.ceil(job.result.cooldownSec / 60)} minutes` : ""}; Keep going picks up from there.</p>}
                       </div>
-                      <Button tone="quiet" onClick={stems.reset}>Analyze another</Button>
+                      <div className="flex shrink-0 flex-col gap-2">
+                        {job.result.partial && <Button tone="accent" onClick={() => void stems.keepGoing()} disabled={starting}>Keep going</Button>}
+                        <Button tone="quiet" onClick={stems.reset}>Analyze another</Button>
+                      </div>
                     </div>
                   </div>
                   {job.result.tracklist?.length ? <TracklistList entries={job.result.tracklist} stems={stems} /> : <p className="text-sm text-ink-2">{job.result.cooldownSec ? `Naming is cooling down for about ${Math.ceil(job.result.cooldownSec / 60)} minutes after too many requests. Try again then.` : "Nothing in it could be named. Unreleased edits and very quiet passages stay anonymous; capture the part you care about from the tab instead."}</p>}

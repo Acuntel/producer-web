@@ -101,26 +101,46 @@ COOLDOWN_SEC = float(os.environ.get("IDENTIFY_COOLDOWN", "600"))
 _COOL = os.path.join(tempfile.gettempdir(), "producer-identify.cool")
 
 
+_HOLD = os.path.join(tempfile.gettempdir(), "producer-identify.hold")
+
+
+def _read_state(path: str) -> list[float]:
+    try:
+        with open(path) as f: return [float(x) for x in f.read().split()]
+    except Exception: return []
+
+
 def cooling() -> float:
-    """Seconds left of a cooldown after consecutive timeouts (the service blocking this address), else 0."""
+    """Seconds left of the long cooldown (the service blocking this address after repeated timeouts), else 0."""
     import time as _t
-    try:
-        with open(_COOL) as f: until, n = f.read().split()
-        return max(0.0, float(until) - _t.time())
-    except Exception: return 0.0
+    st = _read_state(_COOL)
+    return max(0.0, st[0] - _t.time()) if st else 0.0
 
 
-def _note_outcome(timed_out: bool) -> None:
-    """Three timeouts in a row start a cooldown; one answer clears the count."""
+def holding() -> float:
+    """Seconds left of a short hold: the service answered slowly or timed out, so everyone waits a little."""
     import time as _t
+    st = _read_state(_HOLD)
+    return max(0.0, st[0] - _t.time()) if st else 0.0
+
+
+def _note_outcome(latency: float, timed_out: bool) -> None:
+    """The service's own penalties are graded: a slow answer means slow down, a timeout means pause and go on
+    slower, six timeouts inside three minutes mean it has blocked us and we stop for COOLDOWN_SEC."""
+    import time as _t
+    now = _t.time()
     try:
-        try:
-            with open(_COOL) as f: until, n = f.read().split(); n = int(n)
-        except Exception: until, n = "0", 0
-        n = n + 1 if timed_out else 0
-        new_until = _t.time() + COOLDOWN_SEC if n >= 3 else float(until)
-        with open(_COOL, "w") as f: f.write(f"{new_until:.1f} {n}")
-        if n == 3: print(f"identify: three timeouts in a row, cooling down for {int(COOLDOWN_SEC)} s", flush=True)
+        if not timed_out and latency < 3.0: return
+        hold = 10.0 if not timed_out else 30.0
+        with open(_HOLD, "w") as f: f.write(f"{now + hold:.1f}")
+        if not timed_out: return
+        stamps = [x for x in _read_state(_COOL)[1:] if now - x < 180.0] + [now]
+        if len(stamps) >= 6:
+            with open(_COOL, "w") as f: f.write(f"{now + COOLDOWN_SEC:.1f} " + " ".join(f"{x:.1f}" for x in stamps))
+            print(f"identify: {len(stamps)} timeouts in three minutes, cooling down for {int(COOLDOWN_SEC)} s", flush=True)
+        else:
+            with open(_COOL, "w") as f: f.write("0 " + " ".join(f"{x:.1f}" for x in stamps))
+            print(f"identify: timeout {len(stamps)} of 6 in the window, holding {int(hold)} s", flush=True)
     except Exception: pass
 
 
@@ -132,16 +152,21 @@ def identify_bytes(path: str) -> dict | None:
     async def go():
         return await asyncio.wait_for(Shazam().recognize(path), timeout=TIMEOUT_SEC)
     if cooling() > 0: return None
-    _pace()
-    t0 = _t.time()
-    try:
-        r = _parse(asyncio.run(go()))
-        _note_outcome(False)
-    except Exception as e:
-        timed = isinstance(e, (asyncio.TimeoutError, TimeoutError)) or "Timeout" in type(e).__name__
-        _note_outcome(timed)
-        print(f"identify failed after {_t.time()-t0:.1f}s: {str(e)[:120] or type(e).__name__}", flush=True)
-        return None
+    for attempt in (1, 2):
+        h = holding()
+        if h > 0: _t.sleep(min(h, 60.0))
+        if cooling() > 0: return None
+        _pace()
+        t0 = _t.time()
+        try:
+            r = _parse(asyncio.run(go()))
+            _note_outcome(_t.time() - t0, False)
+            break
+        except Exception as e:
+            timed = isinstance(e, (asyncio.TimeoutError, TimeoutError)) or "Timeout" in type(e).__name__
+            _note_outcome(_t.time() - t0, timed)
+            print(f"identify failed after {_t.time()-t0:.1f}s (attempt {attempt}): {str(e)[:120] or type(e).__name__}", flush=True)
+            if attempt == 2 or not timed: return None
     if os.environ.get("IDENTIFY_DEBUG"): print(f"identify {os.path.basename(path)} {_t.time()-t0:.2f}s {'hit' if r else 'miss'}", flush=True)
     return r
 
@@ -177,7 +202,7 @@ def _one_cut(args) -> tuple[float, dict | None]:
     return s, r
 
 
-def tracklist(path: str, duration: float, step: float = STEP_SEC, cut: float = CUT_SEC, workers: int = WORKERS, progress=None) -> list[dict]:
+def tracklist(path: str, duration: float, step: float = STEP_SEC, cut: float = CUT_SEC, workers: int = WORKERS, progress=None, from_sec: float = 0.0, stats: dict | None = None) -> list[dict]:
     """Cuts land where the audio says the record changed: one mid-segment cut per segment (two for a long one),
     then a second chance next to every miss, then a coarse safety pass only where the segments are long.
     Capped at MAX_CUTS so a run can never approach the service's block."""
@@ -197,7 +222,7 @@ def tracklist(path: str, duration: float, step: float = STEP_SEC, cut: float = C
         plan.append(max(0.0, mid))
         if b - a > 240: plan.append(round(a + (b - a) * 0.25 - cut / 2, 1)); plan.append(round(a + (b - a) * 0.75 - cut / 2, 1))
     if not bounds: plan = [float(s) for s in range(0, max(1, int(duration - cut / 2)), int(step))]
-    plan = sorted({p for p in plan if 0 <= p and p + cut <= duration + 1})[:MAX_CUTS]
+    plan = sorted({p for p in plan if from_sec <= p and p + cut <= duration + 1})[:MAX_CUTS]
     total_est = min(MAX_CUTS, len(plan) + len(plan) // 3 + 2)
     done = 0
     with tempfile.TemporaryDirectory(prefix="tl-") as td, ThreadPoolExecutor(max_workers=workers) as ex:
@@ -215,7 +240,13 @@ def tracklist(path: str, duration: float, step: float = STEP_SEC, cut: float = C
         keys = sorted(k for k in hits if hits[k])
         mids = [round((a + b) / 2, 1) for a, b in zip(keys, keys[1:]) if b - a > 90 and hits[a]["key"] != hits[b]["key"]]
         run(mids)
-    print(f"tracklist: {len(bounds)} boundaries, {len(hits)} cuts, {sum(1 for v in hits.values() if v)} named", flush=True)
+    named = sum(1 for v in hits.values() if v)
+    # Coverage: the last cut that was actually asked (a cooldown answers None without asking).
+    asked = [k for k in hits if hits[k] is not None] or [from_sec]
+    stopped = cooling() > 0
+    covered = duration if not stopped else min(duration, max(asked) + cut)
+    if stats is not None: stats.update({"cuts": len(hits), "named": named, "boundaries": len(bounds), "coveredSec": round(covered, 1), "partial": stopped})
+    print(f"tracklist: {len(bounds)} boundaries, {len(hits)} cuts, {named} named, covered {int(covered)}s of {int(duration)}s{' (cooldown)' if stopped else ''}", flush=True)
     return merge_hits(hits, cut)
 
 

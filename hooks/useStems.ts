@@ -16,7 +16,7 @@ export type OneShotOut = { role: string; path: string; clipId?: string; duration
 export type Hearing = { report?: string; drumGrids?: Record<string, string>; bass?: { root?: string; notes?: string[]; eighthRhythm?: string }; chords?: string[]; lyrics?: { lines: { at: number; text: string }[] }; clap?: { descriptors?: [string, number][]; genres?: [string, number][] }; blocks?: { at: number; level: number; carries: string; entering: string[]; leaving: string[] }[]; perStem?: Record<string, { share: number; centroidHz: number; crestDb: number; onsetsPerBeat: number }>; error?: string };
 export type Identity = { key: string; title: string; artist: string | null; isrc?: string | null; album?: string | null; label?: string | null; year?: string | null; genre?: string | null; cover?: string | null; url?: string | null; offsetSec: number; timeSkew: number; pitchPct: number; confident: boolean; atSec?: number };
 export type TrackEntry = { key: string; title: string; artist: string | null; isrc?: string | null; album?: string | null; label?: string | null; year?: string | null; cover?: string | null; url?: string | null; start: number; end: number; hits: number; pitchPct: number; offsetSec: number; confident: boolean; query: string };
-export type StemsResult = { facts?: StemsFacts; stems?: StemOut[]; oneshots?: OneShotOut[]; name?: string; stage?: string; hearing?: Hearing; cached?: boolean; preview?: { stems: (StemOut & { startSec?: number; bars?: number })[]; oneshots: OneShotOut[] }; identity?: Identity | null; timing?: Record<string, number>; kind?: "stems" | "hear" | "tracklist"; tracklist?: TrackEntry[]; durationSec?: number; sourceUrl?: string | null; cooldownSec?: number };
+export type StemsResult = { facts?: StemsFacts; stems?: StemOut[]; oneshots?: OneShotOut[]; name?: string; stage?: string; hearing?: Hearing; cached?: boolean; preview?: { stems: (StemOut & { startSec?: number; bars?: number })[]; oneshots: OneShotOut[] }; identity?: Identity | null; timing?: Record<string, number>; kind?: "stems" | "hear" | "tracklist"; tracklist?: TrackEntry[]; durationSec?: number; sourceUrl?: string | null; cooldownSec?: number; coveredSec?: number; partial?: boolean };
 export const identityLine = (i: Identity | null | undefined) => i?.title ? `${i.artist ? `${i.artist} - ` : ""}${i.title}${i.year || i.label ? ` (${[i.label, i.year].filter(Boolean).join(", ")})` : ""}${Math.abs(i.pitchPct) >= 0.5 ? `, played at ${i.pitchPct > 0 ? "+" : ""}${i.pitchPct.toFixed(1)}%` : ""}` : "";
 export type FindCandidate = { source: string; title: string; url: string; artist: string | null; duration_sec: number | null; year: number | null; license: string | null; kind: string; score: number };
 export type StemsJob = { id: string; kind?: "stems" | "hear" | "tracklist"; status: "queued" | "running" | "done" | "error"; progress: number; result: StemsResult | null; error: string | null; source: { url?: string; storage_path?: string; name?: string; query?: string } };
@@ -62,9 +62,10 @@ export function useStems(d: Deps) {
           if (res?.kind === "tracklist") {
             const tl = res.tracklist ?? [];
             dRef.current.flash(tl.length ? `${tl.length} records in ${res.name ?? "the mix"}` : "Could not name anything in that mix");
+            const coverage = res.partial ? ` Named up to ${mmss(res.coveredSec ?? 0)} of ${mmss(res.durationSec ?? 0)}; the naming service asked for a pause${res.cooldownSec ? ` of about ${Math.ceil(res.cooldownSec / 60)} minutes` : ""}, so the rest waits for "keep going".` : "";
             const lines = tl.slice(0, 40).map((e, i) => `${i + 1}. ${mmss(e.start)} ${e.artist ? `${e.artist} - ` : ""}${e.title}${Math.abs(e.pitchPct) >= 0.5 ? ` (played ${e.pitchPct > 0 ? "+" : ""}${e.pitchPct.toFixed(1)}%)` : ""}${e.confident ? "" : " (unsure)"}${e.year ? ` [${e.year}]` : ""} → query "${e.query}"`).join("\n");
             void dRef.current.send(tl.length
-              ? `TRACKLIST of "${res.name ?? "the mix"}" (${mmss(res.durationSec ?? 0)}), identified from the sound in cuts:\n${lines}\nTell the user what is in it the way a DJ friend would (the records that matter, who plays what after what, the pitch moves), in a few lines at most. To pull one into the studio, return action {"type":"analyze","query": "<that entry's query>"}. Do not change the song.`
+              ? `TRACKLIST of "${res.name ?? "the mix"}" (${mmss(res.durationSec ?? 0)}), identified from the sound in cuts:\n${lines}\n${coverage}Tell the user what is in it the way a DJ friend would (the records that matter, who plays what after what, the pitch moves), in a few lines at most. To pull one into the studio, return action {"type":"analyze","query": "<that entry's query>"}. Do not change the song.`
               : res.cooldownSec ? `The mix "${res.name ?? "the mix"}" could not be read: the recognition service is cooling down for about ${Math.ceil(res.cooldownSec / 60)} minutes after too many requests. Say so in one line and offer to try again then. Do not change the song.`
               : `The mix "${res.name ?? "the mix"}" (${mmss(res.durationSec ?? 0)}) came back with no identifiable records (unreleased edits, or too quiet). Say so in one line and offer capture from the tab for the part they care about. Do not change the song.`, { hidden: true });
             return;
@@ -111,7 +112,7 @@ export function useStems(d: Deps) {
     pollRef.current = window.setTimeout(() => void poll(id, since), 2500);
   }, []);
 
-  const start = useCallback(async (input: { url?: string; file?: File; query?: string; storagePath?: string; name?: string; kind?: "stems" | "tracklist" }) => {
+  const start = useCallback(async (input: { url?: string; file?: File; query?: string; storagePath?: string; name?: string; kind?: "stems" | "tracklist"; fromSec?: number }) => {
     const sb = supabaseBrowser(); const uid = dRef.current.user?.id;
     if (!sb || !uid) { setError("Sign in to analyze a record."); return; }
     setError(null); setStarting(true); setJob(null); stopPolling();
@@ -124,7 +125,7 @@ export function useStems(d: Deps) {
         const { error: upErr } = await sb.storage.from("clips").upload(storagePath, input.file, { contentType: input.file.type || "audio/mpeg", upsert: true });
         if (upErr) throw new Error(upErr.message);
       }
-      const r = await fetch("/api/stems", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: input.url, query: input.query, storagePath, name: name ?? input.query, projectId: dRef.current.projectId, kind: input.kind ?? "stems" }) });
+      const r = await fetch("/api/stems", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: input.url, query: input.query, storagePath, name: name ?? input.query, projectId: dRef.current.projectId, kind: input.kind ?? "stems", fromSec: input.fromSec }) });
       const j = await r.json();
       if (!r.ok || !j.jobId) throw new Error(j.error ?? "could not start");
       setJob({ id: j.jobId, status: "queued", progress: 0, result: null, error: null, source: { url: input.url, storage_path: storagePath, name: name ?? input.query } });
@@ -326,9 +327,19 @@ export function useStems(d: Deps) {
     await start({ file, name: ident?.title ? `${ident.artist ? `${ident.artist} - ` : ""}${ident.title}`.slice(0, 80) : undefined });
   }, [identifyClip, start]);
   /** What is in this mix: by link, by name (the finder prefers mixes) or a file; the worker identifies it in cuts. */
-  const startTracklist = useCallback(async (input: { url?: string; query?: string; file?: File; name?: string }) => {
+  const startTracklist = useCallback(async (input: { url?: string; query?: string; file?: File; name?: string; fromSec?: number }) => {
     await start({ ...input, kind: "tracklist" });
   }, [start]);
+  /** A read that stopped early (the naming service asked for a pause): carry on from where it got to. */
+  const keepGoing = useCallback(async () => {
+    const j = job; const res = j?.result;
+    if (!j || res?.kind !== "tracklist" || !res.partial) return;
+    const src = j.source ?? {};
+    const from = res.coveredSec ?? 0;
+    if (res.sourceUrl || src.url) await start({ url: res.sourceUrl ?? src.url, name: res.name ?? src.name, kind: "tracklist", fromSec: from });
+    else if (src.query) await start({ query: src.query, name: res.name ?? src.name, kind: "tracklist", fromSec: from });
+    else if (src.storage_path) await start({ storagePath: src.storage_path, name: res.name ?? src.name, kind: "tracklist", fromSec: from });
+  }, [job, start]);
   /** Ranked candidates across every public source (about a second), plus the connected folder if any. */
   const find = useCallback(async (query: string, want?: string): Promise<{ web: FindCandidate[]; local: LocalHit[] }> => {
     const q = query.trim(); if (!q) return { web: [], local: [] };
@@ -376,7 +387,7 @@ export function useStems(d: Deps) {
   const reset = useCallback(() => { stopPolling(); setJob(null); setError(null); setCandidates([]); setLocalHits([]); }, []);
   const askBreakdown = useCallback(() => { const n = job?.result?.name ?? "that record"; void dRef.current.send(`Break down "${n}" for me: structure, the engine, the hook, the drum language, the mix picture, and the one trick. Then say which piece we should take.`); }, [job]);
 
-  return { job, error, starting, start, useOneShot, addStemLoop, renderVocal, findSound, hearOurRender, previewUrl, reset, askBreakdown, find, prefetch, candidates, localHits, finding, connectLocal, analyzeLocal, findAndAnalyze, folder: folderInfo(), canPickFolder: canPickFolder(), identifyClip, identifyPlaying, startCaptured, startTracklist, identified, identifying };
+  return { job, error, starting, start, useOneShot, addStemLoop, renderVocal, findSound, hearOurRender, previewUrl, reset, askBreakdown, find, prefetch, candidates, localHits, finding, connectLocal, analyzeLocal, findAndAnalyze, folder: folderInfo(), canPickFolder: canPickFolder(), identifyClip, identifyPlaying, startCaptured, startTracklist, keepGoing, identified, identifying };
 }
 
 function friendly(msg: string): string {

@@ -51,6 +51,21 @@ def set_clip_embedding(clip_id: str, source: dict, embedding: list[float] | None
     requests.patch(f"{URL}/rest/v1/clips?id=eq.{clip_id}", headers=_h({"Content-Type": "application/json", "Prefer": "return=minimal"}), data=json.dumps(body), timeout=15)
 
 
+# --- The mix cache: a tracklist read once at a link serves everyone who asks for that mix again. ---
+def mix_cache_find(url: str) -> dict | None:
+    if not url or not url.startswith("http"): return None
+    r = requests.get(f"{URL}/rest/v1/mix_cache?source_url=eq.{urllib.parse.quote(url, safe='')}&select=source_url,result,hits&limit=1", headers=_h(), timeout=20)
+    if not r.ok or not r.json(): return None
+    row = r.json()[0]
+    requests.patch(f"{URL}/rest/v1/mix_cache?source_url=eq.{urllib.parse.quote(url, safe='')}", headers=_h({"Content-Type": "application/json", "Prefer": "return=minimal"}), data=json.dumps({"hits": (row.get("hits") or 0) + 1}), timeout=10)
+    return row
+
+
+def mix_cache_put(url: str, result: dict) -> None:
+    body = {"source_url": url, "result": {k: v for k, v in result.items() if k in ("kind", "name", "durationSec", "tracklist", "sourceUrl", "coveredSec", "partial", "timing")}}
+    requests.post(f"{URL}/rest/v1/mix_cache", headers=_h({"Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal"}), data=json.dumps(body), timeout=30)
+
+
 # --- The fingerprint cache: one analyzed record serves everyone who finds it again. ---
 def cache_find_url(url: str) -> dict | None:
     """The same source link seen before: no download, no fingerprint."""
