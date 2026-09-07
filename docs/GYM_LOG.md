@@ -169,3 +169,16 @@ Brady's deeper brief is in docs/ROUND_0906C_MASTERPROMPT.md. This part ships the
 - DESIGN: tighter radii, quieter shadows, a flat orb; lib/song/moves.ts turns every op batch into lane moves; the lane flashes and shows the move label ("filter 520", "sound: Demo Track 1 · kick"), and a placed sound auditions once through the master.
 - Music engine facts learned the hard way: `composition_plan` is a music_v1 feature (music_v2 rejects it with "Invalid type of composition_plan"), and `music_length_ms` may not accompany a plan. A 10 s hook composes in about 3 s on either model. The route now sends the plan on v1 (lyrics as written) and falls back to a prose prompt on v2.
 - Chrome's fake-audio-capture flag delivers silence in this build; tests/voice.e2e.mjs injects a WAV as the page microphone through getUserMedia instead.
+
+### Still open after part 2 (honest list)
+- Sound search has an endpoint and a voice action but no dedicated screen; it speaks through the producer ("is this the one?").
+- Deep listen of our own render exists as a brain action; the initiative loop does not yet call it on its own.
+- The design pass is tokens, orb and lane moves; the mixer and panels still carry the round-B look. A full visual pass against a real DAW reference is the next design round.
+- Taste ledger and A/B picks are still per-browser (localStorage), not per-user in the database.
+- Vocals: the engine composes a hook in about 3 s; the sung result quality has not been judged by ear yet.
+
+### Cost controls (after the house key ran dry on 2026-09-06 evening)
+- What spent it: a 24k-token prefix on every brain call with only the MIND block cached, everything on Opus after the round C switch, eight calls per rollout, a critic call after every re-listen, and about 25 harness sessions across local and prod in one day.
+- Now: PRODUCER_MODEL claude-opus-5 for conversation, blueprint, bass and verdict; PRODUCER_FAST_MODEL claude-sonnet-5 for drums, harmony, hook, craft, mix; PRODUCER_CRITIC_MODEL claude-sonnet-5. Economy mode (PRODUCER_ECONOMY=1 or ?economy=1, which every harness now sends) puts every call on the fast model. The critic is keyed on the song's tracks and sections, not the measurement, so a re-listen of the same song writes no new note. Initiative fires after two quiet minutes, six minutes apart at most.
+- Cache: the ephemeral breakpoint on the last system block covers persona, contract, process and mind together, so the whole prefix is a cache read after the first call. Prices in one sentence: on this setup a full voice-built song is about $2.50 to $3.50 in brain tokens plus about $0.50 of speech and cents of worker compute; all-Opus uncached was $9 to $12.
+- Not allowed and not possible: powering the app with a Claude Max login. Anthropic's terms reserve Pro/Max OAuth tokens for Claude apps and Claude Code; third-party products use Console keys. Verified 09-01: the OAuth token rate-limits Opus instantly anyway.

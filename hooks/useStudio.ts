@@ -426,10 +426,10 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     if (!started || paused) return;
     const t = window.setInterval(() => {
       const now = Date.now();
-      if (busyRef.current || rollout || now - lastUtteranceRef.current < 60000 || now - lastInitiativeRef.current < 240000 || songRef.current.tracks.length === 0) return;
+      if (busyRef.current || rollout || now - lastUtteranceRef.current < 120000 || now - lastInitiativeRef.current < 360000 || songRef.current.tracks.length === 0) return;
       lastInitiativeRef.current = now;
       const pos = engineRef.current?.getPosition();
-      void send(`PRODUCER INITIATIVE: the user has been listening quietly for a minute${pos ? ` (now in the ${pos.section}, bar ${pos.barInSection + 1})` : ""}. Take one initiative a real producer would: EITHER offer an A/B on one specific element (return ops for A and alternative for B, say "A or B?") OR pause and point at one bar with one proposed fix as a question. One sentence, no lecture, nothing else changes.`, { hidden: true });
+      void send(`PRODUCER INITIATIVE: the user has been listening quietly for two minutes${pos ? ` (now in the ${pos.section}, bar ${pos.barInSection + 1})` : ""}. Take one initiative a real producer would: EITHER offer an A/B on one specific element (return ops for A and alternative for B, say "A or B?") OR pause and point at one bar with one proposed fix as a question. One sentence, no lecture, nothing else changes.`, { hidden: true });
     }, 15000);
     return () => window.clearInterval(t);
   }, [started, paused, rollout, send]);

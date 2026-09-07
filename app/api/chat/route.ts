@@ -20,6 +20,8 @@ import { skillsFor, skillsBlock } from "@/lib/brain/skills";
 export const maxDuration = 60;
 
 const MODEL = process.env.PRODUCER_MODEL || "claude-opus-5";
+const FAST = process.env.PRODUCER_FAST_MODEL || "claude-sonnet-5";
+const economy = (req: Request) => process.env.PRODUCER_ECONOMY === "1" || new URL(req.url).searchParams.get("economy") === "1";
 const SAY_RE = /"say"\s*:\s*"((?:[^"\\]|\\.)*)"/;
 
 type Msg = { role: "user" | "assistant"; content: unknown };
@@ -60,11 +62,13 @@ export async function POST(req: Request) {
   const finalUser = buildUserBlock(input, last?.content ?? "");
 
   const params = {
-    model: MODEL,
+    model: economy(req) ? FAST : MODEL,
     max_tokens: 16000,
     output_config: { effort: "low" as const },
     tools: [{ type: "web_search_20260209" as const, name: "web_search" as const, max_uses: 3 }],
     system: [
+      // One cached prefix: persona, contract, process and the mind together. The cache breakpoint sits on the
+      // LAST block so the whole prefix is read at a tenth of the price after the first call.
       { type: "text" as const, text: PERSONA },
       { type: "text" as const, text: CONTRACT },
       { type: "text" as const, text: PROCESS },

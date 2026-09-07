@@ -77,10 +77,10 @@ async function main() {
   // ---- 2. the real studio: orb, then a typed request through the brain ----
   console.log(`[e2e] ${BASE}/`);
   await call("Page.addScriptToEvaluateOnNewDocument", { source: `(() => { const f = window.fetch; window.__chat = []; window.fetch = async (...a) => { const r = await f(...a); try { if (String(a[0]).includes('/api/chat')) { const c = r.clone(); c.json().then((j) => window.__chat.push(j)).catch(() => {}); } } catch {} return r; }; })();` });
-  await call("Page.navigate", { url: `${BASE}/?e2e=1` });
+  await call("Page.navigate", { url: `${BASE}/?e2e=1&economy=1` });
   await waitFor(`!!document.querySelector('button[aria-label="Start the session"]')`, 30000, "orb");
   await evalJs(`localStorage.clear(); true`);
-  await call("Page.navigate", { url: `${BASE}/?e2e=1` });
+  await call("Page.navigate", { url: `${BASE}/?e2e=1&economy=1` });
   await waitFor(`!!document.querySelector('button[aria-label="Start the session"]')`, 30000, "orb after reset");
   // Tap until the session actually starts: on a CDN load the first tap can land before hydration.
   const startedAt = Date.now();

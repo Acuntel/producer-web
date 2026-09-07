@@ -30,10 +30,10 @@ async function main() {
   const js = async (expr) => { const r = await call("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(JSON.stringify(r.exceptionDetails).slice(0, 400)); return r.result.value; };
   const waitFor = async (expr, ms, label) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const v = await js(expr); if (v) return v; await sleep(400); } throw new Error(`timeout waiting for ${label}`); };
   // Guest mode, NOT typed: the microphone drives the session.
-  await call("Page.navigate", { url: `${BASE}/?guest=1` });
+  await call("Page.navigate", { url: `${BASE}/?guest=1&economy=1` });
   await sleep(2500);
   await js(`localStorage.clear(); localStorage.setItem('producer.guest.v1','1'); true`);
-  await call("Page.navigate", { url: `${BASE}/?guest=1` });
+  await call("Page.navigate", { url: `${BASE}/?guest=1&economy=1` });
   await waitFor(`!!document.querySelector('button[aria-label="Start the session"]') || document.body.innerText.includes('New session')`, 30000, "home or orb");
   // From Home, New session opens the studio and starts it (one tap).
   if (await js(`document.body.innerText.includes('New session')`)) { await js(`[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'New session')?.click(); true`); }

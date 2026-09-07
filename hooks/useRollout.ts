@@ -6,6 +6,7 @@ import { applyOps, migrateSong, withReferenceGroove, type Song } from "@/lib/son
 import type { MusicFacts } from "@/lib/ears";
 import { ROLLOUTS, groupSteps, scopeText, type RolloutKind, type Step } from "@/lib/brain/rollouts";
 import { logMoveScore } from "@/lib/scorecard";
+import { economyQuery } from "@/lib/brain/stream";
 
 export type RolloutState = { kind: RolloutKind; index: number; total: number; title: string; status: string } | null;
 export type StepLog = { step: string; attempt: number; ms: number; model?: string; applied: number; skipped: number; check: string | null; say: string; tracks: number };
@@ -52,7 +53,7 @@ export function useRollout(deps: Deps) {
         const song = deps.getSong();
         const ref = deps.getReference();
         const ts = Date.now();
-        const r = await fetch("/api/step", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+        const r = await fetch("/api/step" + economyQuery(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
           step: { id: step.id, title: step.title, goal: step.goal, scope: scopeText(step), tier: step.tier, fullSong: !!step.fullSong }, kind, song, facts: deps.compact(facts),
           reference: ref ? { name: ref.name, facts: deps.compact(ref.facts) } : null, deltas: deps.getDeltas(facts), lane: song.lane, askedLane: lane ?? null, ask, prior, attempt, failure, section: section ?? null, taste: deps.taste(),
         }) }).then((x) => x.json()).catch(() => null);

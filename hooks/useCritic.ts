@@ -20,7 +20,8 @@ export function useCritic(d: Deps) {
   const timer = useRef<number | null>(null);
   useEffect(() => { setNotes(loadNotes()); }, []);
 
-  const keyOf = (x: Deps) => (x.facts ? `${x.song.title}|${x.facts.loudness.integrated}|${x.facts.spectrum.centroidHz}|${x.song.tracks.length}|${x.reference?.name ?? ""}` : "");
+  // Keyed on the SONG (its tracks and sections), not on the measurement: a re-listen of the same song is not a new note.
+  const keyOf = (x: Deps) => (x.facts ? `${x.song.title}|${x.song.tracks.length}|${JSON.stringify(x.song.tracks.map((t) => [t.id, t.volume, t.mute, t.notes.length, t.clip?.clipId ?? ""]))}|${x.song.sections.length}|${x.reference?.name ?? ""}` : "");
 
   const run = useCallback(async () => {
     const x = latest.current;

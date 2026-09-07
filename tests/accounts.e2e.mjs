@@ -45,7 +45,7 @@ async function main() {
 
   // 1. Gate
   console.log(`[acct] ${BASE}/ (no guest flag): expect the account gate`);
-  await call("Page.navigate", { url: `${BASE}/?typed=1` });
+  await call("Page.navigate", { url: `${BASE}/?typed=1&economy=1` });
   await waitFor(`document.body.innerText.includes('Create account') && document.body.innerText.includes('Try it without an account')`, 30000, "gate");
   await shot("acct-1-gate");
   // 2. Sign up
@@ -122,7 +122,7 @@ async function main() {
   assert.ok(await js(`(() => { const b = document.querySelector('form button[type="submit"]'); if (!b) return false; b.click(); return true; })()`), "sign in submit");
   await waitFor(`!document.body.innerText.includes('Try it without an account')`, 30000, "gate closes after sign-in");
   const cookiesBefore = await js(`document.cookie.split(';').map((c) => c.trim().split('=')[0]).filter((n) => n.startsWith('sb-')).length`);
-  await call("Page.navigate", { url: `${BASE}/?typed=1` });
+  await call("Page.navigate", { url: `${BASE}/?typed=1&economy=1` });
   await waitFor(`!!document.querySelector('button[aria-label="Your account"]')`, 30000, "still signed in after reload");
   const cookiesAfter = await js(`document.cookie.split(';').map((c) => c.trim().split('=')[0]).filter((n) => n.startsWith('sb-')).length`);
   console.log(`[acct] signed back in; session cookies before reload ${cookiesBefore}, after ${cookiesAfter}; account icon present after reload`);

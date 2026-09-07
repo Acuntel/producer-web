@@ -14,6 +14,8 @@ import { dnaLaneFor, laneHomeBpm } from "@/lib/brain/laneNames";
 export const maxDuration = 90;
 const FAST = process.env.PRODUCER_FAST_MODEL || "claude-sonnet-5";
 const DEEP = process.env.PRODUCER_MODEL || "claude-opus-5";
+// Harness and low-cost runs: everything on the fast model. Set PRODUCER_ECONOMY=1 or send ?economy=1.
+const economy = (req: Request) => process.env.PRODUCER_ECONOMY === "1" || new URL(req.url).searchParams.get("economy") === "1";
 
 type StepInput = {
   step: { id: string; title: string; goal: string; scope: string; tier: "fast" | "deep"; fullSong?: boolean };
@@ -49,7 +51,7 @@ export async function POST(req: Request) {
   ].filter(Boolean).join("\n\n");
   try {
     const ask = (content: string) => client.messages.create({
-      model: x.step.tier === "deep" ? DEEP : FAST,
+      model: x.step.tier === "deep" && !economy(req) ? DEEP : FAST,
       max_tokens: x.step.fullSong ? 12000 : 14000,
       output_config: { effort: "low" },
       system: [
@@ -74,7 +76,7 @@ export async function POST(req: Request) {
     const reply = parseBrain(text);
     if (stop === "max_tokens" || (!reply.ops && !reply.song && !reply.say)) console.warn("step reply problem", x.step.id, stop, text.length, text.slice(0, 200));
     const usage = (resp as { usage?: { output_tokens?: number; output_tokens_details?: { thinking_tokens?: number } } }).usage;
-    return Response.json({ say: reply.say, ops: reply.ops, song: reply.song, listen: reply.listen, model: x.step.tier === "deep" ? DEEP : FAST, usage, thinking: usage?.output_tokens_details?.thinking_tokens, stop, textLength: text.length, head: reply.ops || reply.song ? undefined : text.slice(0, 300) });
+    return Response.json({ say: reply.say, ops: reply.ops, song: reply.song, listen: reply.listen, model: x.step.tier === "deep" && !economy(req) ? DEEP : FAST, usage, thinking: usage?.output_tokens_details?.thinking_tokens, stop, textLength: text.length, head: reply.ops || reply.song ? undefined : text.slice(0, 300) });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "unknown error";
     return Response.json({ say: "That step hiccuped.", ops: null, song: null, detail: msg.slice(0, 200) }, { status: 200 });

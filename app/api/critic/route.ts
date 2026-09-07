@@ -10,7 +10,7 @@ import { dnaLaneFor } from "@/lib/brain/laneNames";
 import { mixerLine } from "@/lib/brain/context";
 
 export const maxDuration = 60;
-const MODEL = process.env.PRODUCER_FAST_MODEL || "claude-sonnet-5";
+const MODEL = process.env.PRODUCER_CRITIC_MODEL || "claude-sonnet-5";   // the critic writes notes; the fast tier is plenty
 
 const ROLE = `You are the studio's CRITIC: a second producer listening in the back of the room. You NEVER change the song. You write short, specific recommendations from the measurements, the lane DNA and the reference deltas; the user decides what to do with them. Rules: numbers over adjectives; each note names ONE thing, WHY (the measurement), and ONE concrete move in the studio's own terms (ops in the SongDoc contract when you can write them exactly); severity 3 = it does not sound like a record yet, 2 = clearly better with this, 1 = taste. At most 5 notes, best first. Reading the pump number: "pump" is beat-rate loudness modulation of the WHOLE mix; a sparse synth mix with nothing sustained between kicks reads 0.8+ no matter the sidechain setting, so when pump is high AND sub+low is above 0.8 the move is to add sustained energy (pads, stabs, hats, chords), never to ease the sidechain below 5 dB. Never repeat something the user already dismissed. No em dashes. Output ONLY JSON: {"headline": "<one sentence overall read>", "notes": [{"area": "mix"|"arrangement"|"groove"|"harmony"|"sound"|"reference", "severity": 1|2|3, "what": "...", "why": "...", "fix": "...", "section"?: id, "ops"?: [..]}]}`;
 

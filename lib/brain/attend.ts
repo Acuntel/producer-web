@@ -38,7 +38,7 @@ export function quickGate(text: string, ctx: { paused: boolean; recentMove: bool
 
 export async function classify(text: string, ctx: { paused: boolean; lastProducer: string; lastAsk: string; section: string }): Promise<Intent> {
   try {
-    const r = await fetch("/api/attend", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, ...ctx }) });
+    const r = await fetch("/api/attend" + (typeof window !== "undefined" && /[?&]economy=1/.test(window.location.search) ? "?economy=1" : ""), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, ...ctx }) });
     const j = (await r.json()) as { intent?: Intent };
     return j.intent === "ignore" || j.intent === "talk" || j.intent === "command" ? j.intent : "command";
   } catch { return "command"; }   // fail open: never drop a request because the classifier hiccuped

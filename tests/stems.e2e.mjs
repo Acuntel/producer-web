@@ -38,7 +38,7 @@ async function main() {
   const setInput = async (selector, value) => js(`(() => { const i = document.querySelector(${JSON.stringify(selector)}); if (!i) return false; const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(i, ${JSON.stringify(value)}); i.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
   const clickText = async (text, tag = "button", starts = false) => js(`(() => { const b = [...document.querySelectorAll(${JSON.stringify(tag)})].find((x) => ${starts ? "x.textContent.trim().startsWith" : "x.textContent.trim() ==="}(${JSON.stringify(text)})); if (!b) return false; b.click(); return true; })()`);
 
-  await call("Page.navigate", { url: `${BASE}/?typed=1` });
+  await call("Page.navigate", { url: `${BASE}/?typed=1&economy=1` });
   await waitFor(`document.body.innerText.includes('Create account')`, 30000, "gate");
   await setInput('input[type="email"]', EMAIL); await setInput('input[type="password"]', PASSWORD);
   assert.ok(await clickText("Create my account"), "submit");
