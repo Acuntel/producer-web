@@ -186,8 +186,8 @@ def process_tracklist(job: Job, tmp: str) -> None:
     duration = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", wav], capture_output=True, text=True).stdout.strip() or 0)
     t_fetch = time.time() - t0
     supa.update_job(job.job_id, progress=20, result={"kind": "tracklist", "name": name, "durationSec": round(duration, 1), "stage": "identifying"})
-    def prog(done: int, total: int):
-        try: supa.update_job(job.job_id, progress=20 + int(75 * done / max(1, total)))
+    def prog(done: int, total: int, entries: list[dict] | None = None):
+        try: supa.update_job(job.job_id, progress=20 + int(75 * done / max(1, total)), result={"kind": "tracklist", "name": name, "durationSec": round(duration, 1), "stage": "identifying", "tracklist": entries or [], "cuts": done})
         except Exception: pass
     entries = identify.tracklist(wav, duration, progress=prog)
     final = {"kind": "tracklist", "name": name, "durationSec": round(duration, 1), "tracklist": entries, "sourceUrl": resolved,

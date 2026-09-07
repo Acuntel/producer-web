@@ -128,7 +128,7 @@ def tracklist(path: str, duration: float, step: float = STEP_SEC, cut: float = C
             todo = [s for s in starts if s not in hits and s + cut <= duration + 1]
             for s, r in ex.map(_one_cut, [(path, s, cut, td) for s in todo], chunksize=1):
                 hits[s] = r; done += 1
-                if progress and done % 6 == 0: progress(min(done, total_est), total_est)
+                if progress and done % 4 == 0: progress(min(done, total_est), total_est, merge_hits(hits, cut))
         # Coarse pass in order, skipping ahead after a confident hit: a record plays for minutes in a mix, so the
         # next cut lands two minutes on; a change sooner than that is caught by the refinement below.
         s0 = 0.0
@@ -146,6 +146,10 @@ def tracklist(path: str, duration: float, step: float = STEP_SEC, cut: float = C
                 if b - a > REFINE_SEC and (ka != kb or ka is None): mids.append(round((a + b) / 2, 1))
             if not mids: break
             run(mids)
+    return merge_hits(hits, cut)
+
+
+def merge_hits(hits: dict[float, dict | None], cut: float = CUT_SEC) -> list[dict]:
     entries: list[dict] = []
     for s in sorted(hits):
         r = hits.get(s)

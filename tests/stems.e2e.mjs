@@ -3,7 +3,7 @@
 // and the Supabase rows, then try a YouTube link. Cleans the user up.
 // Usage: node tests/stems.e2e.mjs [baseUrl] [audioFile]
 import { spawn } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import assert from "node:assert/strict";
 
 const BASE = process.argv[2] ?? "http://localhost:3111";
@@ -135,7 +135,18 @@ async function main() {
     if (again.jobId) { const t2 = Date.now(); let s2 = null; while (Date.now() - t2 < 4 * 60 * 1000) { await sleep(3000); s2 = await js(`fetch('/api/stems?id=${again.jobId}').then(r => r.json())`); if (s2.status === "done" || s2.status === "error") break; } console.log(`[stems] second time after ${Math.round((Date.now() - t2) / 1000)}s: status=${s2?.status} cached=${!!s2?.result?.cached} stems=${(s2?.result?.stems ?? []).length}`); }
   }
   // A DJ mix by name comes back as its tracklist: records with timestamps, the DJ's pitch move, a query each.
-  const tl = await js(`fetch('/api/stems', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: 'kettama essential mix', kind: 'tracklist' }) }).then(r => r.json())`);
+  // The recognition service blocks bursts of about twenty requests per address, so the routine proof uses a
+  // short uploaded mix (MIX_FILE, a few cuts); TRACKLIST_BY_NAME=1 runs the two hour Essential Mix instead.
+  let tl = { jobId: null };
+  if (process.env.MIX_FILE && existsSync(process.env.MIX_FILE)) {
+    const ext = process.env.MIX_FILE.split(".").pop();
+    const mixPath = `${user.id}/uploads/mix-${Date.now()}.${ext}`;
+    const upm = await fetch(`${SB}/storage/v1/object/clips/${mixPath}`, { method: "POST", headers: { apikey: SRK, Authorization: `Bearer ${SRK}`, "Content-Type": ext === "mp4" || ext === "m4a" ? "audio/mp4" : "audio/mpeg", "x-upsert": "true" }, body: readFileSync(process.env.MIX_FILE) });
+    console.log(`[stems] mix uploaded (${upm.status}) ${mixPath}`);
+    tl = await js(`fetch('/api/stems', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ storagePath: ${JSON.stringify(mixPath)}, name: 'test mix', kind: 'tracklist' }) }).then(r => r.json())`);
+  } else if (process.env.TRACKLIST_BY_NAME === "1") {
+    tl = await js(`fetch('/api/stems', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: 'kettama essential mix', kind: 'tracklist' }) }).then(r => r.json())`);
+  } else console.log("[stems] tracklist step skipped (set MIX_FILE=<short mix> or TRACKLIST_BY_NAME=1)");
   console.log(`[stems] tracklist job: ${JSON.stringify(tl)}`);
   if (tl.jobId) {
     const t3 = Date.now(); let s3 = null;
