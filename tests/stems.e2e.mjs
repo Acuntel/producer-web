@@ -107,13 +107,22 @@ async function main() {
     const said = await js(`(document.querySelector('[data-role="producer-line"]')?.textContent ?? '').slice(0, 200)`);
     console.log(`[stems] vocal NOT placed: ${e.message} | sheet: ${dlg.replace(/\n/g, ' ')} | producer: ${said}`);
   }
-  // Find a record by NAME through the worker (SoundCloud, then Bandcamp; no YouTube).
+  // The finder: ranked candidates across sources in about a second, then a by-name job with progressive stages.
+  const tF = Date.now();
+  const found = await js(`fetch('/api/find', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: ${JSON.stringify(QUERY)} }) }).then(r => r.json())`);
+  const srcs = [...new Set((found.candidates ?? []).map((c) => c.source))];
+  console.log(`[stems] find: ${(found.candidates ?? []).length} candidates from ${srcs.join(", ")} in ${Date.now() - tF} ms; top: ${found.candidates?.[0]?.artist ?? ""} · ${found.candidates?.[0]?.title ?? ""}`);
+  assert.ok((found.candidates ?? []).length >= 3, "finder returns candidates");
   const byName = await js(`fetch('/api/stems', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: ${JSON.stringify(QUERY)} }) }).then(r => r.json())`);
   console.log(`[stems] by-name job: ${JSON.stringify(byName)}`);
   if (byName.jobId) {
-    const t1 = Date.now(); let st = null;
-    while (Date.now() - t1 < 6 * 60 * 1000) { await sleep(5000); st = await js(`fetch('/api/stems?id=${byName.jobId}').then(r => r.json())`); if (st.status === "done" || st.status === "error") break; }
-    console.log(`[stems] by-name result: status=${st?.status} name=${st?.result?.name ?? ""} bpm=${st?.result?.facts?.bpm ?? ""} key=${st?.result?.facts?.key ?? ""} stems=${(st?.result?.stems ?? []).length} report=${(st?.result?.hearing?.report ?? st?.error ?? "").slice(0, 160)}`);
+    const t1 = Date.now(); let st = null, previewAt = null;
+    while (Date.now() - t1 < 8 * 60 * 1000) { await sleep(4000); st = await js(`fetch('/api/stems?id=${byName.jobId}').then(r => r.json())`); if (!previewAt && st?.result?.preview?.oneshots?.length) { previewAt = Date.now() - t1; console.log(`[stems]   preview one-shots ready after ${Math.round(previewAt / 1000)}s (${st.result.preview.oneshots.map((o) => o.role).join(", ")})`); } if (st.status === "done" || st.status === "error") break; }
+    console.log(`[stems] by-name result after ${Math.round((Date.now() - t1) / 1000)}s: status=${st?.status} cached=${!!st?.result?.cached} name=${st?.result?.name ?? ""} bpm=${st?.result?.facts?.bpm ?? ""} key=${st?.result?.facts?.key ?? ""} stems=${(st?.result?.stems ?? []).length} report=${(st?.result?.hearing?.report ?? st?.error ?? "").slice(0, 140)}`);
+    assert.equal(st?.status, "done", "by-name analysis finished");
+    // Second time, the same record comes from the cache for anyone.
+    const again = await js(`fetch('/api/stems', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: ${JSON.stringify(QUERY)} }) }).then(r => r.json())`);
+    if (again.jobId) { const t2 = Date.now(); let s2 = null; while (Date.now() - t2 < 4 * 60 * 1000) { await sleep(3000); s2 = await js(`fetch('/api/stems?id=${again.jobId}').then(r => r.json())`); if (s2.status === "done" || s2.status === "error") break; } console.log(`[stems] second time after ${Math.round((Date.now() - t2) / 1000)}s: status=${s2?.status} cached=${!!s2?.result?.cached} stems=${(s2?.result?.stems ?? []).length}`); }
   }
   // A YouTube link is refused with a clear message, not a stall.
   const yt = await js(`fetch('/api/stems', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }) }).then(r => r.json())`);

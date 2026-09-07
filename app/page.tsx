@@ -28,7 +28,7 @@ const harnessMode = () => typeof window !== "undefined" && /[?&](e2e|typed)=1/.t
 export default function Studio() {
   const sendRef = useRef<(t: string) => void>(() => {});
   const snapshotRef = useRef<(s: Song, m: SnapshotMeta) => void>(() => {});
-  const actionsRef = useRef<{ analyze: (i: { url?: string; query?: string }) => Promise<void>; vocal: (p: string, l?: string, ms?: number) => Promise<void>; findSound: (beats: number) => Promise<void>; hear: (sectionId?: string) => Promise<string | null> }>({ analyze: async () => {}, vocal: async () => {}, findSound: async () => {}, hear: async () => null });
+  const actionsRef = useRef<{ analyze: (i: { url?: string; query?: string; from?: "local" | "web" }) => Promise<void>; vocal: (p: string, l?: string, ms?: number) => Promise<void>; findSound: (beats: number) => Promise<void>; hear: (sectionId?: string) => Promise<string | null> }>({ analyze: async () => {}, vocal: async () => {}, findSound: async () => {}, hear: async () => null });
   const [typed] = useState(harnessMode);
   const [view, setView] = useState<"home" | "studio">(() => (harnessMode() ? "studio" : "home"));
   const voice = useVoiceLoop((t) => sendRef.current(t));
@@ -38,8 +38,9 @@ export default function Studio() {
   const projects = useProjects({ user: account.user, loadSong: studio.loadSong, loadChat: studio.loadChat, getSong: studio.getSong, localLibrary: studio.library, flash: studio.flash });
   snapshotRef.current = projects.snapshot;
   const stems = useStems({ user: account.user, projectId: projects.current?.id ?? null, flash: studio.flash, edit: studio.edit, send: studio.send, registerClip: studio.registerClip, getSong: studio.getSong, setReference: studio.setReferenceBuffer, recordSound: (bpm, beats) => hum.record(bpm, beats), previewClip: studio.previewClip });
-  actionsRef.current = { analyze: async (i) => { setShowAnalyze(true); await stems.start(i.url ? { url: i.url } : { query: i.query }); }, vocal: async (p, l, ms) => { setShowAnalyze(true); await stems.renderVocal(p, l, ms); }, findSound: async (b) => { await stems.findSound(b); }, hear: async (sec) => stems.hearOurRender(sec) };
+  actionsRef.current = { analyze: async (i) => { setShowAnalyze(true); if (i.url) await stems.start({ url: i.url }); else await stems.findAndAnalyze(i.query ?? "", i.from ?? null); }, vocal: async (p, l, ms) => { setShowAnalyze(true); await stems.renderVocal(p, l, ms); }, findSound: async (b) => { await stems.findSound(b); }, hear: async (sec) => stems.hearOurRender(sec) };
   useEffect(() => { sendRef.current = (t) => void studio.sendVoice(t); }, [studio]);
+  useEffect(() => { if (voice.interim) stems.prefetch(voice.interim); }, [voice.interim, stems]);
   const critic = useCritic({ song: studio.song, facts: studio.facts, reference: studio.reference, paused: !!studio.rollout, send: studio.send, started: studio.started });
   const mic = useMicLevel(studio.started && view === "studio");
   const [muted, setMuted] = useState(false);

@@ -7,12 +7,14 @@ import type { User } from "@supabase/supabase-js";
 import type { Song, Role } from "@/lib/song/types";
 import type { ClipMeta } from "@/components/SongsSheet";
 import { supabaseBrowser } from "@/lib/account/supabase";
+import { connectFolder, searchLocal, hasFolder, folderInfo, canPickFolder, type LocalHit } from "@/lib/localSource";
 
 export type StemsFacts = { bpm: number; key: string; keyConfidence?: number; durationSec: number; bars: number; barEnergy?: number[]; blocks?: { bar: number; at: number; energy: number }[]; dropAt: number | null; bestBars: { startBar: number; startSec: number; endSec: number; energy: number }; name?: string };
 export type StemOut = { stem: string; path: string; clipId?: string };
 export type OneShotOut = { role: string; path: string; clipId?: string; durationSec: number; fundamentalHz: number | null; centroidHz: number; peakDb: number; atSec: number };
 export type Hearing = { report?: string; drumGrids?: Record<string, string>; bass?: { root?: string; notes?: string[]; eighthRhythm?: string }; chords?: string[]; lyrics?: { lines: { at: number; text: string }[] }; clap?: { descriptors?: [string, number][]; genres?: [string, number][] }; blocks?: { at: number; level: number; carries: string; entering: string[]; leaving: string[] }[]; perStem?: Record<string, { share: number; centroidHz: number; crestDb: number; onsetsPerBeat: number }>; error?: string };
-export type StemsResult = { facts?: StemsFacts; stems?: StemOut[]; oneshots?: OneShotOut[]; name?: string; stage?: string; hearing?: Hearing };
+export type StemsResult = { facts?: StemsFacts; stems?: StemOut[]; oneshots?: OneShotOut[]; name?: string; stage?: string; hearing?: Hearing; cached?: boolean; preview?: { stems: (StemOut & { startSec?: number; bars?: number })[]; oneshots: OneShotOut[] } };
+export type FindCandidate = { source: string; title: string; url: string; artist: string | null; duration_sec: number | null; year: number | null; license: string | null; kind: string; score: number };
 export type StemsJob = { id: string; status: "queued" | "running" | "done" | "error"; progress: number; result: StemsResult | null; error: string | null; source: { url?: string; storage_path?: string; name?: string } };
 
 type Deps = { user: User | null; projectId: string | null; flash: (t: string) => void; edit: (ops: unknown[], label: string) => Promise<boolean>; send: (t: string, o?: { hidden?: boolean }) => Promise<void>; registerClip: (c: ClipMeta) => void; getSong: () => Song; setReference?: (buf: AudioBuffer, name: string) => Promise<void>; recordSound?: (bpm: number, beats: number) => Promise<{ samples: Float32Array; sampleRate: number; notes: unknown[] } | null>; previewClip?: (clipId: string) => Promise<boolean> };
@@ -25,6 +27,10 @@ export function useStems(d: Deps) {
   const [job, setJob] = useState<StemsJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [candidates, setCandidates] = useState<FindCandidate[]>([]);
+  const [localHits, setLocalHits] = useState<LocalHit[]>([]);
+  const [finding, setFinding] = useState(false);
+  const findCache = useRef(new Map<string, { at: number; list: FindCandidate[] }>());
   const pollRef = useRef<number | null>(null);
   const announced = useRef<string | null>(null);
   const dRef = useRef(d); dRef.current = d;
@@ -97,7 +103,7 @@ export function useStems(d: Deps) {
       if (input.file) {
         const safe = input.file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 60);
         storagePath = `${uid}/uploads/${Date.now()}-${safe}`;
-        name = input.file.name.replace(/\.[a-z0-9]+$/i, "");
+        name = input.name ?? input.file.name.replace(/\.[a-z0-9]+$/i, "");
         const { error: upErr } = await sb.storage.from("clips").upload(storagePath, input.file, { contentType: input.file.type || "audio/mpeg", upsert: true });
         if (upErr) throw new Error(upErr.message);
       }
@@ -136,8 +142,8 @@ export function useStems(d: Deps) {
   /** "Use this kick": the first track in that role plays the sliced sample; no track yet, one is made. */
   const useOneShot = useCallback(async (shot: OneShotOut) => {
     if (!job) return;
-    const name = `${job.result?.name ?? "record"} · ${shot.role}`;
-    const id = await ensureClip(shot.path, `shot_${job.id}_${shot.role}`, name, { durationSec: shot.durationSec });
+    const name = `${job.result?.name ?? job.source?.name ?? "record"} · ${shot.role}`;
+    const id = await ensureClip(shot.path, `shot_${job.id}_${shot.role}${shot.path.includes("preview-") ? "_p" : ""}${shot.path.includes("-2") ? "_2" : ""}`, name, { durationSec: shot.durationSec });
     const role = (shot.role === "perc" ? "perc" : shot.role) as Role;
     const song = dRef.current.getSong();
     let track = song.tracks.find((t) => t.role === role);
@@ -254,10 +260,54 @@ export function useStems(d: Deps) {
     return null;
   }, []);
 
-  const reset = useCallback(() => { stopPolling(); setJob(null); setError(null); }, []);
+  /** Ranked candidates across every public source (about a second), plus the connected folder if any. */
+  const find = useCallback(async (query: string, want?: string): Promise<{ web: FindCandidate[]; local: LocalHit[] }> => {
+    const q = query.trim(); if (!q) return { web: [], local: [] };
+    const local = hasFolder() ? searchLocal(q) : [];
+    setLocalHits(local);
+    const hit = findCache.current.get(q.toLowerCase());
+    if (hit && Date.now() - hit.at < 60000) { setCandidates(hit.list); return { web: hit.list, local }; }
+    setFinding(true);
+    try {
+      const r = await fetch("/api/find", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q, want }) }).then((x) => x.json()).catch(() => null);
+      const list = (r?.candidates ?? []) as FindCandidate[];
+      findCache.current.set(q.toLowerCase(), { at: Date.now(), list });
+      setCandidates(list);
+      return { web: list, local };
+    } finally { setFinding(false); }
+  }, []);
+  /** Speculative: the sentence is still being spoken; start the search so results are ready when it ends. */
+  const prefetch = useCallback((interim: string) => {
+    const m = interim.match(/\b(?:pull|find|grab|get|analy[sz]e|look up|bring in|load)\s+(?:me\s+)?(?:the\s+|that\s+|a\s+)?(?:song|track|record|tune)?\s*(.{6,80})$/i);
+    if (!m) return;
+    const q = m[1].replace(/\b(from|off|on)\s+(soundcloud|the internet|online|my (desktop|computer|folder|downloads))\b.*$/i, "").trim();
+    if (q.length < 6 || findCache.current.has(q.toLowerCase())) return;
+    findCache.current.set(q.toLowerCase(), { at: Date.now(), list: [] });   // mark in flight
+    void fetch("/api/find", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q }) }).then((x) => x.json()).then((r) => { findCache.current.set(q.toLowerCase(), { at: Date.now(), list: (r?.candidates ?? []) as FindCandidate[] }); }).catch(() => findCache.current.delete(q.toLowerCase()));
+  }, []);
+  /** The connected folder on this computer: pick it once, search it by name, analyze a hit like an upload. */
+  const connectLocal = useCallback(async (pickNew = false) => {
+    const info = await connectFolder(pickNew);
+    if (info) dRef.current.flash(`${info.count} audio files in ${info.name}`);
+    else if (!canPickFolder()) dRef.current.flash("This browser cannot open folders. Use Chrome.");
+    return info;
+  }, []);
+  const analyzeLocal = useCallback(async (hit: LocalHit) => { const f = await hit.file(); await start({ file: f, name: hit.name }); }, [start]);
+  /** By name, anywhere: the connected folder first if the user said so, else the web finder picks the best downloadable copy. */
+  const findAndAnalyze = useCallback(async (query: string, from?: "local" | "web" | null) => {
+    if (from === "local" || (from !== "web" && hasFolder())) {
+      const hits = searchLocal(query, 3);
+      if (hits.length) { dRef.current.flash(`Found ${hits[0].name} in your folder`); await analyzeLocal(hits[0]); return "local"; }
+      if (from === "local") { dRef.current.flash(hasFolder() ? "Nothing in your folder matches that" : "Connect a folder first (Analyze a record, Use a folder)"); if (!hasFolder()) return "nofolder"; }
+    }
+    await start({ query });
+    return "web";
+  }, [analyzeLocal, start]);
+
+  const reset = useCallback(() => { stopPolling(); setJob(null); setError(null); setCandidates([]); setLocalHits([]); }, []);
   const askBreakdown = useCallback(() => { const n = job?.result?.name ?? "that record"; void dRef.current.send(`Break down "${n}" for me: structure, the engine, the hook, the drum language, the mix picture, and the one trick. Then say which piece we should take.`); }, [job]);
 
-  return { job, error, starting, start, useOneShot, addStemLoop, renderVocal, findSound, hearOurRender, previewUrl, reset, askBreakdown };
+  return { job, error, starting, start, useOneShot, addStemLoop, renderVocal, findSound, hearOurRender, previewUrl, reset, askBreakdown, find, prefetch, candidates, localHits, finding, connectLocal, analyzeLocal, findAndAnalyze, folder: folderInfo(), canPickFolder: canPickFolder() };
 }
 
 function friendly(msg: string): string {

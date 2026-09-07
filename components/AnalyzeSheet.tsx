@@ -11,8 +11,8 @@ import { Icon } from "./Icon";
 
 type Stems = ReturnType<typeof useStems>;
 
-const STAGE: Record<string, string> = { separating: "Separating the stems", slicing: "Slicing the drums", uploading: "Saving to your library" };
-const stageLine = (j: NonNullable<Stems["job"]>) => j.status === "queued" ? "Waiting for the worker" : j.progress < 15 ? "Fetching the audio" : j.progress < 25 ? "Listening: tempo, key, structure" : STAGE[j.result?.stage ?? ""] ?? "Working";
+const STAGE: Record<string, string> = { "separating the best bars": "Separating the best 16 bars first", "separating the whole record": "Separating the whole record", separating: "Separating the stems", slicing: "Slicing the drums", listening: "Listening like a producer", uploading: "Saving to your library", "from cache": "Already analyzed once, loading it" };
+const stageLine = (j: NonNullable<Stems["job"]>) => j.status === "queued" ? "Waiting for the worker" : j.progress < 15 ? "Finding and fetching the audio" : j.progress < 22 ? "Listening: tempo, key, structure" : STAGE[j.result?.stage ?? ""] ?? "Working";
 
 export function AnalyzeSheet({ stems, signedIn, onSignIn, onClose }: { stems: Stems; signedIn: boolean; onSignIn: () => void; onClose: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -60,15 +60,38 @@ export function AnalyzeSheet({ stems, signedIn, onSignIn, onClose }: { stems: St
               {!running && (
                 <div className="space-y-2">
                   <p className="text-sm text-ink-2">Name a record and the producer finds it on SoundCloud, or upload a file, or capture what is playing in another tab. You get its tempo, key and structure, four stems, the kick, snare and hat sliced out as one-shots, and what the studio hears.</p>
-                  <form onSubmit={(e) => { e.preventDefault(); const v = query.trim(); if (v) void stems.start(/^https?:\/\//i.test(v) ? { url: v } : { query: v }); }} className="flex gap-2">
+                  <form onSubmit={(e) => { e.preventDefault(); const v = query.trim(); if (!v) return; if (/^https?:\/\//i.test(v)) void stems.start({ url: v }); else void stems.find(v); }} className="flex gap-2">
                     <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-line/60 bg-base px-3 py-2 focus-within:border-accent/60">
                       <Icon name="search" size={15} className="shrink-0 text-ink-3" />
-                      <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Artist and title, a SoundCloud link, or a link to an audio file" aria-label="Find a record" className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-ink-3 focus:outline-none" />
+                      <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Artist and title, a link, or a file link" aria-label="Find a record" className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-ink-3 focus:outline-none" />
                     </div>
-                    <Button tone="accent" type="submit" disabled={starting || !query.trim()}>{starting ? "Starting" : "Find it"}</Button>
+                    <Button tone="accent" type="submit" disabled={starting || stems.finding || !query.trim()}>{stems.finding ? "Searching" : "Find it"}</Button>
                   </form>
+                  {(stems.candidates.length > 0 || stems.localHits.length > 0) && (
+                    <div className="rounded-xl border border-line/40 bg-s2/40 p-2">
+                      <div className="eyebrow mb-1.5 px-1">Found{stems.candidates.length ? ` on ${[...new Set(stems.candidates.map((c) => c.source))].join(", ")}` : ""}{stems.localHits.length ? `${stems.candidates.length ? " and" : ""} in your folder` : ""}</div>
+                      <ul className="max-h-56 space-y-1 overflow-y-auto">
+                        {stems.localHits.slice(0, 3).map((h) => (
+                          <li key={`l-${h.path}`} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-s2">
+                            <span className="rounded bg-live/15 px-1.5 py-0.5 text-[11px] font-medium text-live">folder</span>
+                            <span className="min-w-0 flex-1 truncate text-sm text-ink" title={h.path}>{h.name}</span>
+                            <Button tone="ghost" onClick={() => void stems.analyzeLocal(h)}>Analyze</Button>
+                          </li>
+                        ))}
+                        {stems.candidates.slice(0, 8).map((c) => (
+                          <li key={`${c.source}-${c.url}`} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-s2">
+                            <span className="rounded bg-s3 px-1.5 py-0.5 text-[11px] font-medium text-ink-2">{c.source}{c.kind === "mix" ? " · mix" : c.kind === "sample" ? " · sample" : ""}</span>
+                            <span className="min-w-0 flex-1 truncate text-sm text-ink" title={c.title}>{c.artist ? `${c.artist} · ` : ""}{c.title}</span>
+                            {c.duration_sec ? <span className="tnum shrink-0 text-xs text-ink-3">{mmss(c.duration_sec)}</span> : null}
+                            <Button tone="ghost" onClick={() => void stems.start({ url: c.url, name: `${c.artist ? c.artist + " - " : ""}${c.title}`.slice(0, 80) })}>Analyze</Button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   <div className="flex flex-wrap items-center gap-2">
                     <Button tone="ghost" icon="plus" type="button" onClick={() => fileRef.current?.click()} disabled={starting || !!cap}>Upload a file</Button>
+                    {stems.canPickFolder && <Button tone="ghost" icon="folder" type="button" onClick={() => void stems.connectLocal(!stems.folder.count)} disabled={starting}>{stems.folder.count ? `Folder: ${stems.folder.name} (${stems.folder.count})` : "Use a folder on this computer"}</Button>}
                     {canCapture() && (cap ? (
                       <Button tone="live" icon="stop" type="button" onClick={() => cap.stop()}>Stop capturing ({capSec}s)</Button>
                     ) : (
@@ -90,8 +113,22 @@ export function AnalyzeSheet({ stems, signedIn, onSignIn, onClose }: { stems: St
                     <span className="tnum text-xs text-ink-3">{job.progress}%</span>
                   </div>
                   <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-s3"><div className="h-full rounded-full bg-cool transition-[width] duration-500 ease-snap" style={{ width: `${Math.max(3, job.progress)}%` }} /></div>
-                  <p className="mt-2 text-xs text-ink-2">{stageLine(job)}. A three minute record takes about a minute.</p>
+                  <p className="mt-2 text-xs text-ink-2">{stageLine(job)}.</p>
                   {job.result?.facts && <FactsLine f={job.result.facts} />}
+                  {job.result?.preview?.oneshots?.length ? (
+                    <div className="mt-3">
+                      <div className="eyebrow mb-1.5">Ready now, from the best 16 bars</div>
+                      <ul className="grid gap-1.5 sm:grid-cols-2">
+                        {job.result.preview.oneshots.slice(0, 4).map((s) => (
+                          <li key={s.path} className="flex items-center gap-2 rounded-xl border border-line/40 bg-s2/60 px-3 py-2">
+                            <Preview path={s.path} stems={stems} />
+                            <span className="min-w-0 flex-1 truncate text-sm capitalize text-ink">{s.role}</span>
+                            <Button tone="ghost" onClick={() => void stems.useOneShot(s)}>Use it</Button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                 </div>
               )}
               {done && job.result && (

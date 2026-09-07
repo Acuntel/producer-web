@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 TORCH_HOME=/models OMP_NUM_THREADS=4
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg curl && apt-get clean
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg curl libchromaprint-tools && apt-get clean
 WORKDIR /app
 RUN pip install torch==2.5.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cpu
 COPY requirements.txt .

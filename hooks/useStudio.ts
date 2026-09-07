@@ -38,7 +38,7 @@ const isE2E = () => typeof window !== "undefined" && window.location.search.incl
 
 export type SnapshotMeta = { label?: string; newProject?: boolean; facts?: unknown; chat?: { role: "user" | "assistant"; content: string }[]; blank?: boolean };
 
-export type StudioActions = { analyze?: (input: { url?: string; query?: string }) => Promise<void> | void; vocal?: (prompt: string, lyrics?: string, lengthMs?: number) => Promise<void> | void; findSound?: (beats: number) => Promise<void> | void; hear?: (sectionId?: string) => Promise<string | null> };
+export type StudioActions = { analyze?: (input: { url?: string; query?: string; from?: "local" | "web" }) => Promise<void> | void; vocal?: (prompt: string, lyrics?: string, lengthMs?: number) => Promise<void> | void; findSound?: (beats: number) => Promise<void> | void; hear?: (sectionId?: string) => Promise<string | null> };
 
 export function useStudio(say: (t: string) => void, recordHum: (bpm: number, beats: number) => Promise<{ notes: Note[] } | null>, onSnapshot?: (s: Song, meta: SnapshotMeta) => void, actions?: StudioActions) {
   const onSnapshotRef = useRef(onSnapshot); onSnapshotRef.current = onSnapshot;
@@ -248,7 +248,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       if (res) { setMessages((m) => [...m, { role: "assistant", content: res.say }]); messagesRef.current = [...messagesRef.current, { role: "assistant", content: res.say }]; setListenHint(res.listen); say(res.say); }
     }
     else if (a.type === "analyze") {
-      if ((a.url || a.query) && actionsRef.current?.analyze) { flash("Pulling that record in"); await actionsRef.current.analyze({ url: a.url, query: a.query }); }
+      if ((a.url || a.query) && actionsRef.current?.analyze) { flash("Pulling that record in"); await actionsRef.current.analyze({ url: a.url, query: a.query, from: a.from }); }
       else flash("I need a name or a link to pull that in");
     }
     else if (a.type === "hear") {

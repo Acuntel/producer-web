@@ -8,13 +8,13 @@ from dataclasses import asdict
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 import analysis, supa
-import hearing
+import hearing, finder, fingerprint
 
 SECRET = os.environ.get("WORKER_SECRET", "")
 MAX_SECONDS = int(os.environ.get("MAX_SECONDS", "480"))
 ALLOW_LINKS = os.environ.get("ALLOW_LINK_DOWNLOAD", "0") == "1"   # server-side downloads from media sites are off by default (terms of service, unreliable from datacenter IPs)
 app = FastAPI(title="producer-stems")
-pool = ThreadPoolExecutor(max_workers=1)
+pool = ThreadPoolExecutor(max_workers=int(os.environ.get("JOB_WORKERS", "2")))
 state = {"queued": 0, "running": None, "done": 0, "failed": 0, "started": time.time()}
 lock = threading.Lock()
 
@@ -50,6 +50,20 @@ def submit(job: Job, x_worker_secret: str = Header(default="")):
     with lock: state["queued"] += 1
     pool.submit(process, job)
     return {"ok": True, "job_id": job.job_id, "queued": state["queued"]}
+
+
+class FindIn(BaseModel):
+    query: str
+    want: str | None = None        # track | mix | sample
+    sources: list[str] | None = None
+
+
+@app.post("/find")
+def find(f: FindIn, x_worker_secret: str = Header(default="")):
+    """Ranked candidates across every public source, no download. About one second."""
+    if not SECRET or x_worker_secret != SECRET: raise HTTPException(401, "bad secret")
+    res = finder.search(f.query.strip()[:160], f.sources, f.want)
+    return {"query": f.query, "candidates": finder.to_json(res[:16]), "sources": list(finder.SOURCES)}
 
 
 class MatchIn(BaseModel):
@@ -98,9 +112,19 @@ def fetch_source(job: Job, tmp: str) -> tuple[str, str]:
         # server requests, so a YouTube link gets a clear message pointing at Capture what is playing.
         if src.url and re.search(r"(youtube\.com|youtu\.be|music\.youtube)", src.url, re.I):
             raise RuntimeError("youtube blocked: YouTube refuses server downloads. Play it in a tab and use Capture what is playing, or upload the file.")
-        # By name: the first five SoundCloud results, skipping ones that are DRM protected (official label
-        # uploads often are) until one downloads. Bandcamp has no search extractor; its track links work directly.
-        targets = [src.url] if src.url else [f"scsearch5:{src.query}"]
+        # By name: the finder ranks every source; candidates are tried in order until one downloads
+        # (DRM label uploads on SoundCloud fail fast and the next one is taken). Archive items resolve to their first audio file.
+        if src.url:
+            targets = [src.url]
+        else:
+            ranked = finder.search(src.query or "", None, None)
+            targets = []
+            for c in ranked[:6]:
+                u = c.url
+                if c.source == "archive": u = finder.archive_first_file(c.url) or c.url
+                targets.append(u)
+            if not targets: targets = [f"scsearch5:{src.query}"]
+            print(f"finder: {len(ranked)} candidates for {src.query!r}; trying {len(targets)}", flush=True)
         errors = []
         raw = None; name = src.name
         for target in targets:
@@ -114,7 +138,7 @@ def fetch_source(job: Job, tmp: str) -> tuple[str, str]:
             files = [f for f in os.listdir(tmp) if f.startswith("dl.")]
             if r.returncode in (0, 101) and files:
                 raw = os.path.join(tmp, files[0]); name = name or (lines[0] if lines else "linked track")
-                supa_note = "soundcloud search" if target.startswith("scsearch") else "link"
+                supa_note = "soundcloud search" if target.startswith("scsearch") else ("archive" if "archive.org" in target else "mixcloud" if "mixcloud" in target else "soundcloud" if "soundcloud" in target else "link")
                 print(f"resolved via {supa_note}: {name}", flush=True)
                 break
             errors.append(f"{target.split(':')[0]}: {(r.stderr or r.stdout)[-160:].strip()}")
@@ -167,9 +191,37 @@ def process(job: Job) -> None:
         supa.update_job(job.job_id, progress=15)
         facts = analysis.analyze(wav)
         facts["name"] = name
-        supa.update_job(job.job_id, progress=25, result={"facts": facts, "stage": "separating"})
+        # The cache: a record anyone already analyzed is served from storage, no separation.
+        rawfp = fingerprint.raw_fingerprint(wav)
+        cached = supa.cache_find(rawfp[0], rawfp[1]) if rawfp else None
+        if cached:
+            print("cache hit", flush=True)
+            supa.update_job(job.job_id, progress=90, result={"facts": facts, "stage": "from cache"})
+            result = supa.adopt_cached(job.owner, job.project_id, name, cached)
+            result["facts"] = facts; result["name"] = name; result["cached"] = True
+            supa.update_job(job.job_id, status="done", progress=100, result=result)
+            with lock: state["done"] += 1
+            return
+        supa.update_job(job.job_id, progress=22, result={"facts": facts, "stage": "separating the best bars"})
+        # Progressive: the best 16 bars are separated first (about a fifth of the work), so stems, one-shots and a
+        # listen land early; the whole record follows and replaces them.
+        bar_sec = 240.0 / float(facts.get("bpm") or 126)
+        start = float((facts.get("bestBars") or {}).get("startSec") or 0.0)
+        pre = os.path.join(tmp, "preview.wav")
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{max(0.0, start):.3f}", "-t", f"{16 * bar_sec:.3f}", "-i", wav, pre], check=True)
+        pstems = analysis.separate(pre, os.path.join(tmp, "psep"))
+        pshots = analysis.slice_oneshots(pstems["drums"], os.path.join(tmp, "pshots")) if "drums" in pstems else []
+        base = f"{job.owner}/stems/{job.job_id}"
+        preview_out = []
+        for stem, p in pstems.items():
+            mp3 = os.path.join(tmp, f"preview-{stem}.mp3"); analysis.ffmpeg_to_mp3(p, mp3)
+            preview_out.append({"stem": stem, "path": supa.upload(f"{base}/preview-{stem}.mp3", mp3, "audio/mpeg"), "startSec": start, "bars": 16})
+        pshot_out = []
+        for sh in pshots:
+            pshot_out.append({**asdict(sh), "path": supa.upload(f"{base}/preview-oneshot-{os.path.basename(sh.path)}", sh.path, "audio/wav")})
+        supa.update_job(job.job_id, progress=45, result={"facts": facts, "stage": "separating the whole record", "preview": {"stems": preview_out, "oneshots": pshot_out}})
         stems = analysis.separate(wav, os.path.join(tmp, "sep"))
-        supa.update_job(job.job_id, progress=75, result={"facts": facts, "stage": "slicing"})
+        supa.update_job(job.job_id, progress=75, result={"facts": facts, "stage": "slicing", "preview": {"stems": preview_out, "oneshots": pshot_out}})
         shots = analysis.slice_oneshots(stems["drums"], os.path.join(tmp, "shots")) if "drums" in stems else []
         # The ears: per-stem listening, drum and bass transcription, lyrics, descriptors, embeddings.
         supa.update_job(job.job_id, progress=80, result={"facts": facts, "stage": "listening"})
@@ -178,7 +230,6 @@ def process(job: Job) -> None:
         except Exception as e: heard = {"error": str(e)[:200], "report": ""}
         embeddings = heard.pop("embeddings", {}) if isinstance(heard, dict) else {}
         supa.update_job(job.job_id, progress=88, result={"facts": facts, "stage": "uploading"})
-        base = f"{job.owner}/stems/{job.job_id}"
         rows, stem_out, shot_out = [], [], []
         for stem, p in stems.items():
             mp3 = os.path.join(tmp, f"{stem}.mp3")
@@ -201,7 +252,11 @@ def process(job: Job) -> None:
         by_path = {c["storage_path"]: c["id"] for c in clips}
         for x in stem_out: x["clipId"] = by_path.get(x["path"])
         for x in shot_out: x["clipId"] = by_path.get(x["path"])
-        supa.update_job(job.job_id, status="done", progress=100, result={"facts": facts, "stems": stem_out, "oneshots": shot_out, "name": name, "hearing": heard})
+        final = {"facts": facts, "stems": stem_out, "oneshots": shot_out, "name": name, "hearing": heard}
+        supa.update_job(job.job_id, status="done", progress=100, result=final)
+        if rawfp:
+            try: supa.cache_put(fingerprint.key_of(rawfp[0]), rawfp[0], rawfp[1], job.owner, base, final)
+            except Exception as e: print("cache put failed", e, flush=True)
         with lock: state["done"] += 1
     except Exception as e:
         traceback.print_exc()

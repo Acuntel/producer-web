@@ -4,7 +4,7 @@ import type { Song } from "../song/types";
 import { migrateSong } from "../song/migrate";
 import { laneId } from "./laneNames";
 
-export type BrainAction = { type: "play" | "pause" | "goto" | "loop" | "unloop" | "recordHum" | "rollout" | "hear" | "analyze" | "vocal" | "findSound" | "none"; section?: string; bar?: number; beats?: number; track?: string; kind?: string; lane?: string; url?: string; query?: string; prompt?: string; lyrics?: string; lengthMs?: number };
+export type BrainAction = { type: "play" | "pause" | "goto" | "loop" | "unloop" | "recordHum" | "rollout" | "hear" | "analyze" | "vocal" | "findSound" | "none"; section?: string; bar?: number; beats?: number; track?: string; kind?: string; lane?: string; url?: string; query?: string; prompt?: string; lyrics?: string; lengthMs?: number; from?: "local" | "web" };
 export type Expectation = { section?: string; metric: string; dir: "up" | "down" };
 export type BrainReply = { say: string; ops: unknown[] | null; song: Song | null; action: BrainAction | null; listen: string | null; expect: Expectation[] | null; alternative: unknown[] | null; raw?: string };
 
@@ -54,6 +54,7 @@ export function normalizeAction(a: unknown): BrainAction | null {
     ...(laneId(o.lane) ? { lane: laneId(o.lane) as string } : {}),
     ...(typeof o.url === "string" && /^https?:\/\/\S+$/i.test(o.url) ? { url: o.url } : {}),
     ...(typeof o.query === "string" && o.query.trim() ? { query: o.query.trim().slice(0, 160) } : {}),
+    ...(o.from === "local" || o.from === "web" ? { from: o.from } : {}),
     ...(typeof o.prompt === "string" && o.prompt.trim() ? { prompt: o.prompt.trim().slice(0, 600) } : {}),
     ...(typeof o.lyrics === "string" && o.lyrics.trim() ? { lyrics: o.lyrics.trim().slice(0, 1200) } : {}),
     ...(typeof o.lengthMs === "number" ? { lengthMs: Math.max(3000, Math.min(60000, Math.round(o.lengthMs))) } : {}),
