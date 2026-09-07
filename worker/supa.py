@@ -44,6 +44,13 @@ def insert_clips(rows: list[dict]) -> list[dict]:
     return r.json()
 
 
+def set_clip_embedding(clip_id: str, source: dict, embedding: list[float] | None) -> None:
+    """After the listening pass: the embedding lands on the clip row that was published before it."""
+    if not embedding: return
+    body = {"source": {**source, "embedding": embedding}}
+    requests.patch(f"{URL}/rest/v1/clips?id=eq.{clip_id}", headers=_h({"Content-Type": "application/json", "Prefer": "return=minimal"}), data=json.dumps(body), timeout=15)
+
+
 # --- The fingerprint cache: one analyzed record serves everyone who finds it again. ---
 def cache_find_url(url: str) -> dict | None:
     """The same source link seen before: no download, no fingerprint."""

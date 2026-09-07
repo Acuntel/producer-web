@@ -152,7 +152,8 @@ def fetch_source(job: Job, tmp: str, max_seconds: int = MAX_SECONDS, mono16: boo
         raw = None; name = src.name; resolved = None
         for target in targets:
             out = os.path.join(tmp, "dl.%(ext)s")
-            cmd = ["yt-dlp", "-f", "bestaudio/best", "--ignore-errors", "--max-downloads", "1", "--match-filter", f"duration <? {max_seconds + 420}", "-o", out, "--print", "title", "--no-simulate", "--quiet", "--no-warnings", "--socket-timeout", "20"]
+            # HLS copies download as parallel fragments (Mixcloud's plain file crawls at a few hundred KB/s from a server).
+            cmd = ["yt-dlp", "-f", "bestaudio[protocol^=m3u8]/bestaudio/best", "--concurrent-fragments", "8", "--ignore-errors", "--max-downloads", "1", "--match-filter", f"duration <? {max_seconds + 420}", "-o", out, "--print", "title", "--no-simulate", "--quiet", "--no-warnings", "--socket-timeout", "20"]
             if not target.startswith("scsearch"): cmd.append("--no-playlist")
             proxy = os.environ.get("YTDLP_PROXY")
             if proxy: cmd += ["--proxy", proxy]
@@ -318,37 +319,50 @@ def process(job: Job) -> None:
         stems = analysis.separate(wav, os.path.join(tmp, "sep")); stamp("separated")
         supa.update_job(job.job_id, progress=75, result={"facts": facts, "stage": "slicing", "preview": {"stems": preview_out, "oneshots": pshot_out}})
         shots = analysis.slice_oneshots(stems["drums"], os.path.join(tmp, "shots")) if "drums" in stems else []
-        # The ears: per-stem listening, drum and bass transcription, lyrics, descriptors, embeddings.
-        supa.update_job(job.job_id, progress=80, result={"facts": facts, "stage": "listening"})
-        heard = {}
-        try: heard = hearing.hear(wav, stems, facts)
-        except Exception as e: heard = {"error": str(e)[:200], "report": ""}
-        stamp("heard")
-        embeddings = heard.pop("embeddings", {}) if isinstance(heard, dict) else {}
-        supa.update_job(job.job_id, progress=88, result={"facts": facts, "stage": "uploading"})
+        # Publish first, listen after: the stems and one-shots are usable the moment they exist; the listening
+        # pass (about two minutes on the worker) follows and its embeddings land on the rows afterwards.
+        supa.update_job(job.job_id, progress=72, result={"facts": facts, "stage": "uploading", "preview": {"stems": preview_out, "oneshots": pshot_out}, "timing": timing})
         rows, stem_out, shot_out = [], [], []
         for stem, p in stems.items():
             mp3 = os.path.join(tmp, f"{stem}.mp3")
             analysis.ffmpeg_to_mp3(p, mp3)
             path = supa.upload(f"{base}/{stem}.mp3", mp3, "audio/mpeg")
             stem_out.append({"stem": stem, "path": path})
-            rows.append({"owner": job.owner, "project_id": job.project_id, "name": f"{name} · {stem}", "storage_path": path, "mime": "audio/mpeg", "duration_sec": facts["durationSec"], "bpm": facts["bpm"], "key": facts["key"], "source": {"kind": "stem", "stem": stem, "job_id": job.job_id, "from": name, "embedding": embeddings.get(stem)}})
-        for s in shots:
-            path = supa.upload(f"{base}/oneshot-{os.path.basename(s.path)}", s.path, "audio/wav")
-            d = asdict(s); d["path"] = path
-            emb = None
-            try:
-                import soundfile as sf
-                yy, sr = sf.read(s.path, dtype="float32"); yy = yy if yy.ndim == 1 else yy.mean(axis=1)
-                emb = [round(float(v), 4) for v in hearing.clap_embed(yy, sr)]
-            except Exception: pass
+            rows.append({"owner": job.owner, "project_id": job.project_id, "name": f"{name} · {stem}", "storage_path": path, "mime": "audio/mpeg", "duration_sec": facts["durationSec"], "bpm": facts["bpm"], "key": facts["key"], "source": {"kind": "stem", "stem": stem, "job_id": job.job_id, "from": name}})
+        for sh in shots:
+            path = supa.upload(f"{base}/oneshot-{os.path.basename(sh.path)}", sh.path, "audio/wav")
+            d = asdict(sh); d["path"] = path
             shot_out.append(d)
-            rows.append({"owner": job.owner, "project_id": job.project_id, "name": f"{name} · {s.role}", "storage_path": path, "mime": "audio/wav", "duration_sec": s.durationSec, "bpm": None, "key": None, "source": {"kind": "oneshot", "role": s.role, "job_id": job.job_id, "from": name, "fundamentalHz": s.fundamentalHz, "centroidHz": s.centroidHz, "embedding": emb}})
+            rows.append({"owner": job.owner, "project_id": job.project_id, "name": f"{name} · {sh.role}", "storage_path": path, "mime": "audio/wav", "duration_sec": sh.durationSec, "bpm": None, "key": None, "source": {"kind": "oneshot", "role": sh.role, "job_id": job.job_id, "from": name, "fundamentalHz": sh.fundamentalHz, "centroidHz": sh.centroidHz}})
         clips = supa.insert_clips(rows) if rows else []
         by_path = {c["storage_path"]: c["id"] for c in clips}
         for x in stem_out: x["clipId"] = by_path.get(x["path"])
         for x in shot_out: x["clipId"] = by_path.get(x["path"])
         stamp("uploaded")
+        supa.update_job(job.job_id, progress=80, result={"facts": facts, "stems": stem_out, "oneshots": shot_out, "name": name, "identity": ident, "stage": "listening", "timing": timing})
+        # The ears: per-stem listening, drum and bass transcription, lyrics, descriptors, embeddings.
+        heard = {}
+        try: heard = hearing.hear(wav, stems, facts)
+        except Exception as e: heard = {"error": str(e)[:200], "report": ""}
+        stamp("heard")
+        embeddings = heard.pop("embeddings", {}) if isinstance(heard, dict) else {}
+        source_by_path = {r["storage_path"]: r["source"] for r in rows}
+        for x in stem_out:
+            if x.get("clipId") and embeddings.get(x["stem"]):
+                try: supa.set_clip_embedding(x["clipId"], source_by_path[x["path"]], embeddings.get(x["stem"]))
+                except Exception: pass
+        for x in shot_out:
+            if not x.get("clipId"): continue
+            try:
+                import soundfile as sf
+                local = next((sh.path for sh in shots if os.path.basename(sh.path) == os.path.basename(x["path"]).replace("oneshot-", "", 1)), None)
+                if not local: continue
+                yy, sr = sf.read(local, dtype="float32"); yy = yy if yy.ndim == 1 else yy.mean(axis=1)
+                emb = [round(float(v), 4) for v in hearing.clap_embed(yy, sr)]
+                x["embedding"] = emb
+                supa.set_clip_embedding(x["clipId"], source_by_path[x["path"]], emb)
+            except Exception: pass
+        stamp("embedded")
         final = {"facts": facts, "stems": stem_out, "oneshots": shot_out, "name": name, "hearing": heard, "identity": ident, "timing": timing}
         supa.update_job(job.job_id, status="done", progress=100, result=final)
         if rawfp:

@@ -4,11 +4,34 @@ and the DJ's pitch adjustment. A mix is cut every few seconds and the hits are m
 a tracklist with timestamps. No key needed; about 0.2 s per cut from a server."""
 from __future__ import annotations
 import asyncio, os, subprocess, tempfile
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 
 CUT_SEC = 12          # 12 s cuts identify reliably; 6 s cuts sometimes pick the wrong version
-STEP_SEC = 20         # a tracklist cut every 20 s: 180 cuts for an hour, about 40 s with four workers
+STEP_SEC = 60         # coarse pass: a cut every minute catches any record that lasts 70 s in the mix; boundaries are refined after
+REFINE_SEC = 30       # a boundary between two records is narrowed to this by midpoint cuts
 MERGE_WINDOW = 90     # the same record heard again within 90 s is one entry (two decks layered, a long blend)
+# The recognition signature is pure Python and CPU bound: threads serialize on the GIL (1.7 s per cut on the
+# worker), processes run the cuts in parallel on the cores the container has.
+WORKERS = max(2, min(8, int(os.environ.get("IDENTIFY_WORKERS", "4"))))
+# The recognition service throttles bursts from one address (measured: after about 30 requests in a few seconds,
+# answers take 7 s or time out). A pacing gate keeps every process under IDENTIFY_RATE requests per second.
+RATE = float(os.environ.get("IDENTIFY_RATE", "1.5"))
+_GATE = os.path.join(tempfile.gettempdir(), "producer-identify.gate")
+
+
+def _pace() -> None:
+    """A file-locked token gate shared by every process: at most RATE requests per second worker-wide."""
+    import fcntl, time as _t
+    with open(_GATE, "a+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            f.seek(0); last = float((f.read() or "0").strip() or 0)
+            nxt = max(_t.time(), last + 1.0 / RATE)
+            f.seek(0); f.truncate(); f.write(f"{nxt:.4f}")
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+    wait = nxt - _t.time()
+    if wait > 0: _t.sleep(wait)
 
 
 def _cut(src: str, start: float, dur: float, dst: str) -> str:
@@ -39,16 +62,25 @@ def _parse(out: dict) -> dict | None:
     }
 
 
+TIMEOUT_SEC = float(os.environ.get("IDENTIFY_TIMEOUT", "8"))
+
+
 def identify_bytes(path: str) -> dict | None:
-    """One short file (already cut). Runs its own event loop so worker threads can call it."""
+    """One short file (already cut). Runs its own event loop so worker threads and processes can call it.
+    A hung request is cut off at TIMEOUT_SEC: one slow answer must never hold a whole tracklist."""
+    import time as _t
     from shazamio import Shazam
     async def go():
-        return await Shazam().recognize(path)
+        return await asyncio.wait_for(Shazam().recognize(path), timeout=TIMEOUT_SEC)
+    _pace()
+    t0 = _t.time()
     try:
-        return _parse(asyncio.run(go()))
+        r = _parse(asyncio.run(go()))
     except Exception as e:
-        print("identify failed", str(e)[:120], flush=True)
+        print(f"identify failed after {_t.time()-t0:.1f}s: {str(e)[:120] or type(e).__name__}", flush=True)
         return None
+    if os.environ.get("IDENTIFY_DEBUG"): print(f"identify {os.path.basename(path)} {_t.time()-t0:.2f}s {'hit' if r else 'miss'}", flush=True)
+    return r
 
 
 def identify_file(path: str, at: float | None = None, duration: float | None = None) -> dict | None:
@@ -73,27 +105,54 @@ def display_name(ident: dict | None) -> str | None:
     return f"{ident['artist']} - {ident['title']}" if ident.get("artist") else ident["title"]
 
 
-def tracklist(path: str, duration: float, step: float = STEP_SEC, cut: float = CUT_SEC, workers: int = 4, progress=None) -> list[dict]:
-    """Every `step` seconds a `cut`-second slice is identified; hits are merged into entries.
-    Two decks layered come back as alternating hits, so an entry absorbs a repeat within MERGE_WINDOW."""
-    starts = [float(s) for s in range(0, max(1, int(duration - cut / 2)), int(step))]
+def _one_cut(args) -> tuple[float, dict | None]:
+    path, s, cut, td = args
+    p = _cut(path, s, cut, os.path.join(td, f"c{int(s)}.wav"))
+    r = identify_bytes(p)
+    try: os.remove(p)
+    except OSError: pass
+    return s, r
+
+
+def tracklist(path: str, duration: float, step: float = STEP_SEC, cut: float = CUT_SEC, workers: int = WORKERS, progress=None) -> list[dict]:
+    """Adaptive: a coarse cut every `step` seconds names the records; wherever two neighbours disagree (or one
+    is silent) the boundary is narrowed by midpoint cuts down to REFINE_SEC. About 120 coarse cuts plus two or
+    three per transition for two hours, instead of a cut every few seconds. Hits merge into entries; two decks
+    layered come back as alternating hits, so an entry absorbs a repeat within MERGE_WINDOW."""
     hits: dict[float, dict | None] = {}
-    with tempfile.TemporaryDirectory(prefix="tl-") as td:
-        def one(s: float):
-            p = _cut(path, s, cut, os.path.join(td, f"c{int(s)}.wav"))
-            return s, identify_bytes(p)
-        done = 0
-        with ThreadPoolExecutor(max_workers=workers) as ex:
-            for s, r in ex.map(one, starts):
+    total_est = int(duration / step) + 3 * int(duration / 180) + 4
+    done = 0
+    with tempfile.TemporaryDirectory(prefix="tl-") as td, ProcessPoolExecutor(max_workers=workers) as ex:
+        def run(starts: list[float]):
+            nonlocal done
+            todo = [s for s in starts if s not in hits and s + cut <= duration + 1]
+            for s, r in ex.map(_one_cut, [(path, s, cut, td) for s in todo], chunksize=1):
                 hits[s] = r; done += 1
-                if progress and done % 8 == 0: progress(done, len(starts))
+                if progress and done % 6 == 0: progress(min(done, total_est), total_est)
+        # Coarse pass in order, skipping ahead after a confident hit: a record plays for minutes in a mix, so the
+        # next cut lands two minutes on; a change sooner than that is caught by the refinement below.
+        s0 = 0.0
+        while s0 + cut <= duration + 1:
+            run([s0])
+            r0 = hits.get(s0)
+            s0 += (2 * step) if (r0 and r0.get("confident")) else step
+        # Refine: between two cuts that name different records (or one names nothing), cut the midpoint, repeat
+        # until the gap is REFINE_SEC. A miss next to a hit gets a second chance the same way.
+        for _ in range(4):
+            keys = sorted(hits)
+            mids = []
+            for a, b in zip(keys, keys[1:]):
+                ka = (hits[a] or {}).get("key"); kb = (hits[b] or {}).get("key")
+                if b - a > REFINE_SEC and (ka != kb or ka is None): mids.append(round((a + b) / 2, 1))
+            if not mids: break
+            run(mids)
     entries: list[dict] = []
-    for s in starts:
+    for s in sorted(hits):
         r = hits.get(s)
         if not r: continue
         prev = next((e for e in reversed(entries) if e["key"] == r["key"] and s - e["end"] <= MERGE_WINDOW), None)
         if prev:
-            prev["end"] = s + cut; prev["hits"] += 1
+            prev["end"] = max(prev["end"], s + cut); prev["hits"] += 1
             prev["pitchPct"] = round((prev["pitchPct"] * (prev["hits"] - 1) + r["pitchPct"]) / prev["hits"], 2)
             if r["confident"]: prev["confident"] = True
             continue

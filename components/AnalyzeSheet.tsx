@@ -130,11 +130,11 @@ export function AnalyzeSheet({ stems, signedIn, onSignIn, onClose }: { stems: St
                   <p className="mt-2 text-xs text-ink-2">{stageLine(job)}.</p>
                   {job.result?.identity?.title && <p className="mt-1 text-xs text-ink-3">Named from the sound: {identityLine(job.result.identity)}</p>}
                   {job.result?.facts && <FactsLine f={job.result.facts} />}
-                  {job.result?.preview?.oneshots?.length ? (
+                  {(job.result?.oneshots?.length || job.result?.preview?.oneshots?.length) ? (
                     <div className="mt-3">
-                      <div className="eyebrow mb-1.5">Ready now, from the best 16 bars</div>
+                      <div className="eyebrow mb-1.5">{job.result?.oneshots?.length ? "Ready now, the whole record is sliced; the ears are still listening" : "Ready now, from the best 16 bars"}</div>
                       <ul className="grid gap-1.5 sm:grid-cols-2">
-                        {job.result.preview.oneshots.slice(0, 4).map((s) => (
+                        {(job.result?.oneshots?.length ? job.result.oneshots : job.result?.preview?.oneshots ?? []).slice(0, 4).map((s) => (
                           <li key={s.path} className="flex items-center gap-2 rounded-xl border border-line/40 bg-s2/60 px-3 py-2">
                             <Preview path={s.path} stems={stems} />
                             <span className="min-w-0 flex-1 truncate text-sm capitalize text-ink">{s.role}</span>

@@ -34,8 +34,20 @@ def detect_key(chroma_mean: np.ndarray) -> tuple[str, float]:
     return best_name, round(conf, 2)
 
 
+def load_mono(path: str, sr: int = 22050) -> tuple[np.ndarray, int]:
+    """ffmpeg resamples in a fraction of a second where librosa's resampler takes seconds per minute of audio."""
+    tmp = path + f".{sr}.wav"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", path, "-ac", "1", "-ar", str(sr), tmp], check=True)
+    y, got = sf.read(tmp, dtype="float32")
+    try: os.remove(tmp)
+    except OSError: pass
+    return (y if y.ndim == 1 else y.mean(axis=1)), int(got)
+
+
 def analyze(path: str) -> dict:
-    y, sr = librosa.load(path, sr=22050, mono=True)
+    # Measured on a five minute record: librosa.load 2.4 s, harmonic separation 10 s (and 80 s on the worker),
+    # chroma_cqt 0.6 s, chroma_stft 0.3 s with the same key. So: ffmpeg for the resample, no HPSS, chroma_stft.
+    y, sr = load_mono(path, 22050)
     duration = float(len(y) / sr)
     onset_env = librosa.onset.onset_strength(y=y, sr=sr)
     tempo, beats = librosa.beat.beat_track(onset_envelope=onset_env, sr=sr, trim=False)
@@ -44,7 +56,7 @@ def analyze(path: str) -> dict:
     while bpm and bpm < 95: bpm *= 2
     while bpm > 185: bpm /= 2
     beat_times = librosa.frames_to_time(beats, sr=sr)
-    chroma = librosa.feature.chroma_cqt(y=librosa.effects.harmonic(y), sr=sr)
+    chroma = librosa.feature.chroma_stft(y=y, sr=sr)
     key, key_conf = detect_key(chroma.mean(axis=1))
     # Energy per bar (4 beats) and the best 8 bars: the loudest window.
     rms = librosa.feature.rms(y=y)[0]

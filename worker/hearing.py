@@ -172,8 +172,9 @@ def hear(mix_path: str, stems: dict[str, str], facts: dict) -> dict:
     bpm = float(facts.get("bpm") or 126); bar_sec = 240.0 / bpm
     n_bars = int(facts.get("bars") or 32)
     best_bar = int((facts.get("bestBars") or {}).get("startBar", 0))
-    mix, _ = librosa.load(mix_path, sr=SR, mono=True)
-    loaded = {k: librosa.load(p, sr=SR, mono=True)[0] for k, p in stems.items()}
+    from analysis import load_mono   # ffmpeg resample: seconds, not tens of seconds, for five files
+    mix, _ = load_mono(mix_path, SR)
+    loaded = {k: load_mono(p, SR)[0] for k, p in stems.items()}
     per_stem = {}
     energies = {}
     for name, y in loaded.items():
