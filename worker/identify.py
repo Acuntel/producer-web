@@ -4,15 +4,15 @@ and the DJ's pitch adjustment. A mix is cut every few seconds and the hits are m
 a tracklist with timestamps. No key needed; about 0.2 s per cut from a server."""
 from __future__ import annotations
 import asyncio, os, subprocess, tempfile
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 
 CUT_SEC = 12          # 12 s cuts identify reliably; 6 s cuts sometimes pick the wrong version
 STEP_SEC = 60         # coarse pass: a cut every minute catches any record that lasts 70 s in the mix; boundaries are refined after
 REFINE_SEC = 30       # a boundary between two records is narrowed to this by midpoint cuts
 MERGE_WINDOW = 90     # the same record heard again within 90 s is one entry (two decks layered, a long blend)
-# The recognition signature is pure Python and CPU bound: threads serialize on the GIL (1.7 s per cut on the
-# worker), processes run the cuts in parallel on the cores the container has.
-WORKERS = max(2, min(8, int(os.environ.get("IDENTIFY_WORKERS", "4"))))
+# Two threads: the pacing gate below bounds throughput anyway, and forked child processes under the live server
+# hung on every request (measured: all timeouts in the pool, 0.75 s from the server process itself).
+WORKERS = max(1, min(4, int(os.environ.get("IDENTIFY_WORKERS", "2"))))
 # The recognition service blocks an address after a burst (measured: about 20 requests in four seconds are answered,
 # then every request times out, and the block outlasted five minutes of one ping a minute). So the worker never
 # gets near it: a file-locked gate shared by every process allows at most RATE requests per second and at most
@@ -100,7 +100,7 @@ def tracklist(path: str, duration: float, step: float = STEP_SEC, cut: float = C
     plan = sorted({p for p in plan if 0 <= p and p + cut <= duration + 1})[:MAX_CUTS]
     total_est = min(MAX_CUTS, len(plan) + len(plan) // 3 + 2)
     done = 0
-    with tempfile.TemporaryDirectory(prefix="tl-") as td, ProcessPoolExecutor(max_workers=workers) as ex:
+    with tempfile.TemporaryDirectory(prefix="tl-") as td, ThreadPoolExecutor(max_workers=workers) as ex:
         def run(starts: list[float]):
             nonlocal done
             todo = [s for s in starts if s not in hits and s + cut <= duration + 1 and len(hits) < MAX_CUTS]
