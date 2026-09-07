@@ -16,6 +16,7 @@ const stageLine = (j: NonNullable<Stems["job"]>) => j.status === "queued" ? "Wai
 
 export function AnalyzeSheet({ stems, signedIn, onSignIn, onClose }: { stems: Stems; signedIn: boolean; onSignIn: () => void; onClose: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState("");
   const [cap, setCap] = useState<Capture | null>(null);
   const [capSec, setCapSec] = useState(0);
   const [capErr, setCapErr] = useState<string | null>(null);
@@ -58,7 +59,14 @@ export function AnalyzeSheet({ stems, signedIn, onSignIn, onClose }: { stems: St
             <>
               {!running && (
                 <div className="space-y-2">
-                  <p className="text-sm text-ink-2">Upload a file, or capture what is playing in another tab. You get its tempo, key and structure, four stems, and the kick, snare and hat sliced out as one-shots you can drop straight into your record.</p>
+                  <p className="text-sm text-ink-2">Name a record and the producer finds it on SoundCloud, or upload a file, or capture what is playing in another tab. You get its tempo, key and structure, four stems, the kick, snare and hat sliced out as one-shots, and what the studio hears.</p>
+                  <form onSubmit={(e) => { e.preventDefault(); const v = query.trim(); if (v) void stems.start(/^https?:\/\//i.test(v) ? { url: v } : { query: v }); }} className="flex gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-line/60 bg-base px-3 py-2 focus-within:border-accent/60">
+                      <Icon name="search" size={15} className="shrink-0 text-ink-3" />
+                      <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Artist and title, or a SoundCloud link" aria-label="Find a record" className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-ink-3 focus:outline-none" />
+                    </div>
+                    <Button tone="accent" type="submit" disabled={starting || !query.trim()}>{starting ? "Starting" : "Find it"}</Button>
+                  </form>
                   <div className="flex flex-wrap items-center gap-2">
                     <Button tone="ghost" icon="plus" type="button" onClick={() => fileRef.current?.click()} disabled={starting || !!cap}>Upload a file</Button>
                     {canCapture() && (cap ? (
