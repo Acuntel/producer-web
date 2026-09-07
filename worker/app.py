@@ -189,13 +189,17 @@ def process(job: Job) -> None:
     try:
         supa.update_job(job.job_id, status="running", progress=5)
         # Instant path: a link (or the finder's top pick for a name) that was analyzed before, for anyone.
-        pre_url = job.source.url
-        if not pre_url and job.source.query and not job.source.storage_path:
-            try:
-                top = finder.search(job.source.query, None, None)[:1]
-                if top: pre_url = finder.archive_first_file(top[0].url) or top[0].url if top[0].source == "archive" else top[0].url
-            except Exception: pre_url = None
-        known = supa.cache_find_url(pre_url) if pre_url and not job.source.storage_path else None
+        # Every ranked candidate is checked against the cache before anything downloads: the copy that
+        # was analyzed before may sit third in the list (the first two being DRM uploads that never download).
+        pre_urls = [job.source.url] if job.source.url else []
+        if not pre_urls and job.source.query and not job.source.storage_path:
+            try: pre_urls = [c.url for c in finder.search(job.source.query, None, None)[:6]]
+            except Exception: pre_urls = []
+        known = None
+        if not job.source.storage_path:
+            for u in pre_urls:
+                known = supa.cache_find_url(u)
+                if known: pre_url = u; break
         if known:
             print(f"cache hit by url {pre_url}", flush=True)
             name = job.source.name or (known.get("result") or {}).get("name") or "record"
