@@ -49,13 +49,18 @@ def analyze(path: str) -> dict:
     # chroma_cqt 0.6 s, chroma_stft 0.3 s with the same key. So: ffmpeg for the resample, no HPSS, chroma_stft.
     y, sr = load_mono(path, 22050)
     duration = float(len(y) / sr)
-    onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+    # Tempo from the middle 90 s (the beat tracker's dynamic programme is the slow part on the worker's CPU;
+    # a dance record does not change tempo), energy and key from the whole record.
+    mid = len(y) // 2; half = 45 * sr
+    ex = y[max(0, mid - half): mid + half] if len(y) > 2 * half + sr else y
+    onset_env = librosa.onset.onset_strength(y=ex, sr=sr)
     tempo, beats = librosa.beat.beat_track(onset_envelope=onset_env, sr=sr, trim=False)
+    ex_offset = max(0, mid - half) if len(y) > 2 * half + sr else 0
     bpm = float(np.atleast_1d(tempo)[0])
     # Dance records live 100-180; fold octave errors into that band.
     while bpm and bpm < 95: bpm *= 2
     while bpm > 185: bpm /= 2
-    beat_times = librosa.frames_to_time(beats, sr=sr)
+    beat_times = librosa.frames_to_time(beats, sr=sr) + ex_offset / sr
     chroma = librosa.feature.chroma_stft(y=y, sr=sr)
     key, key_conf = detect_key(chroma.mean(axis=1))
     # Energy per bar (4 beats) and the best 8 bars: the loudest window.
@@ -86,7 +91,8 @@ def analyze(path: str) -> dict:
         "bpm": round(bpm, 1), "key": key, "keyConfidence": key_conf, "durationSec": round(duration, 2),
         "bars": n_bars, "barEnergy": [round(float(v), 3) for v in be.tolist()], "blocks": blocks, "dropAt": drop_at,
         "bestBars": {"startBar": best_start, "startSec": round(best_start * bar_sec, 2), "endSec": round((best_start + 8) * bar_sec, 2), "energy": round(best_val, 2)},
-        "beatOffsetSec": round(float(beat_times[0]), 3) if len(beat_times) else 0.0,
+        # The beat grid's phase from the record's start (the first tracked beat folded into one beat period).
+        "beatOffsetSec": round(float(beat_times[0] % (60.0 / bpm)), 3) if len(beat_times) and bpm else 0.0,
     }
 
 

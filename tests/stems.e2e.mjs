@@ -67,7 +67,7 @@ async function main() {
   const facts = await js(`(document.body.innerText.match(/\\d+ BPM · [^\\n]+best 8 bars[^\\n]*/) || [''])[0]`);
   console.log(`[stems] facts: ${facts}`);
   assert.ok(/BPM/.test(facts), "facts line");
-  const jobs = await admin(`/rest/v1/jobs?owner=eq.${user.id}&select=id,status,progress,result&order=created_at.desc`);
+  const jobs = await admin(`/rest/v1/jobs?owner=eq.${user.id}&select=id,status,progress,result,source&order=created_at.desc`);
   const job = jobs.body[0]; assert.equal(job.status, "done", "job done in Supabase");
   console.log(`[stems] job ${job.id.slice(0, 8)}: ${(job.result.stems ?? []).length} stems, ${(job.result.oneshots ?? []).map((o) => `${o.role}${o.fundamentalHz ? "@" + Math.round(o.fundamentalHz) + "Hz" : ""}`).join(", ")}`);
   const clips = await admin(`/rest/v1/clips?owner=eq.${user.id}&select=id,name,source`);

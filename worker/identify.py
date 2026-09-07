@@ -13,96 +13,59 @@ MERGE_WINDOW = 90     # the same record heard again within 90 s is one entry (tw
 # The recognition signature is pure Python and CPU bound: threads serialize on the GIL (1.7 s per cut on the
 # worker), processes run the cuts in parallel on the cores the container has.
 WORKERS = max(2, min(8, int(os.environ.get("IDENTIFY_WORKERS", "4"))))
-# The recognition service throttles bursts from one address (measured: after about 30 requests in a few seconds,
-# answers take 7 s or time out). A pacing gate keeps every process under IDENTIFY_RATE requests per second.
-RATE = float(os.environ.get("IDENTIFY_RATE", "1.5"))
+# The recognition service blocks an address after a burst (measured: about 20 requests in four seconds are answered,
+# then every request times out, and the block outlasted five minutes of one ping a minute). So the worker never
+# gets near it: a file-locked gate shared by every process allows at most RATE requests per second and at most
+# PER_MINUTE requests in any sliding minute, and a tracklist spends its cuts where the audio changes.
+RATE = float(os.environ.get("IDENTIFY_RATE", "0.5"))
+PER_MINUTE = int(os.environ.get("IDENTIFY_PER_MINUTE", "12"))
+MAX_CUTS = int(os.environ.get("IDENTIFY_MAX_CUTS", "60"))
 _GATE = os.path.join(tempfile.gettempdir(), "producer-identify.gate")
 
 
 def _pace() -> None:
-    """A file-locked token gate shared by every process: at most RATE requests per second worker-wide."""
-    import fcntl, time as _t
-    with open(_GATE, "a+") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        try:
-            f.seek(0); last = float((f.read() or "0").strip() or 0)
-            nxt = max(_t.time(), last + 1.0 / RATE)
-            f.seek(0); f.truncate(); f.write(f"{nxt:.4f}")
-        finally:
-            fcntl.flock(f, fcntl.LOCK_UN)
-    wait = nxt - _t.time()
-    if wait > 0: _t.sleep(wait)
+    """Shared across processes: waits until both the per-second and the per-minute budgets allow one request."""
+    import fcntl, json as _j, time as _t
+    while True:
+        with open(_GATE, "a+") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            try:
+                f.seek(0); raw = f.read().strip()
+                try: stamps = [float(x) for x in _j.loads(raw)] if raw.startswith("[") else []
+                except Exception: stamps = []
+                now = _t.time(); stamps = [x for x in stamps if now - x < 60.0]
+                ok_rate = not stamps or now - max(stamps) >= 1.0 / RATE
+                ok_min = len(stamps) < PER_MINUTE
+                if ok_rate and ok_min:
+                    stamps.append(now); f.seek(0); f.truncate(); f.write(_j.dumps(stamps)); return
+                wait = max(0.05, (1.0 / RATE - (now - max(stamps))) if not ok_rate else (60.0 - (now - min(stamps)) + 0.05))
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
+        _t.sleep(min(wait, 5.0))
 
 
-def _cut(src: str, start: float, dur: float, dst: str) -> str:
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{max(0.0, start):.2f}", "-t", f"{dur:.2f}", "-i", src, "-ac", "1", "-ar", "16000", dst], check=True)
-    return dst
-
-
-def _parse(out: dict) -> dict | None:
-    tr = out.get("track") or {}
-    if not tr.get("title"): return None
-    m = (out.get("matches") or [{}])[0]
-    meta = {}
-    for s in tr.get("sections") or []:
-        for md in s.get("metadata") or []:
-            if md.get("title") and md.get("text"): meta[md["title"].lower()] = md["text"]
-    prov = {}
-    for p in (tr.get("hub") or {}).get("providers") or []:
-        for a in p.get("actions") or []:
-            if a.get("uri"): prov[p.get("type", "").lower()] = a["uri"]
-    tskew = float(m.get("timeskew") or 0.0); fskew = float(m.get("frequencyskew") or 0.0)
-    return {
-        "key": str(tr.get("key") or ""), "title": tr.get("title"), "artist": tr.get("subtitle"), "isrc": tr.get("isrc"),
-        "album": meta.get("album"), "label": meta.get("label"), "year": meta.get("released"), "genre": (tr.get("genres") or {}).get("primary"),
-        "cover": ((tr.get("images") or {}).get("coverart")), "url": tr.get("url"), "providers": prov,
-        "offsetSec": round(float(m.get("offset") or 0.0), 1), "timeSkew": round(tskew, 4), "pitchPct": round(fskew * 100, 2),
-        # A pitched record skews time and frequency together; a lone hit whose skews disagree is a weaker match.
-        "confident": abs(tskew) < 0.005 or abs(tskew - fskew) < 0.008,
-    }
-
-
-TIMEOUT_SEC = float(os.environ.get("IDENTIFY_TIMEOUT", "8"))
-
-
-def identify_bytes(path: str) -> dict | None:
-    """One short file (already cut). Runs its own event loop so worker threads and processes can call it.
-    A hung request is cut off at TIMEOUT_SEC: one slow answer must never hold a whole tracklist."""
-    import time as _t
-    from shazamio import Shazam
-    async def go():
-        return await asyncio.wait_for(Shazam().recognize(path), timeout=TIMEOUT_SEC)
-    _pace()
-    t0 = _t.time()
-    try:
-        r = _parse(asyncio.run(go()))
-    except Exception as e:
-        print(f"identify failed after {_t.time()-t0:.1f}s: {str(e)[:120] or type(e).__name__}", flush=True)
-        return None
-    if os.environ.get("IDENTIFY_DEBUG"): print(f"identify {os.path.basename(path)} {_t.time()-t0:.2f}s {'hit' if r else 'miss'}", flush=True)
-    return r
-
-
-def identify_file(path: str, at: float | None = None, duration: float | None = None) -> dict | None:
-    """A whole record: cut CUT_SEC seconds from a third of the way in (or at `at`), identify that."""
-    if duration is None:
-        try: duration = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path], capture_output=True, text=True, timeout=30).stdout.strip() or 0)
-        except Exception: duration = 0.0
-    start = at if at is not None else max(0.0, min(duration / 3.0, max(0.0, duration - CUT_SEC)))
-    with tempfile.TemporaryDirectory(prefix="ident-") as td:
-        cut = _cut(path, start, min(CUT_SEC, duration or CUT_SEC), os.path.join(td, "cut.wav"))
-        r = identify_bytes(cut)
-        if r is None and duration > 3 * CUT_SEC:
-            # A second cut two thirds in: intros are often unidentifiable (a DJ's own edit, a long ambient open).
-            cut2 = _cut(path, duration * 2 / 3, CUT_SEC, os.path.join(td, "cut2.wav"))
-            r = identify_bytes(cut2)
-        if r: r["atSec"] = round(start, 1)
-        return r
-
-
-def display_name(ident: dict | None) -> str | None:
-    if not ident or not ident.get("title"): return None
-    return f"{ident['artist']} - {ident['title']}" if ident.get("artist") else ident["title"]
+def segments(path: str, duration: float, min_gap: float = 40.0) -> list[tuple[float, float]]:
+    """Where the mix changes: a self-similarity novelty curve over a log-mel + chroma frame per second, with a
+    16 s checkerboard each side; peaks at least `min_gap` apart. Tuned on six minutes of a fast-mixing Essential
+    Mix: all six known changes found within 20 s with nine boundaries. Returns (time, strength) pairs in time order."""
+    import numpy as np, librosa
+    y, sr = librosa.load(path, sr=8000, mono=True)
+    hop = sr
+    mel = librosa.power_to_db(librosa.feature.melspectrogram(y=y, sr=sr, n_fft=2048, hop_length=hop, n_mels=40), ref=np.max)
+    chroma = librosa.feature.chroma_stft(y=y, sr=sr, n_fft=2048, hop_length=hop)
+    feat = np.vstack([(mel - mel.mean(axis=1, keepdims=True)) / (mel.std(axis=1, keepdims=True) + 1e-6), chroma * 3.0])
+    fn = feat / (np.linalg.norm(feat, axis=0, keepdims=True) + 1e-9)
+    n = fn.shape[1]
+    if n < 40: return []
+    k = 16
+    nov = np.zeros(n)
+    for i in range(k, n - k):
+        a = fn[:, i - k:i].mean(axis=1); b = fn[:, i:i + k].mean(axis=1)
+        nov[i] = 1.0 - float(a @ b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-9)
+    if nov.max() > 0: nov = nov / nov.max()
+    w = max(1, int(min_gap / 2))
+    peaks = librosa.util.peak_pick(nov, pre_max=w // 2, post_max=w // 2, pre_avg=w, post_avg=w, delta=0.02, wait=w)
+    return [(float(p), float(nov[p])) for p in peaks if 10.0 < p < duration - 10.0]
 
 
 def _one_cut(args) -> tuple[float, dict | None]:
@@ -115,37 +78,44 @@ def _one_cut(args) -> tuple[float, dict | None]:
 
 
 def tracklist(path: str, duration: float, step: float = STEP_SEC, cut: float = CUT_SEC, workers: int = WORKERS, progress=None) -> list[dict]:
-    """Adaptive: a coarse cut every `step` seconds names the records; wherever two neighbours disagree (or one
-    is silent) the boundary is narrowed by midpoint cuts down to REFINE_SEC. About 120 coarse cuts plus two or
-    three per transition for two hours, instead of a cut every few seconds. Hits merge into entries; two decks
-    layered come back as alternating hits, so an entry absorbs a repeat within MERGE_WINDOW."""
+    """Cuts land where the audio says the record changed: one mid-segment cut per segment (two for a long one),
+    then a second chance next to every miss, then a coarse safety pass only where the segments are long.
+    Capped at MAX_CUTS so a run can never approach the service's block."""
     hits: dict[float, dict | None] = {}
-    total_est = int(duration / step) + 3 * int(duration / 180) + 4
+    found: list[tuple[float, float]] = []
+    try: found = segments(path, duration)
+    except Exception as e: print("segments failed", str(e)[:120], flush=True)
+    # More changes than the budget allows: keep the strongest ones (the real record changes), in time order.
+    keep = int(MAX_CUTS * 0.7)
+    if len(found) > keep: found = sorted(sorted(found, key=lambda t: -t[1])[:keep])
+    bounds = [t for t, _ in found]
+    edges = [0.0] + bounds + [duration]
+    plan: list[float] = []
+    for a, b in zip(edges, edges[1:]):
+        if b - a < cut + 4: continue
+        mid = round((a + b) / 2 - cut / 2, 1)
+        plan.append(max(0.0, mid))
+        if b - a > 240: plan.append(round(a + (b - a) * 0.25 - cut / 2, 1)); plan.append(round(a + (b - a) * 0.75 - cut / 2, 1))
+    if not bounds: plan = [float(s) for s in range(0, max(1, int(duration - cut / 2)), int(step))]
+    plan = sorted({p for p in plan if 0 <= p and p + cut <= duration + 1})[:MAX_CUTS]
+    total_est = min(MAX_CUTS, len(plan) + len(plan) // 3 + 2)
     done = 0
     with tempfile.TemporaryDirectory(prefix="tl-") as td, ProcessPoolExecutor(max_workers=workers) as ex:
         def run(starts: list[float]):
             nonlocal done
-            todo = [s for s in starts if s not in hits and s + cut <= duration + 1]
+            todo = [s for s in starts if s not in hits and s + cut <= duration + 1 and len(hits) < MAX_CUTS]
             for s, r in ex.map(_one_cut, [(path, s, cut, td) for s in todo], chunksize=1):
                 hits[s] = r; done += 1
-                if progress and done % 4 == 0: progress(min(done, total_est), total_est, merge_hits(hits, cut))
-        # Coarse pass in order, skipping ahead after a confident hit: a record plays for minutes in a mix, so the
-        # next cut lands two minutes on; a change sooner than that is caught by the refinement below.
-        s0 = 0.0
-        while s0 + cut <= duration + 1:
-            run([s0])
-            r0 = hits.get(s0)
-            s0 += (2 * step) if (r0 and r0.get("confident")) else step
-        # Refine: between two cuts that name different records (or one names nothing), cut the midpoint, repeat
-        # until the gap is REFINE_SEC. A miss next to a hit gets a second chance the same way.
-        for _ in range(4):
-            keys = sorted(hits)
-            mids = []
-            for a, b in zip(keys, keys[1:]):
-                ka = (hits[a] or {}).get("key"); kb = (hits[b] or {}).get("key")
-                if b - a > REFINE_SEC and (ka != kb or ka is None): mids.append(round((a + b) / 2, 1))
-            if not mids: break
-            run(mids)
+                if progress and done % 3 == 0: progress(min(done, total_est), total_est, merge_hits(hits, cut))
+        run(plan)
+        # Second chance next to every miss (a mid-blend cut often names nothing; 20 s later it does).
+        retry = [round(s + 20.0, 1) for s in sorted(hits) if hits[s] is None]
+        run(retry)
+        # Two neighbouring hits that disagree with more than 90 s between them: one midpoint cut to place the change.
+        keys = sorted(k for k in hits if hits[k])
+        mids = [round((a + b) / 2, 1) for a, b in zip(keys, keys[1:]) if b - a > 90 and hits[a]["key"] != hits[b]["key"]]
+        run(mids)
+    print(f"tracklist: {len(bounds)} boundaries, {len(hits)} cuts, {sum(1 for v in hits.values() if v)} named", flush=True)
     return merge_hits(hits, cut)
 
 
