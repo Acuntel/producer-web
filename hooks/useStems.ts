@@ -16,7 +16,7 @@ export type OneShotOut = { role: string; path: string; clipId?: string; duration
 export type Hearing = { report?: string; drumGrids?: Record<string, string>; bass?: { root?: string; notes?: string[]; eighthRhythm?: string }; chords?: string[]; lyrics?: { lines: { at: number; text: string }[] }; clap?: { descriptors?: [string, number][]; genres?: [string, number][] }; blocks?: { at: number; level: number; carries: string; entering: string[]; leaving: string[] }[]; perStem?: Record<string, { share: number; centroidHz: number; crestDb: number; onsetsPerBeat: number }>; error?: string };
 export type Identity = { key: string; title: string; artist: string | null; isrc?: string | null; album?: string | null; label?: string | null; year?: string | null; genre?: string | null; cover?: string | null; url?: string | null; offsetSec: number; timeSkew: number; pitchPct: number; confident: boolean; atSec?: number };
 export type TrackEntry = { key: string; title: string; artist: string | null; isrc?: string | null; album?: string | null; label?: string | null; year?: string | null; cover?: string | null; url?: string | null; start: number; end: number; hits: number; pitchPct: number; offsetSec: number; confident: boolean; query: string };
-export type StemsResult = { facts?: StemsFacts; stems?: StemOut[]; oneshots?: OneShotOut[]; name?: string; stage?: string; hearing?: Hearing; cached?: boolean; preview?: { stems: (StemOut & { startSec?: number; bars?: number })[]; oneshots: OneShotOut[] }; identity?: Identity | null; timing?: Record<string, number>; kind?: "stems" | "hear" | "tracklist"; tracklist?: TrackEntry[]; durationSec?: number; sourceUrl?: string | null };
+export type StemsResult = { facts?: StemsFacts; stems?: StemOut[]; oneshots?: OneShotOut[]; name?: string; stage?: string; hearing?: Hearing; cached?: boolean; preview?: { stems: (StemOut & { startSec?: number; bars?: number })[]; oneshots: OneShotOut[] }; identity?: Identity | null; timing?: Record<string, number>; kind?: "stems" | "hear" | "tracklist"; tracklist?: TrackEntry[]; durationSec?: number; sourceUrl?: string | null; cooldownSec?: number };
 export const identityLine = (i: Identity | null | undefined) => i?.title ? `${i.artist ? `${i.artist} - ` : ""}${i.title}${i.year || i.label ? ` (${[i.label, i.year].filter(Boolean).join(", ")})` : ""}${Math.abs(i.pitchPct) >= 0.5 ? `, played at ${i.pitchPct > 0 ? "+" : ""}${i.pitchPct.toFixed(1)}%` : ""}` : "";
 export type FindCandidate = { source: string; title: string; url: string; artist: string | null; duration_sec: number | null; year: number | null; license: string | null; kind: string; score: number };
 export type StemsJob = { id: string; kind?: "stems" | "hear" | "tracklist"; status: "queued" | "running" | "done" | "error"; progress: number; result: StemsResult | null; error: string | null; source: { url?: string; storage_path?: string; name?: string; query?: string } };
@@ -65,6 +65,7 @@ export function useStems(d: Deps) {
             const lines = tl.slice(0, 40).map((e, i) => `${i + 1}. ${mmss(e.start)} ${e.artist ? `${e.artist} - ` : ""}${e.title}${Math.abs(e.pitchPct) >= 0.5 ? ` (played ${e.pitchPct > 0 ? "+" : ""}${e.pitchPct.toFixed(1)}%)` : ""}${e.confident ? "" : " (unsure)"}${e.year ? ` [${e.year}]` : ""} → query "${e.query}"`).join("\n");
             void dRef.current.send(tl.length
               ? `TRACKLIST of "${res.name ?? "the mix"}" (${mmss(res.durationSec ?? 0)}), identified from the sound in cuts:\n${lines}\nTell the user what is in it the way a DJ friend would (the records that matter, who plays what after what, the pitch moves), in a few lines at most. To pull one into the studio, return action {"type":"analyze","query": "<that entry's query>"}. Do not change the song.`
+              : res.cooldownSec ? `The mix "${res.name ?? "the mix"}" could not be read: the recognition service is cooling down for about ${Math.ceil(res.cooldownSec / 60)} minutes after too many requests. Say so in one line and offer to try again then. Do not change the song.`
               : `The mix "${res.name ?? "the mix"}" (${mmss(res.durationSec ?? 0)}) came back with no identifiable records (unreleased edits, or too quiet). Say so in one line and offer capture from the tab for the part they care about. Do not change the song.`, { hidden: true });
             return;
           }
@@ -303,6 +304,7 @@ export function useStems(d: Deps) {
       const r = await fetch("/api/identify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ storagePath: path }) }).then((x) => x.json()).catch(() => null);
       void sb.storage.from("clips").remove([path]);
       const ident = (r?.identity ?? null) as Identity | null;
+      if (!ident && r?.cooldownSec) dRef.current.flash(`Naming is cooling down for ${Math.ceil(r.cooldownSec / 60)} min`);
       setIdentified(ident);
       return ident;
     } finally { setIdentifying(false); }

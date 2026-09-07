@@ -68,6 +68,106 @@ def segments(path: str, duration: float, min_gap: float = 40.0) -> list[tuple[fl
     return [(float(p), float(nov[p])) for p in peaks if 10.0 < p < duration - 10.0]
 
 
+def _cut(src: str, start: float, dur: float, dst: str) -> str:
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{max(0.0, start):.2f}", "-t", f"{dur:.2f}", "-i", src, "-ac", "1", "-ar", "16000", dst], check=True)
+    return dst
+
+
+def _parse(out: dict) -> dict | None:
+    tr = out.get("track") or {}
+    if not tr.get("title"): return None
+    m = (out.get("matches") or [{}])[0]
+    meta = {}
+    for s in tr.get("sections") or []:
+        for md in s.get("metadata") or []:
+            if md.get("title") and md.get("text"): meta[md["title"].lower()] = md["text"]
+    prov = {}
+    for p in (tr.get("hub") or {}).get("providers") or []:
+        for a in p.get("actions") or []:
+            if a.get("uri"): prov[p.get("type", "").lower()] = a["uri"]
+    tskew = float(m.get("timeskew") or 0.0); fskew = float(m.get("frequencyskew") or 0.0)
+    return {
+        "key": str(tr.get("key") or ""), "title": tr.get("title"), "artist": tr.get("subtitle"), "isrc": tr.get("isrc"),
+        "album": meta.get("album"), "label": meta.get("label"), "year": meta.get("released"), "genre": (tr.get("genres") or {}).get("primary"),
+        "cover": ((tr.get("images") or {}).get("coverart")), "url": tr.get("url"), "providers": prov,
+        "offsetSec": round(float(m.get("offset") or 0.0), 1), "timeSkew": round(tskew, 4), "pitchPct": round(fskew * 100, 2),
+        # A pitched record skews time and frequency together; a lone hit whose skews disagree is a weaker match.
+        "confident": abs(tskew) < 0.005 or abs(tskew - fskew) < 0.008,
+    }
+
+
+TIMEOUT_SEC = float(os.environ.get("IDENTIFY_TIMEOUT", "8"))
+COOLDOWN_SEC = float(os.environ.get("IDENTIFY_COOLDOWN", "600"))
+_COOL = os.path.join(tempfile.gettempdir(), "producer-identify.cool")
+
+
+def cooling() -> float:
+    """Seconds left of a cooldown after consecutive timeouts (the service blocking this address), else 0."""
+    import time as _t
+    try:
+        with open(_COOL) as f: until, n = f.read().split()
+        return max(0.0, float(until) - _t.time())
+    except Exception: return 0.0
+
+
+def _note_outcome(timed_out: bool) -> None:
+    """Three timeouts in a row start a cooldown; one answer clears the count."""
+    import time as _t
+    try:
+        try:
+            with open(_COOL) as f: until, n = f.read().split(); n = int(n)
+        except Exception: until, n = "0", 0
+        n = n + 1 if timed_out else 0
+        new_until = _t.time() + COOLDOWN_SEC if n >= 3 else float(until)
+        with open(_COOL, "w") as f: f.write(f"{new_until:.1f} {n}")
+        if n == 3: print(f"identify: three timeouts in a row, cooling down for {int(COOLDOWN_SEC)} s", flush=True)
+    except Exception: pass
+
+
+def identify_bytes(path: str) -> dict | None:
+    """One short file (already cut). Runs its own event loop so worker threads can call it. A hung request is
+    cut off at TIMEOUT_SEC; three in a row start a cooldown so nothing keeps knocking on a blocking service."""
+    import time as _t
+    from shazamio import Shazam
+    async def go():
+        return await asyncio.wait_for(Shazam().recognize(path), timeout=TIMEOUT_SEC)
+    if cooling() > 0: return None
+    _pace()
+    t0 = _t.time()
+    try:
+        r = _parse(asyncio.run(go()))
+        _note_outcome(False)
+    except Exception as e:
+        timed = isinstance(e, (asyncio.TimeoutError, TimeoutError)) or "Timeout" in type(e).__name__
+        _note_outcome(timed)
+        print(f"identify failed after {_t.time()-t0:.1f}s: {str(e)[:120] or type(e).__name__}", flush=True)
+        return None
+    if os.environ.get("IDENTIFY_DEBUG"): print(f"identify {os.path.basename(path)} {_t.time()-t0:.2f}s {'hit' if r else 'miss'}", flush=True)
+    return r
+
+
+def identify_file(path: str, at: float | None = None, duration: float | None = None) -> dict | None:
+    """A whole record: cut CUT_SEC seconds from a third of the way in (or at `at`), identify that."""
+    if duration is None:
+        try: duration = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path], capture_output=True, text=True, timeout=30).stdout.strip() or 0)
+        except Exception: duration = 0.0
+    start = at if at is not None else max(0.0, min(duration / 3.0, max(0.0, duration - CUT_SEC)))
+    with tempfile.TemporaryDirectory(prefix="ident-") as td:
+        cut = _cut(path, start, min(CUT_SEC, duration or CUT_SEC), os.path.join(td, "cut.wav"))
+        r = identify_bytes(cut)
+        if r is None and duration > 3 * CUT_SEC and cooling() <= 0:
+            # A second cut two thirds in: intros are often unidentifiable (a DJ's own edit, a long ambient open).
+            cut2 = _cut(path, duration * 2 / 3, CUT_SEC, os.path.join(td, "cut2.wav"))
+            r = identify_bytes(cut2)
+        if r: r["atSec"] = round(start, 1)
+        return r
+
+
+def display_name(ident: dict | None) -> str | None:
+    if not ident or not ident.get("title"): return None
+    return f"{ident['artist']} - {ident['title']}" if ident.get("artist") else ident["title"]
+
+
 def _one_cut(args) -> tuple[float, dict | None]:
     path, s, cut, td = args
     p = _cut(path, s, cut, os.path.join(td, f"c{int(s)}.wav"))

@@ -172,7 +172,7 @@ export function AnalyzeSheet({ stems, signedIn, onSignIn, onClose }: { stems: St
                         </li>
                       ))}
                     </ol>
-                  ) : <p className="text-sm text-ink-2">Nothing in it could be named. Unreleased edits and very quiet passages stay anonymous; capture the part you care about from the tab instead.</p>}
+                  ) : <p className="text-sm text-ink-2">{job.result.cooldownSec ? `Naming is cooling down for about ${Math.ceil(job.result.cooldownSec / 60)} minutes after too many requests. Try again then.` : "Nothing in it could be named. Unreleased edits and very quiet passages stay anonymous; capture the part you care about from the tab instead."}</p>}
                 </div>
               )}
               {done && job.result && job.result.kind !== "tracklist" && (

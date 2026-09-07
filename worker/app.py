@@ -38,7 +38,7 @@ class Job(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "model": "htdemucs", "cpus": os.cpu_count(), "workers": pool._max_workers, **state, "uptimeSec": int(time.time() - state["started"])}
+    return {"ok": True, "model": "htdemucs", "cpus": os.cpu_count(), "workers": pool._max_workers, "identifyCooldownSec": int(identify.cooling()), **state, "uptimeSec": int(time.time() - state["started"])}
 
 
 @app.post("/jobs")
@@ -68,7 +68,7 @@ def identify_endpoint(x: IdentifyIn, x_worker_secret: str = Header(default="")):
         t0 = time.time()
         r = identify.identify_file(raw)
         known = supa.cache_find_identity(r["key"]) if r else None
-        return {"identity": r, "name": identify.display_name(r), "cached": bool(known), "ms": int((time.time() - t0) * 1000)}
+        return {"identity": r, "name": identify.display_name(r), "cached": bool(known), "ms": int((time.time() - t0) * 1000), "cooldownSec": int(identify.cooling())}
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -190,7 +190,8 @@ def process_tracklist(job: Job, tmp: str) -> None:
         try: supa.update_job(job.job_id, progress=20 + int(75 * done / max(1, total)), result={"kind": "tracklist", "name": name, "durationSec": round(duration, 1), "stage": "identifying", "tracklist": entries or [], "cuts": done})
         except Exception: pass
     entries = identify.tracklist(wav, duration, progress=prog)
-    final = {"kind": "tracklist", "name": name, "durationSec": round(duration, 1), "tracklist": entries, "sourceUrl": resolved,
+    cool = identify.cooling()
+    final = {"kind": "tracklist", "name": name, "durationSec": round(duration, 1), "tracklist": entries, "sourceUrl": resolved, "cooldownSec": int(cool) if cool else 0,
              "timing": {"fetchSec": round(t_fetch, 1), "identifySec": round(time.time() - t0 - t_fetch, 1), "cuts": len(range(0, max(1, int(duration - identify.CUT_SEC / 2)), int(identify.STEP_SEC)))}}
     supa.update_job(job.job_id, status="done", progress=100, result=final)
 
