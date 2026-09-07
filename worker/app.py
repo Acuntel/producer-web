@@ -105,7 +105,7 @@ def fetch_source(job: Job, tmp: str) -> tuple[str, str]:
         raw = None; name = src.name
         for target in targets:
             out = os.path.join(tmp, "dl.%(ext)s")
-            cmd = ["yt-dlp", "-f", "bestaudio/best", "--ignore-errors", "--max-downloads", "1", "--match-filter", f"duration < {MAX_SECONDS + 420}", "-o", out, "--print", "title", "--no-simulate", "--quiet", "--no-warnings", "--socket-timeout", "20"]
+            cmd = ["yt-dlp", "-f", "bestaudio/best", "--ignore-errors", "--max-downloads", "1", "--match-filter", f"duration <? {MAX_SECONDS + 420}", "-o", out, "--print", "title", "--no-simulate", "--quiet", "--no-warnings", "--socket-timeout", "20"]
             if not target.startswith("scsearch"): cmd.append("--no-playlist")
             proxy = os.environ.get("YTDLP_PROXY")
             if proxy: cmd += ["--proxy", proxy]
