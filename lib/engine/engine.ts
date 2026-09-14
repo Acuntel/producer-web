@@ -91,6 +91,9 @@ export class Engine {
     return true;
   }
 
+  /** The music steps back while the producer speaks, and comes back after. */
+  duck(on: boolean) { try { Tone.getDestination().volume.rampTo(on ? -7 : 0, on ? 0.12 : 0.35); } catch { /* no context yet */ } }
+
   /** A fader move while playing: the voice ramps, nothing is rebuilt. */
   setTrackVolume(id: string, db: number): boolean { const v = this.graph?.voiceById.get(id); if (!v) return false; v.setVolume(db); return true; }
 

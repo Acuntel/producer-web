@@ -3,8 +3,8 @@
 import { useCallback, type MutableRefObject, type Dispatch, type SetStateAction } from "react";
 import { applyOps, type Song } from "@/lib/song";
 import type { MusicFacts } from "@/lib/ears";
-import type { Reference } from "@/components/EarsPanel";
-import type { ClipMeta } from "@/components/SongsSheet";
+import type { Reference } from "@/lib/types/ui";
+import type { ClipMeta } from "@/lib/types/ui";
 
 const REF_KEY = "producer.reference.v1";
 type Deps = {

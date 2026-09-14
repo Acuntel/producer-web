@@ -19,6 +19,7 @@ type Deps = {
   compact: (f: MusicFacts | null) => unknown;
   say: (t: string) => void;
   taste: () => string;
+  onUsage?: (model: string | undefined, usage: unknown) => void;
 };
 
 // A blueprint has no tracks yet; keep a kick and a hat running so the wait is musical.
@@ -58,6 +59,7 @@ export function useRollout(deps: Deps) {
           reference: ref ? { name: ref.name, facts: deps.compact(ref.facts) } : null, deltas: deps.getDeltas(facts), lane: song.lane, askedLane: lane ?? null, ask, prior, attempt, failure, section: section ?? null, taste: deps.taste(),
         }) }).then((x) => x.json()).catch(() => null);
         if (!r) { failure = "no reply"; attempt++; continue; }
+        if (r.usage) deps.onUsage?.(r.model, r.usage);
         // Apply against the FRESHEST song (a sibling step may have landed meanwhile).
         const base = deps.getSong();
         let next: Song | null = null, applied = 0, skipped = 0, rejected: string[] = [];

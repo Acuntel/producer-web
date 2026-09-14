@@ -38,7 +38,7 @@ function friendly(e: unknown) {
 }
 
 const textOf = (resp: Anthropic.Message) => resp.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("");
-const pack = (reply: BrainReply, usage: unknown) => ({ say: reply.say, ops: reply.ops, song: reply.song, action: reply.action, listen: reply.listen, expect: reply.expect, alternative: reply.alternative, usage });
+const pack = (reply: BrainReply, usage: unknown, model?: string) => ({ say: reply.say, ops: reply.ops, song: reply.song, action: reply.action, listen: reply.listen, expect: reply.expect, alternative: reply.alternative, usage, model });
 
 export async function POST(req: Request) {
   const input = (await req.json()) as ExchangeInput;
@@ -92,7 +92,7 @@ export async function POST(req: Request) {
   if (!wantsStream) {
     try {
       const resp = await finish(await client.messages.create({ ...params, messages: msgs } as never) as Anthropic.Message);
-      return Response.json({ ...pack(parseBrain(textOf(resp)), resp.usage), keySource: source });
+      return Response.json({ ...pack(parseBrain(textOf(resp)), resp.usage, params.model), keySource: source });
     } catch (e) { return Response.json(friendly(e), { status: 200 }); }
   }
 
@@ -114,7 +114,7 @@ export async function POST(req: Request) {
           push({ type: "say", say });
         });
         const resp = await finish(await s.finalMessage());
-        push({ type: "final", ...pack(parseBrain(textOf(resp)), resp.usage), saidEarly, keySource: source });
+        push({ type: "final", ...pack(parseBrain(textOf(resp)), resp.usage, params.model), saidEarly, keySource: source });
       } catch (e) {
         push({ type: "final", ...friendly(e) });
       } finally { controller.close(); }

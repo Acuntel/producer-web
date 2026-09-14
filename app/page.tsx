@@ -1,167 +1,164 @@
 "use client";
-// The Producer. Home is your records; a session is the studio. The studio takes two
-// thirds of the screen; the listen side takes the rest. No chat, no keyboard: you
-// talk, the producer answers, the music changes in front of you.
-import { useEffect, useRef, useState } from "react";
+// The Producer, V11. A landing with two choices, then the stage: black, an edge glow that
+// shows what the producer is doing, the record moving in front of you, the conversation
+// in large type, and one control at the bottom. Everything else is voice.
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "@/hooks/useStudio";
-import { useVoiceLoop } from "@/hooks/useVoiceLoop";
 import { useHum } from "@/hooks/useHum";
 import { useCritic } from "@/hooks/useCritic";
 import { useAccount } from "@/hooks/useAccount";
 import { useProjects, type SnapshotMeta } from "@/hooks/useProjects";
 import { useStems } from "@/hooks/useStems";
-import { useMicLevel } from "@/hooks/useMicLevel";
-import { StudioPanel } from "@/components/StudioPanel";
-import { ListenPanel } from "@/components/ListenPanel";
-import { Home } from "@/components/Home";
-import { ProjectsSheet } from "@/components/ProjectsSheet";
+import { useVoiceOut } from "@/hooks/useVoiceOut";
+import { useSpeak } from "@/hooks/useSpeak";
+import { useStopWords } from "@/hooks/useStopWords";
+import { useConversation } from "@/hooks/useConversation";
+import { Glow, type GlowState } from "@/components/Glow";
+import { Landing } from "@/components/Landing";
+import { SpeakButton, type SpeakState } from "@/components/SpeakButton";
+import { Ribbon } from "@/components/Ribbon";
+import { Field } from "@/components/Field";
+import { WorkCards } from "@/components/WorkCards";
+import { StatusLine } from "@/components/StatusLine";
 import { AccountSheet } from "@/components/AccountSheet";
 import { AnalyzeSheet } from "@/components/AnalyzeSheet";
-import { IconButton } from "@/components/ui";
 import { Icon } from "@/components/Icon";
-import type { Phase } from "@/components/Orb";
 import type { Song } from "@/lib/song/types";
-import { SEED_SONG } from "@/lib/song";
 
 const harnessMode = () => typeof window !== "undefined" && /[?&](e2e|typed)=1/.test(window.location.search);
+type Actions = { analyze: (i: { url?: string; query?: string; from?: "local" | "web" }) => Promise<void>; vocal: (p: string, l?: string, ms?: number) => Promise<void>; findSound: (beats: number) => Promise<void>; hear: (sectionId?: string) => Promise<string | null>; identify: () => Promise<string | null>; tracklist: (i: { url?: string; query?: string }) => Promise<void> };
 
-export default function Studio() {
-  const sendRef = useRef<(t: string) => void>(() => {});
+export default function App() {
+  // Server and client must render the same first frame: the harness flag is read after mount.
+  const [view, setView] = useState<"landing" | "stage">("landing");
+  const [typed, setTyped] = useState(false);
+  useEffect(() => { if (harnessMode()) { setTyped(true); setView("stage"); } }, []);
+  const [showAccount, setShowAccount] = useState(false);
+  const [showAnalyze, setShowAnalyze] = useState(false);
   const snapshotRef = useRef<(s: Song, m: SnapshotMeta) => void>(() => {});
-  const actionsRef = useRef<{ analyze: (i: { url?: string; query?: string; from?: "local" | "web" }) => Promise<void>; vocal: (p: string, l?: string, ms?: number) => Promise<void>; findSound: (beats: number) => Promise<void>; hear: (sectionId?: string) => Promise<string | null>; identify: () => Promise<string | null>; tracklist: (i: { url?: string; query?: string }) => Promise<void> }>({ analyze: async () => {}, vocal: async () => {}, findSound: async () => {}, hear: async () => null, identify: async () => null, tracklist: async () => {} });
-  const [typed] = useState(harnessMode);
-  const [view, setView] = useState<"home" | "studio">(() => (harnessMode() ? "studio" : "home"));
-  const voice = useVoiceLoop((t) => sendRef.current(t));
+  const actionsRef = useRef<Actions>({ analyze: async () => {}, vocal: async () => {}, findSound: async () => {}, hear: async () => null, identify: async () => null, tracklist: async () => {} });
+  const duckRef = useRef<(on: boolean) => void>(() => {});
+  const landingRef = useRef<(c: { open?: string; new?: boolean }) => void>(() => {});
+
+  const voiceOut = useVoiceOut({ duck: (on) => duckRef.current(on) });
   const hum = useHum();
   const account = useAccount();
-  const studio = useStudio(voice.say, (bpm, beats) => hum.record(bpm, beats), (s, m) => snapshotRef.current(s, m), { analyze: (i) => actionsRef.current.analyze(i), vocal: (p, l, ms) => actionsRef.current.vocal(p, l, ms), findSound: (b) => actionsRef.current.findSound(b), hear: (sec) => actionsRef.current.hear(sec), identify: () => actionsRef.current.identify(), tracklist: (i) => actionsRef.current.tracklist(i) });
+  const studio = useStudio(voiceOut.speak, (bpm, beats) => hum.record(bpm, beats), (s, m) => snapshotRef.current(s, m), {
+    analyze: (i) => actionsRef.current.analyze(i), vocal: (p, l, ms) => actionsRef.current.vocal(p, l, ms), findSound: (b) => actionsRef.current.findSound(b),
+    hear: (sec) => actionsRef.current.hear(sec), identify: () => actionsRef.current.identify(), tracklist: (i) => actionsRef.current.tracklist(i),
+  });
+  duckRef.current = studio.duck;
   const projects = useProjects({ user: account.user, loadSong: studio.loadSong, loadChat: studio.loadChat, getSong: studio.getSong, localLibrary: studio.library, flash: studio.flash });
   snapshotRef.current = projects.snapshot;
   const stems = useStems({ user: account.user, projectId: projects.current?.id ?? null, flash: studio.flash, edit: studio.edit, send: studio.send, registerClip: studio.registerClip, getSong: studio.getSong, setReference: studio.setReferenceBuffer, recordSound: (bpm, beats) => hum.record(bpm, beats), previewClip: studio.previewClip });
-  actionsRef.current = { analyze: async (i) => { setShowAnalyze(true); if (i.url) await stems.start({ url: i.url }); else await stems.findAndAnalyze(i.query ?? "", i.from ?? null); }, vocal: async (p, l, ms) => { setShowAnalyze(true); await stems.renderVocal(p, l, ms); }, findSound: async (b) => { await stems.findSound(b); }, hear: async (sec) => stems.hearOurRender(sec), identify: async () => { setShowAnalyze(true); return stems.identifyPlaying(); }, tracklist: async (i) => { setShowAnalyze(true); await stems.startTracklist(i); } };
-  useEffect(() => { sendRef.current = (t) => void studio.sendVoice(t); }, [studio]);
-  useEffect(() => { if (voice.interim) stems.prefetch(voice.interim); }, [voice.interim, stems]);
-  const critic = useCritic({ song: studio.song, facts: studio.facts, reference: studio.reference, paused: !!studio.rollout, send: studio.send, started: studio.started });
-  const mic = useMicLevel(studio.started && view === "studio");
-  const [muted, setMuted] = useState(false);
+  actionsRef.current = {
+    analyze: async (i) => { setShowAnalyze(true); if (i.url) await stems.start({ url: i.url }); else await stems.findAndAnalyze(i.query ?? "", i.from ?? null); },
+    vocal: async (p, l, ms) => { setShowAnalyze(true); await stems.renderVocal(p, l, ms); },
+    findSound: async (b) => { await stems.findSound(b); },
+    hear: async (sec) => stems.hearOurRender(sec),
+    identify: async () => { setShowAnalyze(true); return stems.identifyPlaying(); },
+    tracklist: async (i) => { setShowAnalyze(true); await stems.startTracklist(i); },
+  };
+  useCritic({ song: studio.song, facts: studio.facts, reference: studio.reference, paused: !!studio.rollout, send: studio.send, started: studio.started });
 
-  const [showProjects, setShowProjects] = useState(false);
-  const [showAccount, setShowAccount] = useState(false);
-  const [showAnalyze, setShowAnalyze] = useState(false);
-  const { song, started, paused, starting } = studio;
-  const beatSec = 60 / song.bpm;
+  const titles = useMemo(() => [...projects.projects.map((p) => p.title), ...studio.library.map((s) => s.song.title)], [projects.projects, studio.library]);
+  const convo = useConversation({ studio, voice: voiceOut, screen: view, projects: titles, onLanding: (c) => landingRef.current(c) });
+  const speak = useSpeak({ onFinal: (t, ms) => void convo.hear(t, ms), onPress: () => convo.interrupt() });
+  useStopWords(convo.auditioning, () => convo.interrupt(true));
+
+  const { song, started, paused } = studio;
   const playing = started && !paused;
+  // Harness mode opens on the stage with the seed record and starts the session itself
+  // (headless Chrome runs with autoplay allowed, so no gesture is needed).
+  const bootedRef = useRef(false);
+  useEffect(() => { if (typed && view === "stage" && !started && !studio.starting && !bootedRef.current) { bootedRef.current = true; void studio.boot(); } }, [typed, view, started, studio]);
   const gate = account.ready && account.enabled && !account.user && !account.guest;
+  const device = useMemo(() => { const cloud = new Set(projects.projects.map((p) => p.title)); return account.user ? studio.library.filter((s) => !cloud.has(s.song.title)) : studio.library; }, [account.user, projects.projects, studio.library]);
 
-  async function orb() {
-    const wasStarted = started;
-    await studio.boot();
-    // Harness mode types its asks; a fake microphone would flood the brain with transcribed static.
-    if (!wasStarted && !typed) voice.begin();
-  }
-  // From Home, one tap opens the studio and starts the session (the tap is the audio gesture).
   async function enter(load: () => Promise<void>) {
+    voiceOut.warm();
     await load();
-    setView("studio");
-    if (!started) await orb();
-    else if (paused) await studio.boot();
+    setView("stage");
+    if (!started) await studio.boot();
+    else if (paused) await studio.play();
   }
-  async function goHome() {
-    if (playing) await studio.boot();   // pause; a nameless record gets asked for its name
-    setView("home");
-  }
+  landingRef.current = ({ open, new: fresh }) => {
+    if (fresh) { void enter(async () => { projects.startFresh(); await studio.newSession(); }); return; }
+    if (!open) return;
+    const q = open.toLowerCase();
+    const cloud = projects.projects.find((p) => p.title.toLowerCase().includes(q));
+    if (cloud) { void enter(() => projects.open(cloud.id)); return; }
+    const local = studio.library.find((s) => s.song.title.toLowerCase().includes(q));
+    if (local) void enter(() => studio.loadSaved(local));
+    else void voiceOut.speak(`I do not see a project called ${open}. Say new project, or name one from the list.`);
+  };
 
-  const phase: Phase =
-    starting ? "starting"
-    : !started ? "idle"
-    : studio.hearing ? "hearing"
-    : studio.busy ? "thinking"
-    : voice.speaking ? "speaking"
-    : voice.listening ? "listening"
-    : paused ? "paused"
-    : "playing";
+  const glow: GlowState = speak.holding ? "listening" : convo.thinking ? "thinking" : voiceOut.speaking ? "speaking" : convo.auditioning ? "audition" : playing ? "playing" : "idle";
+  const button: SpeakState = speak.status === "holding" ? "holding" : speak.status === "sending" ? "sending" : voiceOut.speaking ? "speaking" : "idle";
+  const micHint = speak.status === "blocked" ? "Microphone blocked. Allow it in the address bar, then try again." : speak.status === "nodevice" ? "No microphone found." : speak.status === "unsupported" ? "This browser cannot do live speech. Use Chrome." : undefined;
+  const measured = studio.facts ? `${Math.round(studio.facts.tempo.bpm)} measured · ${studio.facts.loudness.integrated.toFixed(1)} LUFS` : null;
 
   return (
-    <main className="flex h-dvh flex-col overflow-hidden">
-      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-line/50 px-3 py-2.5 sm:px-4">
-        <h1 className="flex min-w-0 items-center gap-2 text-[15px] font-semibold tracking-tight">
-          <button onClick={() => void goHome()} className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent text-accent-ink" aria-label="Records"><Icon name="logo" size={16} /></button>
-          <span className="truncate">The Producer</span>
-          {view === "studio" && projects.current && <span className="hidden truncate text-sm font-normal text-ink-3 sm:inline">· {projects.current.title}</span>}
-          {projects.syncing && <span className="hidden text-xs font-normal text-ink-3 sm:inline">Saving</span>}
-        </h1>
-        <div className="flex shrink-0 items-center gap-0.5">
-          {view === "studio" && (
-            <>
-              <IconButton name="undo" label="Undo" onClick={studio.undo} disabled={!studio.canUndo} />
-              <IconButton name="redo" label="Redo" onClick={studio.redo} disabled={!studio.canRedo} />
-              <IconButton name="library" label="Records" onClick={() => void goHome()} />
-              <IconButton name="folder" label="Projects" onClick={() => setShowProjects(true)} />
-              <IconButton name="download" label={studio.rendering ? "Rendering WAV…" : "Download WAV"} onClick={() => void studio.download()} disabled={studio.rendering} className={studio.rendering ? "animate-breathe" : ""} />
-            </>
-          )}
-          {view === "home" && <IconButton name="folder" label="Manage records" onClick={() => setShowProjects(true)} />}
-          {account.enabled && <IconButton name="user" label={account.user ? "Your account" : "Sign in"} tone={account.user ? "solid" : "ghost"} onClick={() => setShowAccount(true)} />}
-        </div>
-      </header>
+    <main className="relative flex h-dvh flex-col overflow-hidden bg-base">
+      <Glow state={glow} level={speak.level} />
 
-      {view === "home" ? (
-        <Home
-          signedIn={projects.signedIn} email={account.user?.email} projects={projects.projects} loading={projects.loading} localLibrary={studio.library}
-          onOpen={(id) => void enter(() => projects.open(id))}
-          onOpenLocal={(s) => void enter(() => studio.loadSaved(s))}
-          onNew={() => void enter(async () => { projects.startFresh(); await studio.newSession(); })}
-          onSignIn={() => setShowAccount(true)}
-        />
+      {view === "landing" ? (
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+          <Landing projects={projects.projects} device={device} signedIn={!!account.user} loading={projects.loading}
+            onNew={() => landingRef.current({ new: true })} onOpen={(id) => void enter(() => projects.open(id))} onOpenLocal={(s) => void enter(() => studio.loadSaved(s))}
+            onSignIn={account.enabled ? () => setShowAccount(true) : undefined} />
+        </div>
       ) : (
-        <div className="grid min-h-0 flex-1 lg:grid-cols-[1fr_minmax(300px,24rem)]">
-          <div className="scroll-y scroll-fade-y max-h-[56dvh] shrink-0 border-b border-line/50 p-3 sm:p-4 lg:max-h-none lg:border-b-0 lg:border-r">
-            <StudioPanel
-              song={song} started={started} playing={playing} starting={starting} onPlayPause={orb}
-              nowSection={studio.nowSection} beat={playing ? studio.beat : null} onJump={(id) => void studio.jump(id)}
-              getLevels={studio.getLevels} onVolume={studio.setVolume} onToggle={studio.toggleTrack}
-              listenHint={studio.listenHint} rollout={studio.rollout} onCancelRollout={studio.cancelRollout}
-              ab={studio.ab} onPickAb={(k) => studio.pickAb(k as never)} score={studio.score}
-              facts={studio.facts} reference={studio.reference} deltaText={studio.deltaText} hearing={studio.hearing}
-              notes={critic.notes} headline={critic.headline} criticThinking={critic.thinking} onApply={critic.apply} onDismiss={critic.dismiss} moves={studio.moves}
-            />
-          </div>
-          <div className="flex min-h-0 flex-col bg-s1/40">
-            <ListenPanel
-              started={started} starting={starting} phase={phase} running={playing} beatSec={beatSec} onOrb={orb}
-              micLevel={mic.level} micPeak={mic.peak} micStatus={mic.status} voiceStatus={voice.status} heardSomething={mic.heardSomething || voice.heardCount > 0}
-              onRetryMic={() => { voice.retry(); }} muted={muted} onMute={(m) => { setMuted(m); voice.setMuted(m); }}
-              interim={voice.interim} lastHeard={voice.lastHeard} messages={studio.messages} speaking={voice.speaking} busy={studio.busy} onHush={voice.hush}
-              paused={paused} ignored={studio.ignored} ignoredCount={studio.ignoredCount} onThatWasForMe={studio.thatWasForMe}
-              brainDown={studio.brainDown} onOpenAccount={account.enabled ? () => setShowAccount(true) : undefined}
-              humming={hum.recording} humCountIn={hum.countIn} canVerdict={!!studio.lastMoveId} onVerdict={studio.verdict}
-              ab={studio.ab} onPickAb={(k) => studio.pickAb(k as never)}
-              onAnalyze={account.enabled ? () => setShowAnalyze(true) : undefined}
-              onReference={(f) => void studio.addReference(f)} onSample={(f) => void studio.addClip(f)}
-              typed={typed} onSend={(t) => void studio.send(t)}
-            />
-          </div>
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col px-4 pb-3 pt-4 sm:px-8 sm:pt-5">
+          <header className="flex shrink-0 items-center justify-between gap-3">
+            <button onClick={() => { if (playing) void studio.pause(); setView("landing"); }} className="flex items-center gap-2 text-sm font-semibold text-ink-2 transition-colors hover:text-ink" aria-label="Back to projects">
+              <span className="grid h-7 w-7 place-items-center rounded-lg bg-ink text-base"><Icon name="logo" size={15} /></span>
+              <span className="hidden sm:inline">The Producer</span>
+            </button>
+            <div className="flex items-center gap-3">
+              <StatusLine song={song} cost={studio.cost} measured={measured} paused={paused} started={started} />
+              {account.enabled && <button onClick={() => setShowAccount(true)} aria-label={account.user ? "Your account" : "Sign in"} className="grid h-8 w-8 place-items-center rounded-full bg-s2 text-ink-3 transition-colors hover:text-ink"><Icon name="user" size={15} /></button>}
+            </div>
+          </header>
+
+          <section className="mt-4 grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,40%)] lg:grid-rows-1">
+            <div className="scroll-y flex max-h-[44dvh] min-h-0 flex-col gap-3 lg:max-h-none">
+              <Field song={song} beat={playing ? studio.beat : null} sectionIdx={studio.nowSection} playing={playing} getLevels={studio.getLevels} moves={studio.moves} />
+              {song.tracks.length === 0 && !convo.work.length && (
+                <div className="rounded-3xl border border-line/50 bg-s1/50 px-5 py-6 text-center">
+                  <p className="text-lg text-ink">Nothing on the record yet.</p>
+                  <p className="mt-1 text-sm text-ink-2">Name an artist, a record, or a feeling. The producer starts pulling it up while you keep talking.</p>
+                </div>
+              )}
+              <WorkCards work={convo.work} />
+              {studio.rollout && (
+                <div className="panel rounded-2xl px-3.5 py-2.5" data-role="rollout">
+                  <div className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-sm font-medium text-live">{studio.rollout.title}</span><span className="tnum shrink-0 text-xs text-ink-3">{studio.rollout.index + 1} of {studio.rollout.total}</span></div>
+                  <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-s3"><div className="h-full rounded-full bg-live transition-[width] duration-500" style={{ width: `${((studio.rollout.index + 1) / Math.max(1, studio.rollout.total)) * 100}%` }} /></div>
+                  <p className="mt-1 truncate text-xs text-ink-3">{studio.rollout.status}</p>
+                </div>
+              )}
+              {studio.listenHint && <p className="flex items-start gap-1.5 text-sm text-live"><Icon name="ear" size={15} className="mt-0.5 shrink-0" /><span>{studio.listenHint}</span></p>}
+            </div>
+            <div className="flex min-h-0 flex-col justify-end">
+              <Ribbon lines={studio.messages} interim={speak.interim} speakingText={voiceOut.current} thinking={convo.thinking || studio.busy} tall />
+            </div>
+          </section>
         </div>
       )}
 
-      {showProjects && (
-        <ProjectsSheet
-          signedIn={projects.signedIn} projects={projects.projects} currentId={projects.current?.id ?? null} loading={projects.loading}
-          localLibrary={studio.library} clips={studio.clips}
-          onOpen={(id) => { setShowProjects(false); void enter(() => projects.open(id)); }}
-          onOpenLocal={(s) => { setShowProjects(false); void enter(() => studio.loadSaved(s)); }}
-          onNew={() => { setShowProjects(false); void projects.create({ ...SEED_SONG, title: "Untitled record" }); }}
-          onRename={(id, t) => void projects.rename(id, t)} onDelete={(id) => void projects.remove(id)} onDuplicate={(id) => void projects.duplicate(id)}
-          onDownloadLocal={(s) => void studio.download(s)} onSignIn={() => { setShowProjects(false); setShowAccount(true); }} onClose={() => setShowProjects(false)}
-        />
-      )}
+      <footer className="relative z-10 flex shrink-0 flex-col items-center gap-2 px-4 pb-6 pt-2">
+        <SpeakButton state={button} level={speak.level} onPress={() => void speak.press()} onRelease={speak.release} hint={micHint} />
+        {typed && (
+          <input aria-label="Message the producer" placeholder="typed (harness)" className="mt-1 w-72 rounded-md border border-line/60 bg-s1 px-2 py-1 text-xs text-ink"
+            onKeyDown={(e) => { if (e.key === "Enter") { const el = e.target as HTMLInputElement; const v = el.value.trim(); if (v) { void convo.hear(v, 0); el.value = ""; } } }} />
+        )}
+      </footer>
+
       {showAccount && <AccountSheet account={account} mode="sheet" onClose={() => setShowAccount(false)} />}
       {showAnalyze && <AnalyzeSheet stems={stems} signedIn={!!account.user} onSignIn={() => { setShowAnalyze(false); setShowAccount(true); }} onClose={() => setShowAnalyze(false)} />}
       {gate && <AccountSheet account={account} mode="gate" onClose={() => {}} />}
-
-      {studio.toast && (
-        <div role="status" className="panel fixed bottom-24 left-1/2 z-50 -translate-x-1/2 animate-slide-up rounded-full px-5 py-2.5 text-sm font-medium shadow-panel">{studio.toast}</div>
-      )}
+      {studio.toast && <div role="status" className="panel fixed bottom-36 left-1/2 z-50 -translate-x-1/2 animate-slide-up rounded-full px-5 py-2.5 text-sm font-medium">{studio.toast}</div>}
     </main>
   );
 }

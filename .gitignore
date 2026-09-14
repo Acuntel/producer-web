@@ -4,3 +4,6 @@ node_modules
 .env*
 tsconfig.tsbuildinfo
 .claude/
+data/dna/raw/
+data/dna/*.parquet
+data/dna/PG_DSN

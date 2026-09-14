@@ -6,7 +6,7 @@ import type { User } from "@supabase/supabase-js";
 import type { Song } from "@/lib/song/types";
 import { supabaseBrowser } from "@/lib/account/supabase";
 import { listProjects, getProject, createProject, saveSnapshot, renameProject, deleteProject, duplicateProject, listVersions, type ProjectCard, type VersionRow, type ChatMsg } from "@/lib/account/projects";
-import type { SavedSong } from "@/components/SongsSheet";
+import type { SavedSong } from "@/lib/types/ui";
 
 const CUR_KEY = "producer.project.v1";
 export type SnapshotMeta = { label?: string; newProject?: boolean; facts?: unknown; chat?: ChatMsg[]; blank?: boolean };

@@ -3,142 +3,117 @@
 @tailwind utilities;
 
 /* ---------------------------------------------------------------------------
-   Tokens. One surface ramp, one ink ramp, one accent. Every ink value below is
-   checked against --c-base for WCAG AA at our 12px floor.
+   V11 tokens. Black stage, hot pink for you, electric green for the producer,
+   violet for thinking. Every ink value is AA on --c-base at the 12px floor.
 --------------------------------------------------------------------------- */
 :root {
-  --c-base: 9 10 12;
-  --c-s1: 18 19 23;
-  --c-s2: 26 28 33;
-  --c-s3: 37 39 46;
-  --c-line: 46 48 57;
+  --c-base: 5 5 7;
+  --c-s1: 11 11 16;
+  --c-s2: 18 18 25;
+  --c-s3: 27 27 36;
+  --c-line: 40 40 52;
 
-  --c-ink: 244 244 245;    /* 18.4:1 */
-  --c-ink-2: 168 168 178;  /* 8.1:1  */
-  --c-ink-3: 138 138 150;  /* 5.2:1  */
+  --c-ink: 246 246 250;    /* 19:1 */
+  --c-ink-2: 182 182 198;  /* 9.4:1 */
+  --c-ink-3: 142 142 160;  /* 5.6:1 */
 
-  --c-accent: 245 176 66;
-  --c-accent-ink: 28 18 3;
-  --c-live: 52 211 153;
-  --c-cool: 110 168 254;
-  --c-warn: 251 146 60;
+  --c-accent: 255 45 146;     /* hot pink: the user, listening */
+  --c-accent-ink: 28 2 16;
+  --c-live: 57 255 136;       /* electric green: the producer, speaking */
+  --c-cool: 139 92 246;       /* violet: thinking, working */
+  --c-warn: 255 176 32;
+
+  --glow-angle: 0deg;
+}
+
+@property --glow-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
 }
 
 @layer base {
-  html {
-    -webkit-text-size-adjust: 100%;
-    scrollbar-color: rgb(var(--c-s3)) transparent;
-  }
+  html { -webkit-text-size-adjust: 100%; scrollbar-color: rgb(var(--c-s3)) transparent; }
   body {
     background: rgb(var(--c-base));
     color: rgb(var(--c-ink));
     font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
-    /* A very soft top-light so the page has a direction, not a flat void. */
-    background-image: radial-gradient(120% 68% at 50% -14%, rgb(var(--c-s2) / 0.85) 0%, transparent 62%);
-    background-attachment: fixed;
+    overscroll-behavior: none;
   }
-  ::selection { background: rgb(var(--c-accent) / 0.3); color: rgb(var(--c-ink)); }
-
-  /* One visible focus treatment everywhere, keyboard only. */
-  :focus-visible {
-    outline: 2px solid rgb(var(--c-accent));
-    outline-offset: 2px;
-    border-radius: 6px;
-  }
+  ::selection { background: rgb(var(--c-accent) / 0.35); color: rgb(var(--c-ink)); }
+  :focus-visible { outline: 2px solid rgb(var(--c-accent)); outline-offset: 3px; border-radius: 8px; }
   button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   button:disabled { cursor: not-allowed; }
-
-  /* Slim, quiet scrollbars. The default macOS/Windows bars read as debug chrome. */
-  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb {
-    background: rgb(var(--c-s3));
-    border-radius: 999px;
-    border: 3px solid transparent;
-    background-clip: content-box;
-  }
-  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--c-line)); background-clip: content-box; }
+  ::-webkit-scrollbar-thumb { background: rgb(var(--c-s3)); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
 }
 
 @layer components {
-  /* Horizontal scrollers fade at the edges instead of hard-clipping their
-     content. This is what made the mixer and the arrangement look broken. */
-  .scroll-x {
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: thin;
-    scroll-snap-type: x proximity;
-    -webkit-overflow-scrolling: touch;
-    mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 18px), transparent 100%);
-  }
-  .scroll-x::-webkit-scrollbar { height: 6px; }
-  .scroll-x > * { scroll-snap-align: start; }
-
   .scroll-y { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
-
-  /* A vertical scroller that is taller than its box fades at the bottom, so a
-     cut-off panel reads as "more below" rather than as broken rendering. */
-  .scroll-fade-y {
-    mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 28px), transparent 100%);
-  }
-  @media (min-width: 1024px) { .scroll-fade-y { mask-image: none; } }
-
-  /* A panel: raised surface, hairline edge, inner top highlight. */
+  .tnum { font-variant-numeric: tabular-nums; }
+  .eyebrow { font-size: 0.75rem; line-height: 1rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgb(var(--c-ink-3)); }
   .panel {
-    background: rgb(var(--c-s1));
-    border: 1px solid rgb(var(--c-line) / 0.55);
-    box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.035) inset, 0 8px 30px -14px rgb(0 0 0 / 0.9);
+    background: rgb(var(--c-s1) / 0.9);
+    border: 1px solid rgb(var(--c-line) / 0.6);
+    box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.035) inset, 0 12px 40px -18px rgb(0 0 0 / 0.95);
+    backdrop-filter: blur(14px);
   }
-  .panel-sunken {
-    background: rgb(var(--c-base) / 0.6);
-    border: 1px solid rgb(var(--c-line) / 0.4);
-    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.35) inset;
-  }
-
-  /* Section label used above every group of controls. */
-  .eyebrow {
-    font-size: 0.75rem;
-    line-height: 1rem;
-    font-weight: 700;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-    color: rgb(var(--c-ink-3));
-  }
-
   .skeleton {
     background: linear-gradient(90deg, rgb(var(--c-s2)) 25%, rgb(var(--c-s3)) 37%, rgb(var(--c-s2)) 63%);
     background-size: 200% 100%;
     animation: shimmer 1.6s linear infinite;
   }
 
-  /* Numbers in a UI must not shift width as they tick. */
-  .tnum { font-variant-numeric: tabular-nums; }
+  /* The edge glow. Two rings: a tight bright band and a wide soft bloom. Only the frame
+     is painted (mask-composite keeps the padding ring, not the middle), so the stage
+     stays pure black and the light lives at the edges the way a Siri screen does. */
+  .glow-edge {
+    position: fixed; inset: 0; pointer-events: none; z-index: 30;
+    opacity: var(--glow-opacity, 0);
+    transition: opacity 600ms ease;
+  }
+  .glow-edge::before, .glow-edge::after {
+    content: ""; position: absolute; inset: 0;
+    background: conic-gradient(from var(--glow-angle) at 50% 50%,
+      rgb(var(--c-accent)), rgb(var(--c-cool)), rgb(var(--c-live)), rgb(var(--c-accent)) );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    animation: glow-spin var(--glow-speed, 9s) linear infinite;
+  }
+  .glow-edge::before { padding: 3px; filter: blur(1.5px); }
+  .glow-edge::after { padding: 26px; filter: blur(34px); opacity: 0.85; }
+  .glow-edge[data-state="listening"] { --glow-opacity: 1; --glow-speed: 3.2s; }
+  .glow-edge[data-state="thinking"] { --glow-opacity: 0.75; --glow-speed: 5s; }
+  .glow-edge[data-state="speaking"] { --glow-opacity: 0.9; --glow-speed: 4s; }
+  .glow-edge[data-state="audition"] { --glow-opacity: 0.55; --glow-speed: 7s; }
+  .glow-edge[data-state="playing"] { --glow-opacity: 0.22; --glow-speed: 14s; }
+  .glow-edge[data-state="idle"] { --glow-opacity: 0.1; --glow-speed: 20s; }
+
+  /* The glow can also lean toward one color so a state reads at a glance. */
+  .glow-edge[data-tint="pink"]::before, .glow-edge[data-tint="pink"]::after {
+    background: conic-gradient(from var(--glow-angle), rgb(var(--c-accent)), rgb(255 120 190), rgb(var(--c-cool)), rgb(var(--c-accent)));
+  }
+  .glow-edge[data-tint="green"]::before, .glow-edge[data-tint="green"]::after {
+    background: conic-gradient(from var(--glow-angle), rgb(var(--c-live)), rgb(120 255 190), rgb(var(--c-cool)), rgb(var(--c-live)));
+  }
+  .glow-edge[data-tint="violet"]::before, .glow-edge[data-tint="violet"]::after {
+    background: conic-gradient(from var(--glow-angle), rgb(var(--c-cool)), rgb(var(--c-accent)), rgb(var(--c-cool)), rgb(var(--c-live)), rgb(var(--c-cool)));
+  }
+
+  /* A move landing on a lane: a short wash of color, then gone. */
+  .lane-land { animation: lane-land 1.4s ease-out both; }
 }
 
-/* The orb pulses on the beat. Kept in CSS so the tempo can drive it by variable. */
-@keyframes orb-beat {
-  0% { transform: scale(1.03); }
-  36% { transform: scale(1); }
-  100% { transform: scale(1); }
-}
-/* A move landing on a lane: a short wash of the lane's color, then gone. */
+@keyframes glow-spin { to { --glow-angle: 360deg; } }
 @keyframes lane-land {
-  0% { box-shadow: 0 0 0 1px rgb(var(--c-accent) / 0.9), 0 0 18px rgb(var(--c-accent) / 0.45); }
-  100% { box-shadow: 0 0 0 1px rgb(var(--c-accent) / 0), 0 0 0 rgb(var(--c-accent) / 0); }
+  0% { box-shadow: 0 0 0 1px rgb(var(--c-live) / 0.9), 0 0 22px rgb(var(--c-live) / 0.5); }
+  100% { box-shadow: 0 0 0 1px rgb(var(--c-live) / 0), 0 0 0 rgb(var(--c-live) / 0); }
 }
-.lane-land { animation: lane-land 1.6s ease-out both; }
-@keyframes orb-ring {
-  0% { transform: scale(1); opacity: 0.45; }
-  70% { transform: scale(1.5); opacity: 0; }
-  100% { transform: scale(1.5); opacity: 0; }
-}
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes speak-ring { 0% { transform: scale(1); opacity: 0.6; } 100% { transform: scale(1.9); opacity: 0; } }
+@keyframes beat-pulse { 0% { transform: scale(1.04); } 40% { transform: scale(1); } 100% { transform: scale(1); } }
+@keyframes shimmer { from { background-position: -200% 0; } to { background-position: 200% 0; } }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }

@@ -4,7 +4,7 @@
 // writes a credits .txt next to the WAV.
 import { useCallback } from "react";
 import type { Song } from "@/lib/song";
-import type { SavedSong } from "@/components/SongsSheet";
+import type { SavedSong } from "@/lib/types/ui";
 
 type Deps = { autoSave: (s: Song) => void; flash: (t: string) => void; say: (t: string) => void; setSong: (s: Song, o?: { label?: string }) => Promise<void>; started: boolean; getSong: () => Song; setRendering: (b: boolean) => void };
 

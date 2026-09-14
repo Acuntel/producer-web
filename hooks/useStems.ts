@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { Song, Role } from "@/lib/song/types";
-import type { ClipMeta } from "@/components/SongsSheet";
+import type { ClipMeta } from "@/lib/types/ui";
 import { supabaseBrowser } from "@/lib/account/supabase";
 import { connectFolder, searchLocal, hasFolder, folderInfo, canPickFolder, type LocalHit } from "@/lib/localSource";
 import { startCapture } from "@/lib/capture";

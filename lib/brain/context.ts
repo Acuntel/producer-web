@@ -20,6 +20,8 @@ export type ExchangeInput = {
   score?: string;           // scorecard line
   critic?: string | null;   // open critic notes (recommendations; the user decides)
   skills?: string | null;   // focused knowledge the server loads for this ask (server adds)
+  feel?: string | null;     // the feel read of the current render (valence, arousal, tension, warmth, words)
+  referenceFeel?: string | null;
 };
 
 // [midi, start, dur, vel, chance?] rounded for the prompt; the optional chance survives.
@@ -52,7 +54,8 @@ export function buildUserBlock(x: ExchangeInput, lastUser: string): string {
   parts.push(`MIXER:\n${mixerLine(x.song)}`);
   if (x.facts) parts.push(`MEASURED SOUND (your ears on the actual full render): ${JSON.stringify(x.facts)}`);
   else parts.push(`MEASURED SOUND: not measured yet for this version (the ears run after every change).`);
-  if (x.reference) parts.push(`REFERENCE TRACK "${x.reference.name}" (what they want it to sound like; emulate the DNA, never the recording): ${JSON.stringify(x.reference.facts)}`);
+  if (x.feel) parts.push(`FEEL of the current render (the read a person would give; choose by feel as well as by numbers): ${x.feel}`);
+  if (x.reference) parts.push(`REFERENCE TRACK "${x.reference.name}" (what they want it to sound like; emulate the DNA, never the recording): ${JSON.stringify(x.reference.facts)}${x.referenceFeel ? `\nREFERENCE FEEL: ${x.referenceFeel}` : ""}`);
   if (x.deltas) parts.push(`DELTAS (render minus reference): ${JSON.stringify(x.deltas)}`);
   if (x.clips && x.clips.length) parts.push(`AUDIO CLIPS IN THE LIBRARY (usable as role "audio" tracks): ${JSON.stringify(x.clips)}`);
   if (x.nowPlaying) parts.push(`NOW PLAYING when they spoke: ${JSON.stringify(x.nowPlaying)}`);

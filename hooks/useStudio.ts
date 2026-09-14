@@ -15,16 +15,18 @@ import { logMoveScore, referenceDelta, scoreLine } from "@/lib/scorecard";
 import { notesForBrain } from "@/lib/critic";
 import { localIntent, rolloutIntent, rolloutLine } from "@/lib/brain/local";
 import { verifyMove } from "@/lib/brain/verify";
+import { costOf, addCost, costFor, type Usage } from "@/lib/cost";
+import { feelFromFacts } from "@/lib/brain/feel";
 import type { BrainAction, Expectation } from "@/lib/brain/parse";
 import type { RolloutKind } from "@/lib/brain/rollouts";
 import { useRollout } from "./useRollout";
 import { useUploads } from "./useUploads";
 import { useLibraryActions } from "./useLibraryActions";
-import type { Reference } from "@/components/EarsPanel";
-import type { SavedSong, ClipMeta } from "@/components/SongsSheet";
+import type { Reference } from "@/lib/types/ui";
+import type { SavedSong, ClipMeta } from "@/lib/types/ui";
 
 type Msg = { role: "user" | "assistant"; content: string };
-type Reply = { say: string; ops?: unknown[] | null; song?: unknown; action?: BrainAction | null; listen?: string | null; expect?: Expectation[] | null; alternative?: unknown[] | null; detail?: string };
+type Reply = { say: string; ops?: unknown[] | null; song?: unknown; action?: BrainAction | null; listen?: string | null; expect?: Expectation[] | null; alternative?: unknown[] | null; detail?: string; model?: string; usage?: Usage };
 export type AB = { a: Song; b: Song; playing: "a" | "b"; label: string } | null;
 
 const LIB_KEY = "producer.library.v2", SONG_KEY = "producer.song.v4", CHAT_KEY = "producer.chat.v3", REF_KEY = "producer.reference.v1";
@@ -69,6 +71,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const brainDownRef = useRef<"credits" | "key" | null>(null);
   const setBrainDown = (v: "credits" | "key" | null) => { brainDownRef.current = v; setBrainDownState(v); };
   const [moves, setMoves] = useState<LaneMove[]>([]);
+  const [cost, setCost] = useState(0);
   const [ignoredCount, setIgnoredCount] = useState(0);
   const lastMoveAtRef = useRef(0);
   const pausedRef = useRef(false);
@@ -107,6 +110,9 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   }, [started]);
 
   const flash = useCallback((t: string) => { setToast(t); setTimeout(() => setToast(""), 1800); }, []);
+  // The meter: every brain call adds its list-price cost to this record's running total.
+  const spend = useCallback((model: string | undefined, usage: unknown) => { const usd = costOf(model, usage as Usage); if (!usd) return; setCost(addCost(songRef.current.title, usd)); }, []);
+  useEffect(() => { setCost(costFor(song.title)); }, [song.title]);
   const landMoves = useCallback((ops: unknown[], before: Song, after: Song) => {
     const m = movesFromOps(ops, before, after); if (!m.length) return;
     setMoves((prev) => [...prev.filter((x) => Date.now() - x.at < 4000 && !m.some((y) => y.trackId === x.trackId)), ...m].slice(-12));
@@ -221,6 +227,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     getDeltas: (f: MusicFacts | null) => { let d: unknown = null; void deltasFor(f).then((x) => (d = x)); return d; },
     compact: (f: MusicFacts | null) => { if (!f) return null; let c: unknown = null; void compactFacts(f).then((x) => (c = x)); return c; },
     say, taste: () => tasteSummary(songRef.current.title),
+    onUsage: (m: string | undefined, u: unknown) => spend(m, u),
   });
   const earsModRef = useRef<typeof import("@/lib/ears") | null>(null);
   useEffect(() => { void import("@/lib/ears").then((m) => { earsModRef.current = m; }); }, []);
@@ -315,16 +322,19 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     return true;
   }, [flash, runAction, say, setSong]);
 
-  const send = useCallback(async (text: string, opts?: { hidden?: boolean; verify?: string }) => {
+  // opts.task: an instruction from the Voice lane. Hidden from the transcript (their own words are
+  // already there) but a real ask: instant moves and rollouts still resolve deterministically.
+  const send = useCallback(async (text: string, opts?: { hidden?: boolean; verify?: string; task?: boolean }) => {
     const t = text.trim();
     if (!t) return;
     if (!opts?.hidden) lastUtteranceRef.current = Date.now();
     if (busyRef.current) { pendingRef.current = t; return; }
-    if (!opts?.hidden && !opts?.verify && (await tryLocal(t))) return;
-    const ro = !opts?.hidden && !opts?.verify ? rolloutIntent(t, !!referenceRef.current) : null;
+    const ask = !opts?.verify && (!opts?.hidden || !!opts?.task);
+    if (ask && !opts?.task && (await tryLocal(t))) return;
+    const ro = ask ? rolloutIntent(t, !!referenceRef.current) : null;
     if (ro) {
       busyRef.current = true; setBusy(true);
-      setMessages((m) => [...m, { role: "user", content: t }]);
+      if (!opts?.hidden) setMessages((m) => [...m, { role: "user", content: t }]);
       const sec = ro.section ? (songRef.current.sections.find((x) => x.id === ro.section || x.name.toLowerCase().replace(/\s+/g, "") === ro.section)?.id ?? ro.section) : null;
       const line = rolloutLine(ro, sec);
       setMessages((m) => [...m, { role: "assistant", content: line }]); say(line);
@@ -347,12 +357,14 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       const localMoves = localMovesRef.current.splice(0);
       // Streamed: the producer starts talking the moment its first sentence closes; the ops land right after.
       let early: string | null = null;
-      const data = await exchange({ messages: next, song: cur, facts: factsCompact, reference: referenceRef.current ? { name: referenceRef.current.name, facts: refFacts } : null, deltas, nowPlaying, taste: tasteSummary(cur.title), clips, localMoves, verify: opts?.verify ?? null, score: scoreLine(), critic: notesForBrain() }, (s) => {
+      // The first sentence is shown as it closes; the Voice lane already answered aloud, so the Hands
+      // speak only their finished report.
+      const data = await exchange({ messages: next, song: cur, facts: factsCompact, reference: referenceRef.current ? { name: referenceRef.current.name, facts: refFacts } : null, deltas, nowPlaying, taste: tasteSummary(cur.title), clips, localMoves, verify: opts?.verify ?? null, score: scoreLine(), critic: notesForBrain(), feel: feelFromFacts(factsRef.current)?.line ?? null, referenceFeel: referenceRef.current ? feelFromFacts(referenceRef.current.facts)?.line ?? null : null }, (s) => {
         early = s;
         setMessages((m) => [...m, { role: "assistant", content: s }]);
-        say(s);
       }) as Reply;
       if (isE2E()) { const w = window as unknown as { __brain?: unknown[] }; (w.__brain ??= []).push(data); }
+      spend(data.model, data.usage);
       if (data.detail && /credit|billing/i.test(data.detail)) setBrainDown("credits");
       else if (data.detail && /invalid.*api.?key|authentication|401/i.test(data.detail)) setBrainDown("key");
       else if (brainDownRef.current) setBrainDown(null);
@@ -382,7 +394,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       setListenHint(data.listen ?? null);
       const entry = logMove({ title: (ns ?? cur).title, said: t, move: data.say, listen: data.listen, factsSummary: before ? `${Math.round(before.tempo.bpm)}bpm ${before.key.name} ${before.loudness.integrated.toFixed(1)}LUFS` : undefined });
       lastMoveRef.current = entry.id; setLastMoveId(entry.id); lastMoveAtRef.current = Date.now();
-      if (early === null) say(data.say);
+      say(data.say);
       await runAction(data.action, ns ?? songRef.current, t);
       // Verify: re-hear the changed sections and hold the brain to its word, once per move.
       let verified: "pass" | "fail" | "na" = "na";
@@ -404,7 +416,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       const p = pendingRef.current; pendingRef.current = null;
       if (p) void send(p);
     }
-  }, [clips, compactFacts, deltasFor, hearNow, runAction, say, setSong, tryLocal, registerClip, flash]);
+  }, [clips, compactFacts, deltasFor, hearNow, runAction, say, setSong, tryLocal, registerClip, flash, spend]);
 
   // Voice goes through the attention layer: was that for the producer? Typed text never does.
   const noteIgnored = useCallback((t: string) => { setIgnored({ text: t, at: Date.now() }); setIgnoredCount((n) => n + 1); }, []);
@@ -458,7 +470,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
         setStarted(true); setPaused(false);
         const blank = isBlank(songRef.current);
         const greeting = blank
-          ? "New record. What are we making? Give me a feel, an artist, a tempo, a first sound, or just say surprise me."
+          ? "New record. Who are we chasing tonight? An artist, a song, or a feeling."
           : resumeRef.current ? `We are back. Last time: ${resumeRef.current} Where do we pick up?`
           : messagesRef.current.length > 0 ? "We are back. Tell me what you are hearing." : "We are live. That is our groove. Name a vibe, or just say surprise me.";
         resumeRef.current = null;
@@ -478,6 +490,12 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     }
   }, [getEngine, paused, refreshEars, say, started, starting]);
 
+  // Explicit transport for the orchestrator (auditions, interrupts) and the transcript it keeps.
+  const play = useCallback(async () => { if (!started) { await boot(); return; } const eng = await getEngine(); eng.resume(); setPaused(false); }, [boot, getEngine, started]);
+  const pause = useCallback(async () => { if (!started) return; const eng = await getEngine(); eng.pause(); setPaused(true); }, [getEngine, started]);
+  const append = useCallback((role: "user" | "assistant", content: string) => { const m = { role, content }; messagesRef.current = [...messagesRef.current, m]; setMessages((x) => [...x, m]); }, []);
+  const getPosition = useCallback((): Position | null => engineRef.current?.getPosition() ?? null, []);
+  const duck = useCallback((on: boolean) => { engineRef.current?.duck(on); }, []);
   const jump = useCallback(async (sectionId: string) => { const eng = await getEngine(); if (eng.goto(sectionId)) flash(`Jumped to ${songRef.current.sections.find((s) => s.id === sectionId)?.name ?? sectionId}`); }, [flash, getEngine]);
   const verdict = useCallback((v: "liked" | "killed") => { if (!lastMoveId) return; setVerdict(lastMoveId, v); flash(v === "liked" ? "Kept" : "Killed"); void send(v === "liked" ? "Yes, keep that." : "No, kill that, go a different direction."); }, [flash, lastMoveId, send]);
   const undo = useCallback(() => void tryLocal("undo"), [tryLocal]); const redo = useCallback(() => void tryLocal("redo"), [tryLocal]);
@@ -486,5 +504,6 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const { addReference, addClip } = useUploads({ flash, send, setSong, setClips, factsRef, referenceRef, setReference, setDeltaText, getSong: () => songRef.current });
 
   return { song, messages, busy, started, starting, paused, nowSection, beat, library, clips, facts, hearing, reference, deltaText, listenHint, toast, lastMoveId, rendering, ab, score, canUndo, canRedo, rollout,
-    boot, send, sendVoice, ignored, ignoredCount, thatWasForMe, loadChat, newSession, setReferenceBuffer, moves, previewClip, brainDown, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, setVolume, toggleTrack };
+    boot, send, sendVoice, ignored, ignoredCount, thatWasForMe, loadChat, newSession, setReferenceBuffer, moves, previewClip, brainDown, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, setVolume, toggleTrack,
+    play, pause, append, tryLocal, spend, cost, getPosition, duck };
 }

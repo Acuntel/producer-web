@@ -74,51 +74,47 @@ async function main() {
   console.log(`[e2e] selftest OK in ${res.totalMs}ms (edited/solo path OK, kickDensity ${e.kickDensity})`);
   }
 
-  // ---- 2. the real studio: orb, then a typed request through the brain ----
+  // ---- 2. the stage: the session boots itself in harness mode, then a typed ask goes Voice -> Hands ----
   console.log(`[e2e] ${BASE}/`);
   await call("Page.addScriptToEvaluateOnNewDocument", { source: `(() => { const f = window.fetch; window.__chat = []; window.fetch = async (...a) => { const r = await f(...a); try { if (String(a[0]).includes('/api/chat')) { const c = r.clone(); c.json().then((j) => window.__chat.push(j)).catch(() => {}); } } catch {} return r; }; })();` });
   await call("Page.navigate", { url: `${BASE}/?e2e=1&economy=1` });
-  await waitFor(`!!document.querySelector('button[aria-label="Start the session"]')`, 30000, "orb");
+  await waitFor(`!!document.querySelector('[data-role="speak"]')`, 30000, "speak button");
   await evalJs(`localStorage.clear(); true`);
   await call("Page.navigate", { url: `${BASE}/?e2e=1&economy=1` });
-  await waitFor(`!!document.querySelector('button[aria-label="Start the session"]')`, 30000, "orb after reset");
-  // Tap until the session actually starts: on a CDN load the first tap can land before hydration.
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < 45000) {
-    await evalJs(`document.querySelector('button[aria-label="Start the session"]')?.click(); true`);
-    await sleep(2500);
-    if (await evalJs(`!!document.querySelector('button[aria-label="Pause"]') || !!document.querySelector('button[aria-label="Play"]')`)) break;
-  }
-  await waitFor(`!!document.querySelector('button[aria-label="Pause"]') || !!document.querySelector('button[aria-label="Play"]')`, 5000, "session start");
-  await waitFor(`document.body.innerText.includes('We are live') || document.body.innerText.includes('We are back')`, 15000, "greeting");
+  await waitFor(`!!document.querySelector('[data-role="speak"]')`, 30000, "speak button after reset");
+  await waitFor(`document.body.innerText.includes('We are live') || document.body.innerText.includes('We are back')`, 45000, "greeting");
+  await waitFor(`/playing|paused/.test(document.querySelector('[data-role="status"]')?.innerText ?? '')`, 15000, "transport status");
   console.log("[e2e] session started, greeting shown");
   const before = await evalJs(`localStorage.getItem('producer.song.v4')`);
   const ask = "make the bass darker and take me to the drop";
-  await evalJs(`(() => { const i = document.querySelector('input[aria-label="Message the producer"]'); const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(i, ${JSON.stringify(ask)}); i.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
-  await sleep(400);
-  await evalJs(`(() => { const i = document.querySelector('input[aria-label="Message the producer"]'); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; })()`);
+  const type = async (text) => {
+    await evalJs(`(() => { const i = document.querySelector('input[aria-label="Message the producer"]'); const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(i, ${JSON.stringify(text)}); i.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+    await sleep(300);
+    await evalJs(`(() => { const i = document.querySelector('input[aria-label="Message the producer"]'); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; })()`);
+  };
+  const t0 = Date.now();
+  await type(ask);
+  const voiceLine = await waitFor(`(() => { const v = window.__voice ?? []; return v.length ? v[v.length - 1].say : ''; })()`, 30000, "voice reply");
+  const voice = JSON.parse(await evalJs(`JSON.stringify((window.__voice ?? [])[ (window.__voice ?? []).length - 1 ])`));
+  console.log(`[e2e] voice (${Date.now() - t0} ms wall, first sentence ${voice.firstWord} ms, route ${voice.voiceMs} ms): ${voiceLine.slice(0, 160)} | control ${JSON.stringify(voice.control)}`);
+  assert.ok(voice.firstWord > 0 && voice.firstWord < 6000, `first spoken sentence should land inside 6 s in the harness, got ${voice.firstWord} ms`);
+  assert.ok(voice.control && (voice.control.task || voice.control.audition), `the voice should hand a task to the hands for "${ask}", got ${JSON.stringify(voice.control)}`);
+  await waitFor(`(window.__brain ?? []).length >= 1`, 120000, "hands reply (ops)");
   await sleep(1500);
-  console.log(`[e2e] after typing: input="${await evalJs(`document.querySelector('input[aria-label="Message the producer"]')?.value ?? '(no input)'`)}" userBubble=${await evalJs(`document.body.innerText.includes(${JSON.stringify(ask)})`)} chatCalls=${await evalJs(`(window.__brain ?? []).length`)}`);
-  const replyText = await waitFor(`(() => { const el = document.querySelector('[data-role="producer-line"]'); const t = (el?.textContent ?? '').trim(); return t && !/^(Working on it\\.|Ready when you are\\.|We are live|We are back)/.test(t) ? t : ''; })()`, 90000, "brain reply");
-  console.log(`[e2e] brain said: ${replyText.slice(0, 200)}`);
-  // The first sentence streams in early; the ops land with the final reply. Wait for that, then read the song.
-  await waitFor(`(window.__brain ?? []).length >= 1`, 90000, "final brain reply (ops)");
-  await sleep(1500);
+  const replyText = await evalJs(`(() => { const els = document.querySelectorAll('[data-role="producer-line"] p'); const el = els[els.length - 1]; return (el?.textContent ?? '').trim(); })()`);
+  console.log(`[e2e] hands said: ${replyText.slice(0, 200)}`);
   const after = await evalJs(`localStorage.getItem('producer.song.v4')`);
   const b = JSON.parse(before), a = JSON.parse(after);
   const bassBefore = JSON.stringify(b.tracks.find((t) => t.role === "bass")), bassAfter = JSON.stringify(a.tracks.find((t) => t.role === "bass"));
   const changed = before !== after;
-  const chat = await evalJs(`JSON.stringify((window.__brain ?? []).map((c) => ({ say: c.say, ops: c.ops, song: c.song ? 'FULL' : null, action: c.action, detail: c.detail })))`);
+  const chat = await evalJs(`JSON.stringify((window.__brain ?? []).map((c) => ({ say: c.say, ops: c.ops, song: c.song ? 'FULL' : null, action: c.action, detail: c.detail, model: c.model })))`);
   console.log(`[e2e] song changed: ${changed}; bass changed: ${bassBefore !== bassAfter}`);
-  console.log(`[e2e] raw brain replies: ${chat.slice(0, 900)}`);
+  console.log(`[e2e] raw hands replies: ${chat.slice(0, 900)}`);
   assert.ok(!/hiccuped|not connected|setup step|out of credits/i.test(replyText), `brain error: ${replyText}`);
-  assert.ok(changed, "the brain should have changed the song");
-  const facts = await waitFor(`(() => { const t = document.body.innerText; const l = t.match(/-?\\d+\\.\\d LUFS/); const b = t.match(/(\\d+) BPM/); return l && b ? b[0] + ' · ' + l[0] : ''; })()`, 60000, "measured chips");
-  console.log(`[e2e] ears panel: ${facts}`);
-  {
-    const note = await waitFor(`(() => { const t = document.body.innerText; const i = t.indexOf('Do it'); return i >= 0 ? t.slice(Math.max(0, i - 420), i + 40).split(String.fromCharCode(10)).filter(Boolean).slice(-4).join(' | ') : ''; })()`, 150000, "critic note");
-    console.log(`[e2e] critic: ${note.slice(0, 420)}`);
-  }
+  assert.ok(changed, "the hands should have changed the song");
+  const facts = await waitFor(`(() => { const t = document.querySelector('[data-role="status"]')?.innerText ?? ''; const l = t.match(/-?\\d+\\.\\d LUFS/); const b = t.match(/(\\d+) BPM/); return l && b ? b[0] + ' \u00b7 ' + l[0] : ''; })()`, 60000, "measured status");
+  console.log(`[e2e] status line: ${facts}`);
+  console.log(`[e2e] cost line: ${await evalJs(`document.querySelector('[data-role="cost"]')?.innerText ?? ''`)}`);
   if (process.env.E2E_REFERENCE) {
     const file = process.env.E2E_REFERENCE;
     console.log(`[e2e] reference upload: ${file.split("/").pop()}`);
@@ -139,9 +135,9 @@ async function main() {
       await evalJs(`(() => { const i = document.querySelector('input[aria-label="Message the producer"]'); const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(i, "make our song like this reference"); i.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
       await sleep(400);
       await evalJs(`(() => { const i = document.querySelector('input[aria-label="Message the producer"]'); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; })()`);
-      await waitFor(`document.body.innerText.includes('🛠')`, 90000, "emulate rollout to start");
+      await waitFor(`!!document.querySelector('[data-role="rollout"]')`, 90000, "emulate rollout to start");
       const t1 = Date.now(); let last = "";
-      while (Date.now() - t1 < 600000) { await sleep(5000); const line = await evalJs(`(document.body.innerText.split(String.fromCharCode(10)).find((l) => l.includes('🛠')) || '')`); if (!line) break; if (line !== last) { console.log(`[e2e]   ${line}`); last = line; } }
+      while (Date.now() - t1 < 600000) { await sleep(5000); const line = await evalJs(`document.querySelector('[data-role="rollout"]')?.innerText.replace(/\\n/g, ' ') ?? ''`); if (!line) break; if (line !== last) { console.log(`[e2e]   ${line}`); last = line; } }
       console.log(`[e2e] steps: ${await evalJs(`JSON.stringify((window.__steps ?? []).map((s) => [s.step, s.attempt, Math.round(s.ms / 1000) + 's', 'ops ' + s.applied, s.check ?? 'ok']))`)}`);
       const doc = JSON.parse(await evalJs(`localStorage.getItem('producer.song.v4')`));
       const after = await waitFor(`(document.body.innerText.split(String.fromCharCode(10)).find((l) => /(percent|dB|louder|quieter|match)/.test(l) && /reference|keys|low end|louder/i.test(l)) || '')`, 60000, "delta after emulate");
@@ -156,9 +152,9 @@ async function main() {
     await evalJs(`(() => { const i = document.querySelector('input[aria-label="Message the producer"]'); const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(i, "new song, KETTAMA style, surprise me"); i.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
     await sleep(400);
     await evalJs(`(() => { const i = document.querySelector('input[aria-label="Message the producer"]'); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; })()`);
-    await waitFor(`document.body.innerText.includes('🛠')`, 60000, "rollout to start");
+    await waitFor(`!!document.querySelector('[data-role="rollout"]')`, 60000, "rollout to start");
     const t1 = Date.now();
-    while (Date.now() - t1 < 720000) { await sleep(5000); const line = await evalJs(`(document.body.innerText.split(String.fromCharCode(10)).find((l) => l.includes('🛠')) || '')`); if (line) console.log(`[e2e]   ${line}`); else break; }
+    while (Date.now() - t1 < 720000) { await sleep(5000); const line = await evalJs(`document.querySelector('[data-role="rollout"]')?.innerText.replace(/\\n/g, ' ') ?? ''`); if (line) console.log(`[e2e]   ${line}`); else break; }
     const doc = JSON.parse(await evalJs(`localStorage.getItem('producer.song.v4')`));
     console.log(`[e2e] steps: ${await evalJs(`JSON.stringify((window.__steps ?? []).map((s) => [s.step, s.attempt, Math.round(s.ms / 1000) + 's', s.model ? s.model.replace('claude-', '') : '?', 'ops ' + s.applied + (s.skipped ? '/skip ' + s.skipped : ''), s.check ?? 'ok', s.tracks + ' tracks', (s.say || '').slice(0, 70)]))`)}`);
     console.log(`[e2e] rollout result: "${doc.title}" ${doc.bpm} BPM ${doc.key} ${doc.lane} · ${doc.tracks.length} tracks · ${doc.sections.length} sections · autos ${doc.sections.reduce((a, s) => a + (s.automation?.length ?? 0), 0)}`);

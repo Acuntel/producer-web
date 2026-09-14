@@ -1,0 +1,79 @@
+// The research lane. No model unless the store is empty: an artist, a record or a genre
+// is dropped down the Galton board and comes back as a recipe in a few milliseconds.
+// When the store has nothing, one Haiku call with one web search fills the gap, and
+// the answer is cached for everyone.
+import { brainClient } from "@/lib/brain/client";
+import { supabaseAdmin } from "@/lib/account/supabase";
+import { lookupArtist, lookupSongs, artistSongs, artistLine, songLine, binsFor, binLine, norm } from "@/lib/brain/galton";
+import { laneNamed, laneInfo } from "@/lib/brain/laneNames";
+
+export const maxDuration = 30;
+const MODEL = process.env.PRODUCER_VOICE_MODEL || "claude-haiku-4-5";
+
+const FAMILY_WORDS: Record<string, string> = { house: "electronic", techno: "electronic", trance: "electronic", garage: "electronic", edm: "electronic", dance: "electronic", dnb: "electronic", "drum and bass": "electronic", dubstep: "electronic", disco: "electronic", rap: "hiphop", "hip hop": "hiphop", hiphop: "hiphop", trap: "hiphop", drill: "hiphop", pop: "pop", rock: "rock", metal: "metal", country: "country", "r&b": "rnb", rnb: "rnb", soul: "rnb", funk: "rnb", jazz: "jazz", reggae: "world", afro: "world", afrobeats: "world", amapiano: "world", latin: "latin", reggaeton: "latin", folk: "folk", indie: "rock" };
+
+function familiesIn(q: string): string[] {
+  const t = q.toLowerCase(); const out = new Set<string>();
+  for (const [w, f] of Object.entries(FAMILY_WORDS)) if (t.includes(w)) out.add(f);
+  return [...out];
+}
+
+export async function POST(req: Request) {
+  const t0 = Date.now();
+  const body = (await req.json().catch(() => null)) as { query?: string; song?: { bpm?: number; lane?: string } } | null;
+  const query = (body?.query ?? "").toString().trim().slice(0, 160);
+  if (!query) return Response.json({ found: false, lines: [], ms: 0 });
+  const lines: string[] = [];
+  let kind: "artist" | "song" | "genre" | "none" = "none";
+
+  // 1. The store: artist first, then a record by title, then the bins for a genre.
+  const dash = query.match(/^(.+?)\s+[-:]\s+(.+)$/);
+  if (dash) {
+    const songs = await lookupSongs(dash[2], dash[1], 4);
+    if (songs.length) { kind = "song"; lines.push(...songs.map(songLine)); }
+  }
+  if (!lines.length) {
+    const a = await lookupArtist(query);
+    if (a) { kind = "artist"; lines.push(artistLine(a, await artistSongs(a.artist_norm, 8))); }
+  }
+  if (!lines.length && !dash) {
+    const songs = await lookupSongs(query, undefined, 4);
+    if (songs.length) { kind = "song"; lines.push(...songs.map(songLine)); }
+  }
+  const fams = familiesIn(query);
+  const lane = laneNamed(query);
+  if (fams.length || lane) {
+    const info = lane ? laneInfo(lane) : null;
+    const tempoBand = info ? bandFor(info.home) : body?.song?.bpm ? bandFor(body.song.bpm) : null;
+    for (const f of fams.length ? fams : ["electronic"]) {
+      const pins = [f, ...(tempoBand ? [tempoBand] : [])];
+      const bins = binsFor(pins, 2);
+      if (bins.length) { if (kind === "none") kind = "genre"; lines.push(...bins.map(binLine)); }
+    }
+    if (fams.length >= 2) lines.push(`Two families named (${fams.join(" and ")}): build the floor from the first family's bin and borrow the second family's hook contour, vocal placement and one signature timbre; say which choice you made.`);
+  }
+  if (lines.length) return Response.json({ found: true, kind, source: "store", lines, ms: Date.now() - t0 });
+
+  // 2. The cache, then one search.
+  const sb = supabaseAdmin(); const key = norm(query);
+  if (sb) { try { const c = await sb.from("research_cache").select("answer").eq("key", key).limit(1); const ans = c.data?.[0]?.answer as { lines?: string[]; kind?: string } | undefined; if (ans?.lines?.length) return Response.json({ found: true, kind: ans.kind ?? "artist", source: "cache", lines: ans.lines, ms: Date.now() - t0 }); } catch { /* no table yet */ } }
+  const { client } = await brainClient(req);
+  if (!client) return Response.json({ found: false, lines: [], ms: Date.now() - t0 });
+  try {
+    const resp = await client.messages.create({
+      model: MODEL, max_tokens: 700,
+      tools: [{ type: "web_search_20260209" as const, name: "web_search" as const, max_uses: 1 }],
+      system: "You are a music researcher for a producer. Answer in at most six plain sentences, no lists, no markdown: who or what this is, the era and genre family, typical tempo range and keys, the harmonic habits (common progressions), song form habits, the signature sounds, the biggest records with years, and one thing a producer would copy. Numbers when you have them; never invent chart facts.",
+      messages: [{ role: "user", content: `Research for a record we are about to build: "${query}".` }],
+    } as never);
+    const text = (resp as { content: { type: string; text?: string }[] }).content.filter((b) => b.type === "text").map((b) => b.text ?? "").join(" ").replace(/\s+/g, " ").trim();
+    const out = text ? [text.slice(0, 1200)] : [];
+    if (sb && out.length) { try { await sb.from("research_cache").upsert({ key, answer: { lines: out, kind: "artist" } }); } catch { /* fine */ } }
+    return Response.json({ found: out.length > 0, kind: "artist", source: "web", lines: out, usage: (resp as { usage: unknown }).usage, model: MODEL, ms: Date.now() - t0 });
+  } catch (e) { return Response.json({ found: false, lines: [], detail: e instanceof Error ? e.message.slice(0, 160) : "error", ms: Date.now() - t0 }); }
+}
+
+function bandFor(bpm: number): string {
+  let b = bpm; while (b < 60) b *= 2; while (b > 180) b /= 2;
+  return b < 90 ? "<90" : b < 110 ? "90-110" : b < 122 ? "110-122" : b < 132 ? "122-132" : b < 145 ? "132-145" : b < 160 ? "145-160" : ">160";
+}
