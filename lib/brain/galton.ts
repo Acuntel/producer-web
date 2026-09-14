@@ -176,7 +176,7 @@ export async function canonLines(name: string): Promise<string[]> {
   } catch { /* tables may be empty */ }
   return out;
 }
-const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+const mmss = (sec: number) => { const s = Math.max(0, Math.round(sec)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
 /** Records the studio has heard itself (any user), matched by artist or title. */
 export async function heardLines(name: string): Promise<string[]> {
