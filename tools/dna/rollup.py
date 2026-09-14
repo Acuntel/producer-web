@@ -23,6 +23,32 @@ FRAGMENTS = ["billboard_songs.parquet", "spotify_songs.parquet",
              "mcgill_songs.parquet", "library_songs.parquet"]
 
 
+def disambiguate_ids(df: pd.DataFrame) -> pd.DataFrame:
+    """id = sha1(source|artist_norm|title_norm) collides for real, distinct
+    rows within one source: Lakh has several independently-arranged MIDI files
+    of the same hit (e.g. three different "Def Leppard - Hysteria" takes), and
+    Spotify's catalog has duplicate title/artist entries across releases. These
+    are genuinely different rows worth keeping (different tempo, grids, audio
+    features), so append -2, -3, ... to the id rather than dropping any of
+    them - only load_pg.py's primary key needs the id to be unique."""
+    dup_mask = df["id"].duplicated(keep=False)
+    if not dup_mask.any():
+        return df
+    n_before = dup_mask.sum()
+    counters: dict[str, int] = {}
+    ids = df["id"].tolist()
+    for i in df.index[dup_mask]:
+        base = ids[i]
+        counters[base] = counters.get(base, 0) + 1
+        if counters[base] > 1:
+            ids[i] = f"{base}-{counters[base]}"
+    df = df.copy()
+    df["id"] = ids
+    print(f"[rollup] {n_before:,} rows shared an id with another row (real duplicate "
+          f"content, e.g. multiple Lakh arrangements of the same song) - suffixed to stay unique")
+    return df
+
+
 def combine() -> pd.DataFrame:
     frames = []
     for name in FRAGMENTS:
@@ -37,6 +63,7 @@ def combine() -> pd.DataFrame:
         raise SystemExit("[rollup] no fragments found - run the per-source scripts first")
     combined = pd.concat(frames, ignore_index=True)
     combined = combined[schema.COLUMN_NAMES]
+    combined = disambiguate_ids(combined)
     SONGS_OUT.parent.mkdir(parents=True, exist_ok=True)
     combined.to_parquet(SONGS_OUT, index=False)
     print(f"[rollup] songs.parquet: {len(combined):,} total rows -> {SONGS_OUT}")

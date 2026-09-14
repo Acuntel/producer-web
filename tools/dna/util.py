@@ -35,7 +35,7 @@ def norm_artist(s: str | None) -> str:
     s = ascii_fold(str(s)).lower()
     s = FEAT_RE.sub("", s)
     s = AMP_AND_RE.sub(" ", s)
-    s = PUNCT_RE.sub(" ", s)
+    s = strip_punct(s)
     s = SPACE_RE.sub(" ", s).strip()
     return s
 
@@ -50,7 +50,7 @@ def norm_title(s: str | None) -> str:
     s = PAREN_RE.sub(" ", s)
     s = BRACKET_RE.sub(" ", s)
     s = REMASTER_RE.sub("", s)
-    s = PUNCT_RE.sub(" ", s)
+    s = strip_punct(s)
     s = SPACE_RE.sub(" ", s).strip()
     return s
 

@@ -147,6 +147,7 @@ def compact_entry(entry: dict, songs_i: Interner, prog_i: Interner, grid_i: Inte
 
 
 def build_galton(all_rows: list[dict]) -> dict:
+    import datetime
     songs_i, prog_i, grid_i = Interner(), Interner(), Interner()
     galton_bins = {}
     for row in all_rows:
@@ -155,7 +156,8 @@ def build_galton(all_rows: list[dict]) -> dict:
         group_cols = bins.PIN_ORDER[:row["level"]]
         key = f"{row['level']}:" + "|".join(str(row[c]) for c in group_cols)
         galton_bins[key] = compact_entry(build_galton_entry(row), songs_i, prog_i, grid_i)
-    return {"bin_fields": BIN_FIELDS, "songs": songs_i.table, "progressions": prog_i.table,
+    return {"builtAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "bin_fields": BIN_FIELDS, "songs": songs_i.table, "progressions": prog_i.table,
             "grids": grid_i.table, "bins": galton_bins}
 
 

@@ -5,9 +5,49 @@
 import galtonJson from "../../data/galton.json";
 import { supabaseAdmin } from "@/lib/account/supabase";
 
-export type Bin = { key: string; count: number; tempo?: number; modeMajor?: number; progressions?: [string, number][]; kick?: string; bass?: string; contour?: string; energy?: number[]; exemplars?: string[]; [k: string]: unknown };
-type Galton = { builtAt: string | null; bins: Record<string, Bin> };
-const GALTON = galtonJson as unknown as Galton;
+// data/galton.json is a compact export: index tables (songs, progressions, grids) and bins keyed
+// "depth:pin1|pin2|..." in PIN order, each bin a positional array in bin_fields order.
+const PINS = ["tempo_band", "meter_feel", "mode", "decade", "family", "structure_archetype", "harmony_class", "hit_tier"] as const;
+export type Pin = (typeof PINS)[number];
+export type Bin = { key: string; pins: Record<Pin, string>; count: number; tempo: number | null; modeMajor: number | null; progressions: [string, number][]; kick: string | null; bass: string | null; contour: string | null; energy: number[] | null; exemplars: string[] };
+type GaltonFile = { builtAt?: string | null; bin_fields?: string[]; songs?: string[]; progressions?: string[]; grids?: string[]; bins?: Record<string, unknown[]> };
+const GALTON = galtonJson as unknown as GaltonFile;
+
+function decodeBin(key: string, raw: unknown[]): Bin {
+  const f = GALTON.bin_fields ?? ["count", "tempo_p50", "mode_share", "top_progressions", "top_kick_grid", "top_bass_rhythm", "top_contour", "energy_contour", "exemplars"];
+  const at = (name: string) => raw[f.indexOf(name)];
+  const grids = GALTON.grids ?? [], progs = GALTON.progressions ?? [], songs = GALTON.songs ?? [];
+  const idx = (v: unknown, table: string[]) => (typeof v === "number" && table[v] !== undefined ? table[v] : null);
+  const values = key.slice(key.indexOf(":") + 1).split("|");
+  const pins = Object.fromEntries(PINS.map((p, i) => [p, values[i] ?? "unknown"])) as Record<Pin, string>;
+  const prog = at("top_progressions");
+  return {
+    key, pins,
+    count: Number(at("count") ?? 0),
+    tempo: typeof at("tempo_p50") === "number" ? (at("tempo_p50") as number) : null,
+    modeMajor: typeof at("mode_share") === "number" ? (at("mode_share") as number) : null,
+    progressions: Array.isArray(prog) ? (prog as [number, number][]).map(([i, c]) => [progs[i] ?? "?", c] as [string, number]).filter((x) => x[0] !== "?") : [],
+    kick: idx(at("top_kick_grid"), grids), bass: idx(at("top_bass_rhythm"), grids), contour: idx(at("top_contour"), grids),
+    energy: Array.isArray(at("energy_contour")) ? (at("energy_contour") as number[]) : null,
+    exemplars: Array.isArray(at("exemplars")) ? (at("exemplars") as number[]).map((i) => songs[i]).filter((x): x is string => typeof x === "string").map((x) => x.replace(/;/g, " & ")) : [],
+  };
+}
+
+/** The deepest, fullest bins whose pins match every requested value at its position, largest first. */
+export function binsFor(want: Partial<Record<Pin, string>>, limit = 3): Bin[] {
+  const req = Object.entries(want).filter(([, v]) => v) as [Pin, string][];
+  const out: Bin[] = [];
+  for (const [key, raw] of Object.entries(GALTON.bins ?? {})) {
+    const values = key.slice(key.indexOf(":") + 1).split("|");
+    if (!req.every(([p, v]) => (values[PINS.indexOf(p)] ?? "unknown").toLowerCase() === v.toLowerCase())) continue;
+    out.push(decodeBin(key, raw));
+  }
+  // Prefer bins that say more (fewer unknowns) when counts are close, else the larger bin.
+  const known = (b: Bin) => Object.values(b.pins).filter((v) => v !== "unknown").length;
+  return out.sort((a, b) => (b.count - a.count) || (known(b) - known(a))).slice(0, limit);
+}
+export const galtonBuiltAt = () => GALTON.builtAt ?? null;
+export const galtonSize = () => Object.keys(GALTON.bins ?? {}).length;
 
 export type ArtistRow = {
   artist_norm: string; display: string; song_count: number; chart_songs?: number; number_ones?: number; first_year?: number; last_year?: number;
@@ -52,19 +92,6 @@ export async function artistSongs(artistNorm: string, limit = 8): Promise<SongRo
   } catch { return []; }
 }
 
-/** The bins whose key contains every named pin, largest first. Keys look like "122-132|four_floor|minor|2020|electronic|build_drop|minor_axis|none". */
-export function binsFor(pins: string[], limit = 3): Bin[] {
-  const want = pins.map((p) => p.toLowerCase());
-  const out: Bin[] = [];
-  for (const [key, b] of Object.entries(GALTON.bins ?? {})) {
-    const parts = key.toLowerCase().split("|");
-    if (want.every((w) => parts.includes(w))) out.push({ ...b, key });
-  }
-  return out.sort((a, b) => (b.count ?? 0) - (a.count ?? 0)).slice(0, limit);
-}
-export const galtonBuiltAt = () => GALTON.builtAt;
-export const galtonSize = () => Object.keys(GALTON.bins ?? {}).length;
-
 export function artistLine(a: ArtistRow, songs: SongRow[] = []): string {
   const keys = (a.top_keys ?? []).slice(0, 3).join(", ");
   const progs = Array.isArray(a.top_progressions) ? (a.top_progressions as unknown[]).slice(0, 3).map((p) => (Array.isArray(p) ? String(p[0]) : String(p))).join("; ") : "";
@@ -86,6 +113,7 @@ export function songLine(s: SongRow): string {
 }
 
 export function binLine(b: Bin): string {
-  const progs = (b.progressions ?? []).slice(0, 3).map((p) => `${p[0]} (${p[1]})`).join("; ");
-  return `Bin ${b.key} (${b.count} songs): tempo p50 ${b.tempo ?? "?"}, major ${pct(b.modeMajor)}${progs ? `; progressions ${progs}` : ""}${b.kick ? `; kick ${b.kick}` : ""}${b.bass ? `; bass ${b.bass}` : ""}${b.contour ? `; hook ${b.contour}` : ""}${b.exemplars?.length ? `; like ${b.exemplars.slice(0, 4).join(", ")}` : ""}.`;
+  const where = (Object.entries(b.pins) as [Pin, string][]).filter(([, v]) => v !== "unknown").map(([p, v]) => `${p.replace(/_/g, " ")} ${v}`).join(", ");
+  const progs = b.progressions.slice(0, 3).map((p) => `${p[0]} (${p[1]})`).join("; ");
+  return `Bin [${where}] (${b.count} songs): tempo p50 ${b.tempo ?? "?"}, major ${pct(b.modeMajor ?? undefined)}${progs ? `; progressions ${progs}` : ""}${b.kick ? `; kick ${b.kick}` : ""}${b.bass ? `; bass ${b.bass}` : ""}${b.contour ? `; hook ${b.contour}` : ""}${b.exemplars.length ? `; like ${b.exemplars.slice(0, 4).join(", ")}` : ""}.`;
 }

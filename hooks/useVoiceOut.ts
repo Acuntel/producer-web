@@ -76,6 +76,21 @@ export function useVoiceOut(d: Deps = {}) {
     finally { abortsRef.current = abortsRef.current.filter((a) => a !== ac); }
   }, []);
 
+  // No ElevenLabs key: the free voice (Kokoro in the browser), then the browser's own voice as the last resort.
+  const localSpeak = useCallback(async (text: string, gen: number): Promise<boolean> => {
+    try {
+      const { speakLocal } = await import("@/lib/voice/kokoro");
+      const out = await speakLocal(text);
+      if (!out || gen !== genRef.current) return !!out;
+      const c = ctx();
+      const buf = c.createBuffer(1, out.samples.length, out.sampleRate); buf.getChannelData(0).set(out.samples);
+      const src = c.createBufferSource(); src.buffer = buf; src.connect(c.destination);
+      const at = Math.max(c.currentTime + 0.02, nextAtRef.current); src.start(at); nextAtRef.current = at + buf.duration;
+      sourcesRef.current.push(src); src.onended = () => { sourcesRef.current = sourcesRef.current.filter((s) => s !== src); };
+      await new Promise((res) => setTimeout(res, Math.max(0, (nextAtRef.current - c.currentTime) * 1000)));
+      return true;
+    } catch { return false; }
+  }, []);
   const browserSpeak = (text: string) => new Promise<void>((res) => {
     if (typeof speechSynthesis === "undefined") { res(); return; }
     speechSynthesis.cancel();
@@ -97,7 +112,10 @@ export function useVoiceOut(d: Deps = {}) {
         let i = 0;
         while (i < parts.length && gen === genRef.current) {
           const ok = await playSentence(parts[i], gen);
-          if (!ok && gen === genRef.current) { await browserSpeak(parts.slice(i).join(" ")); break; }
+          if (!ok && gen === genRef.current) {
+            const local = await localSpeak(parts[i], gen);
+            if (!local && gen === genRef.current) { await browserSpeak(parts.slice(i).join(" ")); break; }
+          }
           i++;
         }
         job.resolve();
@@ -105,7 +123,7 @@ export function useVoiceOut(d: Deps = {}) {
     } finally {
       runningRef.current = false; setSpeaking(false); setCurrent(null); dRef.current.duck?.(false);
     }
-  }, [playSentence]);
+  }, [playSentence, localSpeak]);
 
   const speak = useCallback((text: string): Promise<void> => {
     const t = text.trim();

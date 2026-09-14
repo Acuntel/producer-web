@@ -5,12 +5,19 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "/Users/bradyschwartz/.npm/_npx/17e7e13df003209e/node_modules/.bin/tsx --test tests/*.test.mjs",
+    "e2e": "E2E_SKIP_SELFTEST=1 node tests/e2e.mjs http://localhost:3111",
+    "speak": "node tests/speak.e2e.mjs http://localhost:3111",
+    "shots": "node tests/stage.shot.mjs http://localhost:3111 /tmp/producer-shots 1440 900 && node tests/stage.shot.mjs http://localhost:3111 /tmp/producer-shots 390 844",
+    "serve": "next start -p 3111",
+    "deploy": "vercel --prod --yes --archive=tgz"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
     "@supabase/ssr": "^0.12.6",
     "@supabase/supabase-js": "^2.115.0",
+    "kokoro-js": "^1.2.1",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

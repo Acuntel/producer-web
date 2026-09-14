@@ -45,10 +45,18 @@ export async function POST(req: Request) {
   if (fams.length || lane) {
     const info = lane ? laneInfo(lane) : null;
     const tempoBand = info ? bandFor(info.home) : body?.song?.bpm ? bandFor(body.song.bpm) : null;
+    const seen = new Set<string>();
     for (const f of fams.length ? fams : ["electronic"]) {
-      const pins = [f, ...(tempoBand ? [tempoBand] : [])];
-      const bins = binsFor(pins, 2);
-      if (bins.length) { if (kind === "none") kind = "genre"; lines.push(...bins.map(binLine)); }
+      // One bin per mode, so a minor-leaning lane is not answered with the major bin alone.
+      const picks = ["minor", "major"].flatMap((mode) => {
+        const withTempo = tempoBand ? binsFor({ family: f, tempo_band: tempoBand, mode }, 1) : [];
+        return withTempo.length ? withTempo : binsFor({ family: f, mode }, 1);
+      });
+      for (const b of picks) {
+        const sig = `${b.count}|${b.exemplars.slice(0, 3).join(",")}`;
+        if (seen.has(sig)) continue; seen.add(sig);
+        if (kind === "none") kind = "genre"; lines.push(binLine(b));
+      }
     }
     if (fams.length >= 2) lines.push(`Two families named (${fams.join(" and ")}): build the floor from the first family's bin and borrow the second family's hook contour, vocal placement and one signature timbre; say which choice you made.`);
   }
