@@ -40,6 +40,12 @@ def add_pin_columns(df: pd.DataFrame) -> pd.DataFrame:
     smap = {s: bins.structure_archetype(s) for s in uniq}
     df["structure_archetype"] = df["structure"].map(smap).fillna("unknown")
 
+    e = df["energy"].astype("float64")
+    df["energy_band"] = pd.cut(e, bins=[-np.inf, 0.4, 0.6, 0.8, np.inf], labels=["low", "mid", "high", "peak"], right=False).astype(object).where(e.notna(), "unknown")
+    v, a = df["valence_read"].astype("float64"), df["arousal_read"].astype("float64")
+    df["feel"] = np.select([v.isna() | a.isna(), (v >= 0.5) & (a >= 0.5), v >= 0.5, a >= 0.5], ["unknown", "lift", "sun", "rush"], default="gut")
+    vo = df["voice"].astype("float64") if "voice" in df.columns else pd.Series(np.nan, index=df.index)
+    df["voice"] = np.select([vo.isna(), vo >= 0.5], ["unknown", "vocal"], default="instrumental")
     df["mode"] = df["mode"].fillna("unknown")
     df["decade"] = df["decade"].astype(object).where(df["decade"].notna(), "unknown")
     df["decade"] = df["decade"].apply(lambda v: str(int(v)) if isinstance(v, (int, float)) else v)

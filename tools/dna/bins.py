@@ -3,8 +3,31 @@ Pin order and rules are docs/DNA_SPEC.md section 3.
 """
 from __future__ import annotations
 
-PIN_ORDER = ["tempo_band", "meter_feel", "mode", "decade", "family",
-             "structure_archetype", "harmony_class", "hit_tier"]
+# The pins every audio-measured song can answer come first (tempo, mode, energy, feel, decade, family, voice);
+# the ones only a transcription or a chord sheet can answer come last. Prefix bins therefore stay populated.
+PIN_ORDER = ["tempo_band", "mode", "energy_band", "feel", "decade", "family", "voice",
+             "meter_feel", "structure_archetype", "harmony_class", "hit_tier"]
+
+ENERGY_EDGES = [(0.4, "low"), (0.6, "mid"), (0.8, "high"), (9.0, "peak")]
+
+
+def energy_band(energy: float | None) -> str:
+    if energy is None or energy != energy: return "unknown"
+    for hi, label in ENERGY_EDGES:
+        if energy < hi: return label
+    return "peak"
+
+
+def feel_quadrant(valence_read: float | None, arousal_read: float | None) -> str:
+    """Brady's words: sun (bright and calm), lift (bright and driving), rush (dark and driving), gut (dark and slow)."""
+    if valence_read is None or arousal_read is None or valence_read != valence_read or arousal_read != arousal_read: return "unknown"
+    bright, driving = valence_read >= 0.5, arousal_read >= 0.5
+    return "lift" if bright and driving else "sun" if bright else "rush" if driving else "gut"
+
+
+def voice_pin(voice: float | None) -> str:
+    if voice is None or voice != voice: return "unknown"
+    return "vocal" if voice >= 0.5 else "instrumental"
 
 _TEMPO_BANDS = [
     ("<90", None, 90), ("90-110", 90, 110), ("110-122", 110, 122),
@@ -66,10 +89,13 @@ def or_unknown(v) -> str:
 def compute_pins(row: dict) -> dict:
     return {
         "tempo_band": tempo_band(row.get("tempo")),
-        "meter_feel": meter_feel(row.get("kick_grid"), row.get("snare_grid")),
         "mode": or_unknown(row.get("mode")),
+        "energy_band": energy_band(row.get("energy")),
+        "feel": feel_quadrant(row.get("valence_read"), row.get("arousal_read")),
         "decade": or_unknown(row.get("decade")),
         "family": or_unknown(row.get("family")),
+        "voice": voice_pin(row.get("voice")),
+        "meter_feel": meter_feel(row.get("kick_grid"), row.get("snare_grid")),
         "structure_archetype": structure_archetype(row.get("structure")),
         "harmony_class": or_unknown(row.get("harmony_class")),
         "hit_tier": row.get("hit_tier") or "none",

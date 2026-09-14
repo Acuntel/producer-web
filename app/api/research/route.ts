@@ -5,6 +5,7 @@
 import { brainClient } from "@/lib/brain/client";
 import { supabaseAdmin } from "@/lib/account/supabase";
 import { lookupArtist, lookupSongs, artistSongs, artistLine, songLine, binsFor, binLine, norm, canonLines, heardLines } from "@/lib/brain/galton";
+import { findRow, artistRows, soundLines } from "@/lib/brain/prints";
 import { laneNamed, laneInfo } from "@/lib/brain/laneNames";
 
 export const maxDuration = 30;
@@ -21,8 +22,16 @@ function familiesIn(q: string): string[] {
 export async function POST(req: Request) {
   const t0 = Date.now();
   const body = (await req.json().catch(() => null)) as { query?: string; song?: { bpm?: number; lane?: string } } | null;
-  const query = (body?.query ?? "").toString().trim().slice(0, 160);
+  const asked = (body?.query ?? "").toString().trim().slice(0, 160);
+  // "sounds like X", "similar to X", "in the style of X": look X up and answer with what sits beside it by sound.
+  const like = asked.match(/^(?:what |something |anything |a track |a record |music )?(?:that |which )?(?:sounds? like|similar to|in the (?:vein|style) of|close to)\s+(.+)$/i);
+  const query = like ? like[1].trim() : asked;
   if (!query) return Response.json({ found: false, lines: [], ms: 0 });
+  const words = asked.toLowerCase();
+  const energyPin = /\b(peak ?time|peak|high energy|banger|hard|intense|driving|full on)\b/.test(words) ? (/\bpeak/.test(words) ? "peak" : "high") : /\b(chill|low energy|calm|mellow|soft|laid[- ]back|downtempo|gentle)\b/.test(words) ? "low" : null;
+  const feelPin = /\b(euphoric|uplifting|anthem|lift|hands in the air)\b/.test(words) ? "lift" : /\b(sun|sunny|bright|happy|warm|summer|feel ?good)\b/.test(words) ? "sun" : /\b(rush|dark|tense|aggressive|menacing|angry)\b/.test(words) ? "rush" : /\b(gut|sad|melancholy|melancholic|heartbreak|lonely|blue)\b/.test(words) ? "gut" : null;
+  const voicePin = /\b(instrumental|no vocals?|without vocals?)\b/.test(words) ? "instrumental" : /\b(vocal|vocals|singer|topline|sung)\b/.test(words) ? "vocal" : null;
+  const extraPins = { ...(energyPin ? { energy_band: energyPin } : {}), ...(feelPin ? { feel: feelPin } : {}), ...(voicePin ? { voice: voicePin } : {}) };
   const lines: string[] = [];
   let kind: "artist" | "song" | "genre" | "none" = "none";
 
@@ -38,6 +47,10 @@ export async function POST(req: Request) {
   if (bySplit.length) { kind = "song"; lines.push(...bySplit.map(songLine)); }
   else if (artist) { kind = "artist"; lines.push(artistLine(artist, await artistSongs(artist.artist_norm, 8))); }
   else if (byTitle.length) { kind = "song"; lines.push(...byTitle.map(songLine)); }
+  // The fingerprint: the record's own address and what sits beside it by sound (in-process, no database).
+  const printRows = dash ? [findRow(norm(dash[1]), norm(dash[2]))].filter((r): r is number => r !== null) : artistRows(artist?.artist_norm ?? norm(query), like ? 2 : 1);
+  if (!printRows.length && dash) printRows.push(...artistRows(norm(dash[1]), 1));
+  for (const row of printRows.slice(0, like ? 2 : 1)) { if (kind === "none") kind = dash ? "song" : "artist"; lines.push(...soundLines(row, like ? 8 : 5)); }
   if (canon.length) { if (kind === "none") kind = "artist"; lines.push(...canon); }
   if (heard.length) { if (kind === "none") kind = "song"; lines.push(...heard); }
   // A decade in the words ("80s", "1990s", "nineties") becomes a pin.
@@ -54,6 +67,8 @@ export async function POST(req: Request) {
       // One bin per mode, so a minor-leaning lane is not answered with the major bin alone.
       const picks = ["minor", "major"].flatMap((mode) => {
         const base = { family: f, mode, ...(decade ? { decade } : {}) };
+        const pinned = Object.keys(extraPins).length ? binsFor({ ...base, ...extraPins, ...(tempoBand ? { tempo_band: tempoBand } : {}) }, 1) : [];
+        if (pinned.length) return pinned;
         const withTempo = tempoBand && !decade ? binsFor({ ...base, tempo_band: tempoBand }, 1) : [];
         return withTempo.length ? withTempo : binsFor(base, 1).length ? binsFor(base, 1) : binsFor({ family: f, mode }, 1);
       });
@@ -64,6 +79,9 @@ export async function POST(req: Request) {
       }
     }
     if (fams.length >= 2) lines.push(`Two families named (${fams.join(" and ")}): build the floor from the first family's bin and borrow the second family's hook contour, vocal placement and one signature timbre; say which choice you made.`);
+  }
+  if (!lines.length && Object.keys(extraPins).length) {
+    for (const b of binsFor({ ...extraPins, ...(decade ? { decade } : {}) }, 2)) { kind = "genre"; lines.push(binLine(b)); }
   }
   if (lines.length) return Response.json({ found: true, kind, source: "store", lines, ms: Date.now() - t0 });
 

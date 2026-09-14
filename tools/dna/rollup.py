@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import re
 import sys
-import time
+import json, time
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -18,6 +19,7 @@ import schema
 import util
 
 RAW = Path(__file__).resolve().parents[2] / "data" / "dna" / "raw"
+DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "dna"
 SONGS_OUT = Path(__file__).resolve().parents[2] / "data" / "dna" / "songs.parquet"
 
 FRAGMENTS = ["billboard_songs.parquet", "spotify_songs.parquet",
@@ -97,6 +99,73 @@ def plain_dtypes(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def fill_voice(df: pd.DataFrame) -> pd.DataFrame:
+    """Spotify's instrumentalness is the inverse of the voice probability AcousticBrainz reports."""
+    if "voice" not in df.columns: df["voice"] = np.nan
+    v = pd.to_numeric(df["voice"], errors="coerce"); inst = pd.to_numeric(df["instrumentalness"], errors="coerce")
+    df["voice"] = v.where(v.notna(), 1.0 - inst)
+    return df
+
+
+CAL_FEATURES = ["valence", "energy", "danceability", "acousticness"]
+
+
+def calibrate_acousticbrainz(df: pd.DataFrame) -> pd.DataFrame:
+    """AcousticBrainz's energy (aggressive and party moods), valence (happy mood) and danceability are classifier
+    probabilities; Spotify's are audio measures. On the recordings both sources carry, a linear map from the
+    AcousticBrainz reads and log tempo to each Spotify measure is fitted and applied to every AcousticBrainz row,
+    so cross-source medians sit on one scale. Fit quality is written to data/dna/calibration.json."""
+    ab = df["source"] == "acousticbrainz"
+    if not ab.any(): return df
+    key = df["artist_norm"].fillna("") + "|" + df["title_norm"].fillna("")
+    sp = df[df["source"] == "spotify"].assign(_k=key[df["source"] == "spotify"]).drop_duplicates("_k").set_index("_k")
+    a = df[ab].assign(_k=key[ab]).drop_duplicates("_k").set_index("_k")
+    both = a.join(sp[["energy", "valence", "danceability"]], rsuffix="_sp", how="inner")
+    report = {"overlap": int(len(both)), "fits": {}}
+    if len(both) < 2000:
+        report["note"] = "too little overlap to calibrate"; (DATA_DIR / "calibration.json").write_text(json.dumps(report, indent=1)); return df
+    def design(frame):
+        X = np.c_[[pd.to_numeric(frame[c], errors="coerce").fillna(0.5).to_numpy(dtype="float64") for c in CAL_FEATURES]].T
+        t = pd.to_numeric(frame["tempo"], errors="coerce").fillna(120).clip(40, 300).to_numpy(dtype="float64")
+        return np.c_[X, np.log(t), np.ones(len(frame))]
+    Xb = design(both); fitted = {}
+    for tgt in ("energy", "valence", "danceability"):
+        y = pd.to_numeric(both[f"{tgt}_sp"], errors="coerce").to_numpy(dtype="float64"); m = ~np.isnan(y)
+        beta, *_ = np.linalg.lstsq(Xb[m], y[m], rcond=None); pred = Xb[m] @ beta
+        r2 = 1 - ((y[m] - pred) ** 2).sum() / max(((y[m] - y[m].mean()) ** 2).sum(), 1e-9)
+        fitted[tgt] = beta; report["fits"][tgt] = {"r2": round(float(r2), 3), "n": int(m.sum()), "beta": [round(float(b), 4) for b in beta]}
+    Xa = design(df[ab])
+    for tgt, beta in fitted.items():
+        df.loc[ab, tgt] = np.clip(Xa @ beta, 0.0, 1.0)
+    (DATA_DIR / "calibration.json").write_text(json.dumps(report, indent=1))
+    print(f"[rollup] calibrated {int(ab.sum()):,} AcousticBrainz rows on {len(both):,} shared recordings: " + ", ".join(f"{k} R2 {v['r2']}" for k, v in report["fits"].items()))
+    return df
+
+
+def fill_family(df: pd.DataFrame) -> pd.DataFrame:
+    """Family for rows that have none: MusicBrainz artist genres by artist gid, then by an unambiguous artist name,
+    then the family the store already knows for that artist from any other source."""
+    before = df["family"].notna().mean()
+    mb_path = RAW / "mb_artist_genres.parquet"
+    if mb_path.exists():
+        mb = pd.read_parquet(mb_path, columns=["artist_mbid", "artist_norm", "family"]).dropna(subset=["family"])
+        by_gid = mb.drop_duplicates("artist_mbid").set_index("artist_mbid")["family"]
+        if "artist_mbid" in df.columns:
+            need = df["family"].isna() & df["artist_mbid"].notna()
+            df.loc[need, "family"] = df.loc[need, "artist_mbid"].map(by_gid)
+        n_names = mb.groupby("artist_norm")["family"].nunique()
+        by_name = mb[mb["artist_norm"].isin(n_names[n_names == 1].index)].drop_duplicates("artist_norm").set_index("artist_norm")["family"]
+        need = df["family"].isna() & df["artist_norm"].notna()
+        df.loc[need, "family"] = df.loc[need, "artist_norm"].map(by_name)
+        mid = df["family"].notna().mean()
+        print(f"[rollup] family from MusicBrainz artist genres: {before:.1%} -> {mid:.1%}")
+    known = df.dropna(subset=["family"]).groupby("artist_norm")["family"].agg(lambda x: x.value_counts().index[0])
+    need = df["family"].isna() & df["artist_norm"].notna()
+    df.loc[need, "family"] = df.loc[need, "artist_norm"].map(known)
+    print(f"[rollup] family after artist propagation: {df['family'].notna().mean():.1%} of {len(df):,} rows")
+    return df
+
+
 def combine() -> pd.DataFrame:
     frames = []
     for name in FRAGMENTS:
@@ -112,6 +181,9 @@ def combine() -> pd.DataFrame:
     combined = pd.concat(frames, ignore_index=True)
     combined = combined[schema.COLUMN_NAMES]
     combined = plain_dtypes(combined)
+    combined = fill_voice(combined)
+    combined = calibrate_acousticbrainz(combined)
+    combined = fill_family(combined)
     combined = apply_artist_fold(combined)
     combined = disambiguate_ids(combined)
     SONGS_OUT.parent.mkdir(parents=True, exist_ok=True)

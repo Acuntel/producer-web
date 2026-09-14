@@ -42,7 +42,7 @@ def bucket_lookup(galton: dict) -> None:
     an object - the same hit songs recur across many overlapping bins, and
     repeating 9 field names per bin cost more than the data itself. Resolve
     indices and positions back to a readable dict for the report."""
-    key = "5:122-132|four_floor|minor|2020|electronic"
+    key = "6:122-132|minor|high|lift|2020|house"
     row = galton["bins"].get(key)
     if row:
         entry = dict(zip(galton["bin_fields"], row))

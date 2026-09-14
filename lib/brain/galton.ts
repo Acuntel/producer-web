@@ -7,7 +7,8 @@ import { supabaseAdmin } from "@/lib/account/supabase";
 
 // data/galton.json is a compact export: index tables (songs, progressions, grids) and bins keyed
 // "depth:pin1|pin2|..." in PIN order, each bin a positional array in bin_fields order.
-const PINS = ["tempo_band", "meter_feel", "mode", "decade", "family", "structure_archetype", "harmony_class", "hit_tier"] as const;
+// Pin order matches tools/dna/bins.py PIN_ORDER: the pins every audio-measured song can answer first.
+const PINS = ["tempo_band", "mode", "energy_band", "feel", "decade", "family", "voice", "meter_feel", "structure_archetype", "harmony_class", "hit_tier"] as const;
 export type Pin = (typeof PINS)[number];
 export type Bin = { key: string; pins: Record<Pin, string>; count: number; tempo: number | null; modeMajor: number | null; progressions: [string, number][]; kick: string | null; bass: string | null; contour: string | null; energy: number[] | null; exemplars: string[] };
 type GaltonFile = { builtAt?: string | null; bin_fields?: string[]; songs?: string[]; progressions?: string[]; grids?: string[]; bins?: Record<string, unknown[]> };
