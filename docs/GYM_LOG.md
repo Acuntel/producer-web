@@ -252,3 +252,15 @@ The brief and its reading: docs/MASTERPROMPT_V11.md. The store contract: docs/DN
 - The heard feed: every finished stems job leaves a dna_heard row (migration 0010, /api/dna/heard); rebuilds never touch it; research reads it.
 - More questions to the store (tools/dna/hits_extra.py): number ones sit in C, Db, G and D major; they are less syncopated (0.119 vs 0.155) and their hooks move more (wave contour 28% vs 19%); chord vocabulary 6 vs 5; the first chorus drifted from bar 13 (1960s) to 22 (1980s) to 17 (2000s); disco took nearly half the number ones of the 1970s.
 - Railway is logged out on this machine, so the worker cannot be redeployed from here; the heard feed went through the web side instead.
+
+## 2026-09-14 02:05: AcousticBrainz lands, and why the shell was slow
+- The wait was the pipe, not the machine: four dumps (4.2 GB) from data.metabrainz.org at one to four megabytes a second per connection, and the crawl of DJ mixes is paced by the recognition service at about twelve records a minute, one set at a time. Parsing was never the bottleneck: the two feature CSVs (30 million rows each) parse in 107 s, a million-record highlevel part in 95 to 116 s.
+- Speed-ups that held: the parser split into cached stages so each file parses the moment it lands while the next downloads; eight plain range requests in parallel pull 5.8 to 7 MB/s where one stream gave 0.8 to 3.9; the whole post-parse chain runs detached and unattended (assemble, rollup, reload, discoveries, hits, skills, tests).
+- The store now: 1,933,574 songs in parquet (1,112,906 unique AcousticBrainz recordings, every one with tempo and key, moods and danceability folded into valence, energy and the feel reads); 2,885 Galton bins in the repo (566.9 KB); 126,037 artists rolled up, 68,499 in Postgres (a named source, or five or more recordings); 5,567 buckets; 95 discoveries; the database at 414 MB of the free tier's 500. Burial, Four Tet and a hundred thousand other names the charts never carried now resolve.
+- The canon crawl kept going in the background: 879 records across 34 mixes (from 215 across 7).
+
+### Traps
+- pandas 3 nullable dtypes: one fragment with Int64 or an NA-flavored string column turns the whole concat nullable and `.astype(int)` on a comparison dies on NA. The rollup flattens dtypes after the concat now.
+- Whole floats into smallint: once year carries a gap the column is float and COPY sends "1990.0"; the loader writes integral floats as integers.
+- `curl -C - -r a-b` appends on every retry (a 982 MB file became 6.4 GB of junk and cost 25 minutes); segmented downloads use plain ranges and a retry deletes first.
+- The harness kills every background task when memory gets tight; the heavy chain runs under nohup and a tail monitor reports its stages.
