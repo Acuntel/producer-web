@@ -1,18 +1,18 @@
 # SKILL: why hits work, measured (the store, 2026-09-13)
 
-Sources joined: Billboard Hot 100 1958 to now x Spotify audio features (4579 matched records), x Chordonomicon chord sheets (1003), x McGill expert chords (729), x Lakh MIDI (5842). Every number carries its n; below n=20 there is no number. Quote a number, not an adjective.
+Sources joined: Billboard Hot 100 1958 to now x Spotify audio features (4581 matched records), x Chordonomicon chord sheets (1003), x McGill expert chords (731), x Lakh MIDI (5843). Every number carries its n; below n=20 there is no number. Quote a number, not an adjective.
 
 ## Number ones against the rest of the chart (Spotify priors, 0 to 1)
 | tier | energy p50 | danceability p50 | valence p50 | duration p50 | n |
 | --- | --- | --- | --- | --- | --- |
 | number1 | 0.6 | 0.63 | 0.67 | 218 s | 638 |
-| top10 | 0.66 | 0.58 | 0.63 | 207 s | 1316 |
-| top40 | 0.67 | 0.59 | 0.53 | 211 s | 1216 |
+| top10 | 0.66 | 0.58 | 0.63 | 207 s | 1317 |
+| top40 | 0.67 | 0.59 | 0.53 | 211 s | 1217 |
 | charted | 0.7 | 0.6 | 0.52 | 210 s | 1409 |
 
 Read: number ones are HAPPIER (valence 0.67 vs 0.52) and MORE DANCEABLE (0.63 vs 0.6) than records that merely charted, and LESS LOUD or busy (energy 0.6 vs 0.7). The floor wins on groove and lift, not on force. MOVE: when the ask is "a hit", keep the kick straight and the syncopation medium (danceability), keep a major color or a bright minor with a lifted hook (valence), and do not crush the master or stack bright layers (energy).
 
-Mode: 68% of number ones are major (n=638) against 71% of everything charted (n=4579). Minor hits exist in every decade; they carry a lifted hook or a bright chorus.
+Mode: 68% of number ones are major (n=638) against 71% of everything charted (n=4581). Minor hits exist in every decade; they carry a lifted hook or a bright chorus.
 
 ## Number ones by decade (n in brackets)
 | decade | tempo p50 | energy | danceability | valence | duration |
@@ -21,7 +21,7 @@ Mode: 68% of number ones are major (n=638) against 71% of everything charted (n=
 | 1970s | 110 | 0.66 | 0.64 | 0.7 | 245 s [93] |
 | 1980s | 115 | 0.72 | 0.63 | 0.74 | 249 s [149] |
 | 1990s | 117 | 0.54 | 0.58 | 0.33 | 274 s [22] |
-| 2000s | 117 | 0.68 | 0.74 | 0.61 | 228 s [31] |
+| 2000s | 117 | 0.68 | 0.73 | 0.61 | 228 s [31] |
 | 2010s | 124 | 0.62 | 0.69 | 0.5 | 205 s [82] |
 | 2020s | 109 | 0.56 | 0.81 | 0.53 | 192 s [88] |
 
@@ -40,11 +40,11 @@ Harmony families among number ones (n=219) vs everything: modal_mixture 45% (all
 ## Groove by hit tier (MIDI grids of the same songs)
 | tier | syncopation p50 | four on the floor | top hook contours | n |
 | --- | --- | --- | --- | --- |
-| number1 | 0.119 | 14% | flat 32%, wave 28%, arch 16% | 475 |
+| number1 | 0.119 | 14% | flat 32%, wave 28%, arch 16% | 476 |
 | top10 | 0.091 | 13% | flat 34%, wave 22%, fall 16% | 982 |
 | top40 | 0.101 | 16% | flat 46%, wave 20%, fall 14% | 770 |
 | charted | 0.155 | 18% | flat 45%, wave 19%, arch 16% | 434 |
-| never_charted | 0.176 | 17% | flat 31%, wave 27%, arch 16% | 7479 |
+| never_charted | 0.176 | 17% | flat 31%, wave 27%, arch 16% | 7478 |
 
 Read: number ones carry LESS drum syncopation than the rest of the chart (0.119 vs 0.155) and their hooks MOVE more (a wave contour in 28% of number ones against 19%). The floor stays simple; the melody does the work. MOVE: for a hit, keep the kick and snare plain, put the motion in the hook's contour, not in the drums.
 Chord vocabulary by tier: charted 5 (n=292), number1 6 (n=99), top10 6 (n=211), top40 5 (n=238).

@@ -1,5 +1,5 @@
 {
- "count": 93,
+ "count": 95,
  "top": [
   {
    "family": "metal",
@@ -74,7 +74,7 @@
    "measure": "energy",
    "d": -1.0,
    "hit_p50": 0.586,
-   "never_p50": 0.816,
+   "never_p50": 0.815,
    "n_hit": 48,
    "n_never": 572
   },
@@ -99,6 +99,17 @@
    "never_p50": -9.699,
    "n_hit": 69,
    "n_never": 2131
+  },
+  {
+   "family": "all",
+   "decade": "all",
+   "tier": "top10",
+   "measure": "valence",
+   "d": 0.49,
+   "hit_p50": 0.5,
+   "never_p50": 0.284,
+   "n_hit": 2240,
+   "n_never": 1164833
   },
   {
    "family": "all",
@@ -132,6 +143,17 @@
    "never_p50": -6.169,
    "n_hit": 48,
    "n_never": 572
+  },
+  {
+   "family": "all",
+   "decade": "all",
+   "tier": "top40",
+   "measure": "valence",
+   "d": 0.44,
+   "hit_p50": 0.47,
+   "never_p50": 0.284,
+   "n_hit": 3891,
+   "n_never": 1164833
   },
   {
    "family": "electronic",
@@ -186,7 +208,18 @@
    "hit_p50": 0.0,
    "never_p50": 0.0,
    "n_hit": 876,
-   "n_never": 77591
+   "n_never": 77589
+  },
+  {
+   "family": "all",
+   "decade": "all",
+   "tier": "number1",
+   "measure": "valence",
+   "d": 0.51,
+   "hit_p50": 0.506,
+   "never_p50": 0.284,
+   "n_hit": 670,
+   "n_never": 1164833
   },
   {
    "family": "all",
@@ -196,8 +229,8 @@
    "d": -0.51,
    "hit_p50": 0.0,
    "never_p50": 0.0,
-   "n_hit": 654,
-   "n_never": 77591
+   "n_hit": 655,
+   "n_never": 77589
   },
   {
    "family": "disco",
@@ -218,8 +251,8 @@
    "d": -0.49,
    "hit_p50": 0.0,
    "never_p50": 0.0,
-   "n_hit": 759,
-   "n_never": 77591
+   "n_hit": 760,
+   "n_never": 77589
   },
   {
    "family": "metal",
@@ -263,18 +296,7 @@
    "hit_p50": 0.0,
    "never_p50": 0.0,
    "n_hit": 311,
-   "n_never": 77591
-  },
-  {
-   "family": "all",
-   "decade": "all",
-   "tier": "top10",
-   "measure": "valence",
-   "d": 0.47,
-   "hit_p50": 0.607,
-   "never_p50": 0.444,
-   "n_hit": 654,
-   "n_never": 77591
+   "n_never": 77589
   },
   {
    "family": "metal",
@@ -315,21 +337,10 @@
    "tier": "number1",
    "measure": "acousticness",
    "d": 0.75,
-   "hit_p50": 0.206,
+   "hit_p50": 0.207,
    "never_p50": 0.061,
    "n_hit": 48,
    "n_never": 572
-  },
-  {
-   "family": "all",
-   "decade": "all",
-   "tier": "number1",
-   "measure": "valence",
-   "d": 0.5,
-   "hit_p50": 0.629,
-   "never_p50": 0.444,
-   "n_hit": 311,
-   "n_never": 77591
   },
   {
    "family": "rock",
@@ -409,13 +420,24 @@
    "n_never": 4743
   },
   {
+   "family": "all",
+   "decade": "all",
+   "tier": "number1",
+   "measure": "tempo",
+   "d": -0.37,
+   "hit_p50": 113.955,
+   "never_p50": 123.31,
+   "n_hit": 978,
+   "n_never": 1172015
+  },
+  {
    "family": "disco",
    "decade": "all",
    "tier": "top10",
    "measure": "energy",
    "d": -0.67,
    "hit_p50": 0.707,
-   "never_p50": 0.816,
+   "never_p50": 0.815,
    "n_hit": 43,
    "n_never": 572
   },
@@ -486,17 +508,6 @@
    "n_never": 7789
   },
   {
-   "family": "all",
-   "decade": "all",
-   "tier": "charted",
-   "measure": "acousticness",
-   "d": -0.35,
-   "hit_p50": 0.083,
-   "never_p50": 0.194,
-   "n_hit": 876,
-   "n_never": 77591
-  },
-  {
    "family": "electronic",
    "decade": "all",
    "tier": "charted",
@@ -517,6 +528,17 @@
    "never_p50": 0.0,
    "n_hit": 98,
    "n_never": 475
+  },
+  {
+   "family": "all",
+   "decade": "all",
+   "tier": "number1",
+   "measure": "energy",
+   "d": 0.36,
+   "hit_p50": 0.367,
+   "never_p50": 0.104,
+   "n_hit": 670,
+   "n_never": 1164833
   },
   {
    "family": "metal",
@@ -638,28 +660,6 @@
    "never_p50": 0.067,
    "n_hit": 38,
    "n_never": 1288
-  },
-  {
-   "family": "electronic",
-   "decade": "all",
-   "tier": "number1",
-   "measure": "loudness",
-   "d": 0.55,
-   "hit_p50": -5.151,
-   "never_p50": -7.204,
-   "n_hit": 31,
-   "n_never": 7789
-  },
-  {
-   "family": "metal",
-   "decade": "all",
-   "tier": "charted",
-   "measure": "tempo",
-   "d": -0.47,
-   "hit_p50": 97.57,
-   "never_p50": 120.01,
-   "n_hit": 53,
-   "n_never": 7201
   }
  ]
 }

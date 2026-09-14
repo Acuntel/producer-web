@@ -7,3 +7,4 @@ tsconfig.tsbuildinfo
 data/dna/raw/
 data/dna/*.parquet
 data/dna/PG_DSN
+__pycache__/
