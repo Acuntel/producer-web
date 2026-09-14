@@ -22,7 +22,8 @@ SONGS_OUT = Path(__file__).resolve().parents[2] / "data" / "dna" / "songs.parque
 
 FRAGMENTS = ["billboard_songs.parquet", "spotify_songs.parquet",
              "chordonomicon_songs.parquet", "lakh_songs.parquet",
-             "mcgill_songs.parquet", "library_songs.parquet"]
+             "mcgill_songs.parquet", "library_songs.parquet",
+             "acousticbrainz_songs.parquet"]   # optional; present after tools/dna/acousticbrainz.py has run
 
 # "Elvis Presley With The Jordanaires", "... And The Jordanaires", "Bill
 # Haley And His Comets": Billboard (and some other sources) credit featured

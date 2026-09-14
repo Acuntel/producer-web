@@ -110,6 +110,9 @@ def run(dsn: str | None, dry_run: bool) -> None:
         conn.commit()
 
         songs = pd.read_parquet(DATA / "songs.parquet")
+        # The free tier holds about 500 MB: the millions of AcousticBrainz rows stay in parquet and the bins; only named sources load.
+        skip = {s for s in os.environ.get("DNA_PG_SKIP_SOURCES", "acousticbrainz").split(",") if s}
+        if skip: songs = songs[~songs["source"].isin(skip)]
         # parquet round-trips list<string> columns as numpy.ndarray, not list
         songs["genres"] = songs["genres"].apply(lambda v: list(v) if isinstance(v, (list, np.ndarray)) else None)
         with conn.cursor() as cur:

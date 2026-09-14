@@ -11,19 +11,19 @@ Output: data/dna/raw/acousticbrainz_songs.parquet in the DNA record shape.
 """
 from __future__ import annotations
 
-import csv, io, json, subprocess, sys, tarfile, time
+import csv, io, json, os, subprocess, sys, tarfile, time
 from pathlib import Path
 
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from util import norm_artist, norm_title, make_id  # noqa: E402
+from util import norm_artist, norm_title, stable_id, fold_tempo  # noqa: E402
 from families import family_from_genres, derive_lane  # noqa: E402
-from feel import feel_reads  # noqa: E402
+from feel import compute_feel  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
-RAW = ROOT / "data" / "dna" / "raw" / "ab"
-OUT = ROOT / "data" / "dna" / "raw" / "acousticbrainz_songs.parquet"
+RAW = Path(os.environ.get("AB_RAW", ROOT / "data" / "dna" / "raw" / "ab"))
+OUT = Path(os.environ.get("AB_OUT", ROOT / "data" / "dna" / "raw" / "acousticbrainz_songs.parquet"))
 KEYS = {"C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3, "E": 4, "F": 5, "F#": 6, "Gb": 6, "G": 7, "G#": 8, "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11}
 GENRE_TAGS = {"dnb": "drum and bass", "hou": "house", "tec": "techno", "tra": "trance", "amb": "ambient"}
 
@@ -59,13 +59,30 @@ def parse_highlevel(raw: bytes) -> dict | None:
     date = first(tags.get("date")) or first(tags.get("originaldate")) or ""
     year = int(date[:4]) if date[:4].isdigit() else None
     mbid = first(tags.get("musicbrainz_recordingid"))
-    genres = [g for g in [(hl.get("genre_rosamerica") or {}).get("value"), (hl.get("genre_dortmund") or {}).get("value"), GENRE_TAGS.get((hl.get("genre_electronic") or {}).get("value", ""), None)] if g]
-    ge = hl.get("genre_electronic") or {}
-    electronic_prob = max((ge.get("all") or {"x": 0}).values()) if ge.get("all") else None
+    # Family from the two general genre models (with their confidence); the electronic sub-genre model only
+    # says something when those call it dance or electronic.
+    ROSA = {"cla": "classical", "dan": "electronic", "hip": "hiphop", "jaz": "jazz", "pop": "pop", "rhy": "rnb", "roc": "rock", "spe": "other"}
+    DORT = {"alternative": "rock", "blues": "jazz", "electronic": "electronic", "folkcountry": "folk", "funksoulrnb": "rnb", "jazz": "jazz", "pop": "pop", "raphiphop": "hiphop", "rock": "rock"}
+    ELEC = {"hou": "house", "tec": "techno", "tra": "trance", "dnb": "dnb", "amb": "electronic"}
+    ro = hl.get("genre_rosamerica") or {}; do = hl.get("genre_dortmund") or {}; ge = hl.get("genre_electronic") or {}
+    rf = ROSA.get(ro.get("value", "")); df_ = DORT.get(do.get("value", ""))
+    rp = float(ro.get("probability") or 0); dp = float(do.get("probability") or 0)
+    melec = float(((hl.get("mood_electronic") or {}).get("all") or {}).get("electronic") or 0)
+    # Both general models over-call dance and electronic. Electronic needs both to agree, or one of them plus the
+    # audio's own electronic mood above 0.7; otherwise the non-electronic call wins, the more confident one first.
+    if rf == "electronic" and df_ == "electronic": family = "electronic"
+    elif rf == "electronic" and df_: family = "electronic" if melec >= 0.7 else df_
+    elif df_ == "electronic" and rf: family = "electronic" if melec >= 0.7 else rf
+    else: family = rf if rp >= dp else (df_ or rf)
+    if family == "electronic" and float(ge.get("probability") or 0) >= 0.5: family = ELEC.get(ge.get("value", ""), "electronic")
+    genres = [family] if family else []
+    electronic_prob = float(ge.get("probability") or 0)
     return {
         "mbid": mbid, "title": title, "artist": artist, "year": year,
         "duration_sec": ((d.get("metadata") or {}).get("audio_properties") or {}).get("length"),
-        "genres": genres, "genre_electronic": ge.get("value"), "electronic_prob": electronic_prob,
+        # The general genre models of this corpus are weak (rock reads as electronic); the guess is kept for reference,
+        # the family stays empty and the artist rollup takes it from the other sources.
+        "genres": [], "family": None, "genre_guess": family, "genre_electronic": ge.get("value"), "electronic_prob": electronic_prob,
         "danceability": prob(hl, "danceability", "danceable"),
         "mood_happy": prob(hl, "mood_happy", "happy"), "mood_sad": prob(hl, "mood_sad", "sad"),
         "mood_aggressive": prob(hl, "mood_aggressive", "aggressive"), "mood_relaxed": prob(hl, "mood_relaxed", "relaxed"),
@@ -124,19 +141,20 @@ def main() -> None:
     if "mode" not in df.columns: df["mode"] = None
     df["source"] = "acousticbrainz"
     df["artist_norm"] = df["artist"].map(norm_artist); df["title_norm"] = df["title"].map(norm_title)
-    df["id"] = [make_id("acousticbrainz", a, t) for a, t in zip(df["artist_norm"], df["title_norm"])]
+    df["id"] = [stable_id("acousticbrainz", a, t) for a, t in zip(df["artist_norm"], df["title_norm"])]
     df["decade"] = (df["year"] // 10 * 10).astype("Int64")
-    df["family"] = df["genres"].map(family_from_genres)
-    df.loc[df["electronic_prob"].fillna(0) > 0.6, "family"] = df.loc[df["electronic_prob"].fillna(0) > 0.6, "genre_electronic"].map(lambda g: {"hou": "house", "tec": "techno", "tra": "trance", "dnb": "dnb", "amb": "electronic"}.get(g, "electronic"))
-    df["tempo"] = pd.to_numeric(df["tempo"], errors="coerce")
+    df["family"] = None
+    df["year"] = pd.to_numeric(df["year"], errors="coerce").astype("Int64")
+    df["tempo"] = pd.to_numeric(df["tempo"], errors="coerce").map(lambda x: fold_tempo(float(x)) if pd.notna(x) else None)
     df["key_pc"] = df["key_name"].map(lambda k: KEYS.get(str(k), None) if k is not None else None)
     df["mode"] = df["mode"].map(lambda m: m if m in ("major", "minor") else None)
     df["lane"] = [derive_lane(f, t) for f, t in zip(df["family"], df["tempo"])]
     df["valence"] = df["mood_happy"]; df["energy"] = df[["mood_aggressive", "mood_party"]].mean(axis=1); df["acousticness"] = df["mood_acoustic"]
-    reads = feel_reads(df)
-    for k, v in reads.items(): df[k] = v
+    reads = pd.DataFrame([compute_feel(r) for r in df[["mode", "tempo", "energy", "valence", "acousticness", "family"]].assign(syncopation=None, borrowed=None, harmony_class=None).to_dict("records")])
+    for k in ("valence_read", "arousal_read", "tension_read", "warmth_read"):
+        if k in reads.columns: df[k] = reads[k].values
     keep = ["id", "source", "title", "artist", "artist_norm", "title_norm", "year", "decade", "genres", "family", "lane", "tempo", "key_pc", "mode", "duration_sec",
-            "energy", "danceability", "valence", "acousticness", "mood_happy", "mood_sad", "mood_aggressive", "mood_relaxed", "mood_party", "mood_electronic", "timbre_bright", "voice", "mbid",
+            "energy", "danceability", "valence", "acousticness", "genre_guess", "mood_happy", "mood_sad", "mood_aggressive", "mood_relaxed", "mood_party", "mood_electronic", "timbre_bright", "voice", "mbid",
             "valence_read", "arousal_read", "tension_read", "warmth_read"]
     df = df[[c for c in keep if c in df.columns]].drop_duplicates("id")
     df.to_parquet(OUT, index=False)
