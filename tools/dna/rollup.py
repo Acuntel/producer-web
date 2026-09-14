@@ -85,6 +85,18 @@ def disambiguate_ids(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def plain_dtypes(df: pd.DataFrame) -> pd.DataFrame:
+    """Columns that carry pandas' NA sentinel (nullable Int64/Float64/boolean, NA-flavored or arrow strings) become
+    plain numpy columns: floats with NaN, objects with None. The rollups compare and cast without NA checks."""
+    for c in df.columns:
+        dt = df[c].dtype
+        if getattr(dt, "na_value", None) is not pd.NA: continue
+        if pd.api.types.is_bool_dtype(dt): df[c] = df[c].astype(object).where(df[c].notna(), None)
+        elif pd.api.types.is_numeric_dtype(dt): df[c] = df[c].astype("float64")
+        else: df[c] = df[c].astype(object).where(df[c].notna(), None)
+    return df
+
+
 def combine() -> pd.DataFrame:
     frames = []
     for name in FRAGMENTS:
@@ -99,6 +111,7 @@ def combine() -> pd.DataFrame:
         raise SystemExit("[rollup] no fragments found - run the per-source scripts first")
     combined = pd.concat(frames, ignore_index=True)
     combined = combined[schema.COLUMN_NAMES]
+    combined = plain_dtypes(combined)
     combined = apply_artist_fold(combined)
     combined = disambiguate_ids(combined)
     SONGS_OUT.parent.mkdir(parents=True, exist_ok=True)

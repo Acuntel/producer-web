@@ -214,9 +214,9 @@ def main() -> None:
     df["source"] = "acousticbrainz"
     df["artist_norm"] = df["artist"].map(norm_artist); df["title_norm"] = df["title"].map(norm_title)
     df["id"] = [stable_id("acousticbrainz", a, t) for a, t in zip(df["artist_norm"], df["title_norm"])]
-    df["decade"] = (df["year"] // 10 * 10).astype("Int64")
+    df["year"] = pd.to_numeric(df["year"], errors="coerce").astype("float64")
+    df["decade"] = (df["year"] // 10 * 10).astype("float64")
     df["family"] = None
-    df["year"] = pd.to_numeric(df["year"], errors="coerce").astype("Int64")
     df["tempo"] = pd.to_numeric(df["tempo"], errors="coerce").map(lambda x: fold_tempo(float(x)) if pd.notna(x) else None)
     df["key_pc"] = df["key_name"].map(lambda k: KEYS.get(str(k), None) if k is not None else None)
     df["mode"] = df["mode"].map(lambda m: m if m in ("major", "minor") else None)
