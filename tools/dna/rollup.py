@@ -107,7 +107,9 @@ def fill_voice(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-CAL_FEATURES = ["valence", "energy", "danceability", "acousticness"]
+# The AcousticBrainz reads that predict the Spotify measures best: the seven moods, its danceability, voice, timbre
+# (from the fragment itself, since the schema keeps only the folded columns), plus log tempo.
+CAL_FEATURES = ["mood_happy", "mood_sad", "mood_aggressive", "mood_relaxed", "mood_party", "mood_electronic", "acousticness", "danceability", "voice", "timbre_bright"]
 
 
 def calibrate_acousticbrainz(df: pd.DataFrame) -> pd.DataFrame:
@@ -119,7 +121,8 @@ def calibrate_acousticbrainz(df: pd.DataFrame) -> pd.DataFrame:
     if not ab.any(): return df
     key = df["artist_norm"].fillna("") + "|" + df["title_norm"].fillna("")
     sp = df[df["source"] == "spotify"].assign(_k=key[df["source"] == "spotify"]).drop_duplicates("_k").set_index("_k")
-    a = df[ab].assign(_k=key[ab]).drop_duplicates("_k").set_index("_k")
+    native = pd.read_parquet(RAW / "acousticbrainz_songs.parquet", columns=["id"] + CAL_FEATURES).drop_duplicates("id").set_index("id")
+    a = df.loc[ab, ["id", "tempo"]].join(native, on="id").assign(_k=key[ab]).drop_duplicates("_k").set_index("_k")
     both = a.join(sp[["energy", "valence", "danceability"]], rsuffix="_sp", how="inner")
     report = {"overlap": int(len(both)), "fits": {}}
     if len(both) < 2000:
@@ -134,7 +137,7 @@ def calibrate_acousticbrainz(df: pd.DataFrame) -> pd.DataFrame:
         beta, *_ = np.linalg.lstsq(Xb[m], y[m], rcond=None); pred = Xb[m] @ beta
         r2 = 1 - ((y[m] - pred) ** 2).sum() / max(((y[m] - y[m].mean()) ** 2).sum(), 1e-9)
         fitted[tgt] = beta; report["fits"][tgt] = {"r2": round(float(r2), 3), "n": int(m.sum()), "beta": [round(float(b), 4) for b in beta]}
-    Xa = design(df[ab])
+    Xa = design(df.loc[ab, ["id", "tempo"]].join(native, on="id"))
     for tgt, beta in fitted.items():
         df.loc[ab, tgt] = np.clip(Xa @ beta, 0.0, 1.0)
     (DATA_DIR / "calibration.json").write_text(json.dumps(report, indent=1))
