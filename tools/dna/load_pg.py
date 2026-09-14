@@ -125,6 +125,13 @@ def run(dsn: str | None, dry_run: bool) -> None:
         artists_path = DATA / "artists.parquet"
         if artists_path.exists():
             artists = pd.read_parquet(artists_path)
+            # Same tier rule for artists: one row per artist that a named source knows, plus the artists the
+            # skipped sources alone know when they carry enough recordings to say something about them.
+            named = set(songs["artist_norm"].dropna())
+            min_songs = int(os.environ.get("DNA_PG_ARTISTS_MIN", "5"))
+            before = len(artists)
+            artists = artists[artists["artist_norm"].isin(named) | (artists["song_count"] >= min_songs)]
+            print(f"[load_pg] artists: {len(artists):,} of {before:,} rows load (named sources, or {min_songs}+ recordings elsewhere)", flush=True)
             for col in ("decades", "families", "exemplars"):
                 artists[col] = artists[col].apply(lambda v: list(v) if isinstance(v, (list, np.ndarray)) else [])
             # top_keys/top_progressions are JSON-encoded strings (artists_rollup.py:
