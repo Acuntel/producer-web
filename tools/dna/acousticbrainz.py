@@ -30,6 +30,10 @@ ROOT = Path(__file__).resolve().parents[2]
 RAW = Path(os.environ.get("AB_RAW", ROOT / "data" / "dna" / "raw" / "ab"))
 OUT = Path(os.environ.get("AB_OUT", ROOT / "data" / "dna" / "raw" / "acousticbrainz_songs.parquet"))
 KEYS = {"C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3, "E": 4, "F": 5, "F#": 6, "Gb": 6, "G": 7, "G#": 8, "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11}
+# The eighteen highlevel classifiers; every probability rides into the fingerprint (the labels are weak, the numbers are not).
+CLASSIFIERS = ["danceability", "gender", "genre_dortmund", "genre_electronic", "genre_rosamerica", "genre_tzanetakis", "ismir04_rhythm",
+               "mood_acoustic", "mood_aggressive", "mood_electronic", "mood_happy", "mood_party", "mood_relaxed", "mood_sad", "moods_mirex",
+               "timbre", "tonal_atonal", "voice_instrumental"]
 GENRE_TAGS = {"dnb": "drum and bass", "hou": "house", "tec": "techno", "tra": "trance", "amb": "ambient"}
 
 
@@ -82,7 +86,13 @@ def parse_highlevel(raw: bytes) -> dict | None:
     if family == "electronic" and float(ge.get("probability") or 0) >= 0.5: family = ELEC.get(ge.get("value", ""), "electronic")
     genres = [family] if family else []
     electronic_prob = float(ge.get("probability") or 0)
+    probs = {}
+    for clf in CLASSIFIERS:
+        for label, v in ((hl.get(clf) or {}).get("all") or {}).items():
+            try: probs[f"p_{clf}_{label}"] = float(v)
+            except (TypeError, ValueError): pass
     return {
+        **probs, "artist_mbid": first(tags.get("musicbrainz_artistid")),
         "mbid": mbid, "title": title, "artist": artist, "year": year,
         "duration_sec": ((d.get("metadata") or {}).get("audio_properties") or {}).get("length"),
         # The general genre models of this corpus are weak (rock reads as electronic); the guess is kept for reference,
@@ -131,8 +141,10 @@ def parse_features(path: Path, want: dict[str, str], keep_ids: set[str] | None =
     return pd.concat(frames, ignore_index=True).drop_duplicates("mbid")
 
 
-RHYTHM_WANT = {"bpm": "tempo", "danceability": "rhythm_danceability", "onset_rate": "onset_rate"}
-TONAL_WANT = {"key_key": "key_name", "key_scale": "mode"}
+RHYTHM_WANT = {"bpm": "tempo", "danceability": "rhythm_danceability", "onset_rate": "onset_rate",
+               "bpm_histogram_first_peak_bpm_mean": "bpm_peak1", "bpm_histogram_second_peak_bpm_mean": "bpm_peak2"}
+TONAL_WANT = {"key_key": "key_name", "key_scale": "mode", "tuning_frequency": "tuning_hz", "tuning_equal_tempered_deviation": "tuning_dev"}
+FEATURE_EXTRAS = ["rhythm_danceability", "onset_rate", "bpm_peak1", "bpm_peak2", "tuning_hz", "tuning_dev"]
 
 
 def stage_features() -> Path:
@@ -206,7 +218,7 @@ def main() -> None:
             feats = parse_features(rhythm, RHYTHM_WANT, ids) if rhythm and rhythm.stat().st_size > 1_000_000 else pd.DataFrame(columns=["mbid"])
             if tonal and tonal.stat().st_size > 1_000_000:
                 tf = parse_features(tonal, TONAL_WANT, ids); feats = feats.merge(tf, on="mbid", how="outer") if len(tf) else feats
-        cols = [c for c in ("tempo", "key_name", "mode") if c in feats.columns]
+        cols = [c for c in ("tempo", "key_name", "mode", *FEATURE_EXTRAS) if c in feats.columns]
         if cols: df = df.merge(feats[["mbid"] + cols].drop_duplicates("mbid"), on="mbid", how="left")
     if "tempo" not in df.columns: df["tempo"] = None
     if "key_name" not in df.columns: df["key_name"] = None
@@ -228,7 +240,10 @@ def main() -> None:
     keep = ["id", "source", "title", "artist", "artist_norm", "title_norm", "year", "decade", "genres", "family", "lane", "tempo", "key_pc", "mode", "duration_sec",
             "energy", "danceability", "valence", "acousticness", "genre_guess", "mood_happy", "mood_sad", "mood_aggressive", "mood_relaxed", "mood_party", "mood_electronic", "timbre_bright", "voice", "mbid",
             "valence_read", "arousal_read", "tension_read", "warmth_read"]
+    keep += [c for c in FEATURE_EXTRAS if c in df.columns] + ["artist_mbid"] + [c for c in df.columns if c.startswith("p_")]
     df = df[[c for c in keep if c in df.columns]].drop_duplicates("id")
+    for c in df.columns:
+        if c.startswith("p_"): df[c] = df[c].astype("float32")
     df.to_parquet(OUT, index=False)
     print(f"[acousticbrainz] wrote {OUT} ({len(df):,} rows; tempo for {df['tempo'].notna().sum():,}, key for {df['key_pc'].notna().sum():,}) in {time.time() - t0:.0f}s")
 
