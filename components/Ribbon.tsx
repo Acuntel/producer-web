@@ -12,7 +12,7 @@ export function Ribbon({ lines, interim, speakingText, thinking, tall }: { lines
   const lastIsProducer = shown.length > 0 && shown[shown.length - 1].role === "assistant";
 
   return (
-    <div className={`scroll-y flex min-h-0 flex-col justify-end gap-3 px-1 ${tall ? "max-h-[46dvh]" : "max-h-[32dvh]"}`} aria-live="polite">
+    <div className={`scroll-y flex min-h-0 flex-col justify-end gap-3 px-1 pt-3 ${tall ? "max-h-[46dvh]" : "max-h-[32dvh]"}`} aria-live="polite">
       {shown.map((l, i) => {
         const last = i === shown.length - 1;
         const you = l.role === "user";

@@ -5,6 +5,6 @@ export async function GET() {
     voice: !!process.env.ELEVENLABS_API_KEY,
     model: process.env.PRODUCER_MODEL || "claude-opus-5",
     accounts: !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-    version: "v10-accounts",
+    version: "v11-stage",
   });
 }

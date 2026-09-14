@@ -62,7 +62,8 @@ export type AudioClip = {
 };
 
 // Groove Pool: a 16-slot timing and accent map over one bar of 16ths (Ableton, MPC, 909).
-export type GrooveName = "straight" | "swing16" | "swing8" | "mpc16" | "mpc8" | "909" | "sp1200" | "garage-skip" | "custom";
+// "human-<style>" templates are measured from real drummers (lib/song/grooveHuman.ts): human-funk, human-rock, human-hiphop, human-latin, human-dance, human-afrobeat, human-jazz and more.
+export type GrooveName = "straight" | "swing16" | "swing8" | "mpc16" | "mpc8" | "909" | "sp1200" | "garage-skip" | "custom" | `human-${string}`;
 export type Groove = {
   name: GrooveName;
   amount: number;      // 0-1.3, Ableton's global amount; 1 = the template as written

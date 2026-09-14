@@ -10,8 +10,16 @@ AMP_AND_RE = re.compile(r"\s*&\s*|\s+\band\b\s+", re.IGNORECASE)
 PAREN_RE = re.compile(r"\s*\([^)]*\)\s*")
 BRACKET_RE = re.compile(r"\s*\[[^\]]*\]\s*")
 REMASTER_RE = re.compile(r"\s*-\s*(remaster(ed)?( \d{4})?|live( at .*)?|mono|stereo|single( version)?|radio edit)\s*$", re.IGNORECASE)
-PUNCT_RE = re.compile(r"[^a-z0-9 ]+")
 SPACE_RE = re.compile(r"\s+")
+
+
+def strip_punct(s: str) -> str:
+    """Keep letters/digits from ANY script and spaces, drop punctuation/symbols.
+    A plain ASCII-only regex ([^a-z0-9 ]) would wipe out every non-Latin title
+    (Chinese, Korean, Cyrillic, ...) to an empty string, colliding thousands of
+    genuinely different songs onto the same normalized id - str.isalnum() is
+    Unicode-aware and keeps them."""
+    return "".join(c if (c.isalnum() or c == " ") else " " for c in s)
 
 
 def ascii_fold(s: str) -> str:

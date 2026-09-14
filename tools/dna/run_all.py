@@ -37,12 +37,22 @@ def artist_lookup(artists: pd.DataFrame, name: str) -> None:
 
 
 def bucket_lookup(galton: dict) -> None:
+    """galton.json stores exemplars/progressions/grids once in shared tables and
+    each bin is a positional array (galton['bin_fields'] gives the order), not
+    an object - the same hit songs recur across many overlapping bins, and
+    repeating 9 field names per bin cost more than the data itself. Resolve
+    indices and positions back to a readable dict for the report."""
     key = "5:122-132|four_floor|minor|2020|electronic"
-    entry = galton.get(key)
-    if entry:
+    row = galton["bins"].get(key)
+    if row:
+        entry = dict(zip(galton["bin_fields"], row))
+        songs_t, prog_t, grid_t = galton["songs"], galton["progressions"], galton["grids"]
+        progs = [[prog_t[i], c] for i, c in entry["top_progressions"]]
+        exemplars = [songs_t[i] for i in entry["exemplars"][:3]]
+        kick = grid_t[entry["top_kick_grid"]] if entry["top_kick_grid"] is not None else None
         print(f"  {key}: count={entry['count']}, tempo_p50={entry['tempo_p50']}, "
-              f"mode_share={entry['mode_share']}, top_progressions={entry['top_progressions']}, "
-              f"top_kick={entry['top_kick_grid']}, exemplars={entry['exemplars'][:3]}")
+              f"mode_share={entry['mode_share']}, top_progressions={progs}, "
+              f"top_kick={kick}, exemplars={exemplars}")
     else:
         print(f"  {key}: no bin at count>=20 (see buckets.parquet for the raw, unfiltered count)")
 
@@ -86,7 +96,7 @@ def run():
     jr = hits["spotify_priors_by_hit_tier"]
     print(f"\nBillboard/Spotify join rate: {jr['join_rate']} ({jr['matched']:,}/{jr['billboard_songs']:,})")
     print(f"\nBuckets written: {len(result['buckets']):,} (all levels)")
-    print(f"galton.json: {len(galton):,} bins (count>=20), {result['galton_bytes'] / 1024:.1f} KB")
+    print(f"galton.json: {len(galton['bins']):,} bins (count>=20), {result['galton_bytes'] / 1024:.1f} KB")
     print(f"Load status: {'loaded to Postgres' if dsn else 'SKIPPED (no data/dna/PG_DSN)'}")
 
     print("\nExample lookups:")

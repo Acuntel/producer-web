@@ -9,11 +9,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
-import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 DATA = Path(__file__).resolve().parents[2] / "data" / "dna"
@@ -38,12 +37,15 @@ def resolve_dsn(cli_dsn: str | None) -> str | None:
 def clean(v):
     if v is None:
         return None
-    if isinstance(v, float) and math.isnan(v):
-        return None
-    if pd.isna(v) if not isinstance(v, (list,)) else False:
-        return None
-    if isinstance(v, (list, tuple)):
+    # array-like first: pd.isna() on an array returns an array, and `if <array>:`
+    # raises "truth value of an array is ambiguous" - check shape before scalar-NA.
+    if isinstance(v, (list, tuple, np.ndarray)):
         return list(v)
+    try:
+        if pd.isna(v):
+            return None
+    except (TypeError, ValueError):
+        pass
     if hasattr(v, "item"):
         return v.item()
     return v
@@ -91,17 +93,21 @@ def run(dsn: str | None, dry_run: bool) -> None:
         print("[load_pg] DDL applied")
 
         songs = pd.read_parquet(DATA / "songs.parquet")
-        songs["genres"] = songs["genres"].apply(lambda v: list(v) if isinstance(v, (list,)) else None)
+        # parquet round-trips list<string> columns as numpy.ndarray, not list
+        songs["genres"] = songs["genres"].apply(lambda v: list(v) if isinstance(v, (list, np.ndarray)) else None)
         with conn.cursor() as cur:
             copy_dataframe(cur, "public.dna_songs", songs)
 
         artists_path = DATA / "artists.parquet"
         if artists_path.exists():
             artists = pd.read_parquet(artists_path)
-            for col in ("top_keys", "top_progressions"):
-                artists[col] = artists[col].apply(lambda v: list(v) if isinstance(v, (list,)) else [])
+            for col in ("decades", "families", "exemplars"):
+                artists[col] = artists[col].apply(lambda v: list(v) if isinstance(v, (list, np.ndarray)) else [])
+            # top_keys/top_progressions are JSON-encoded strings (artists_rollup.py:
+            # nested [[value, count], ...] pairs don't survive pyarrow's plain-list
+            # inference) - the DDL declares them jsonb, so load as JSON, not text[].
             with conn.cursor() as cur:
-                copy_dataframe(cur, "public.dna_artists", artists, json_cols=set())
+                copy_dataframe(cur, "public.dna_artists", artists, json_cols={"top_keys", "top_progressions"})
 
         buckets_path = DATA / "buckets.parquet"
         if buckets_path.exists():

@@ -8,9 +8,22 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 OUT = Path(__file__).resolve().parents[2] / "data" / "dna" / "hits.json"
+
+
+def _json_default(o):
+    """pandas/numpy scalars (numpy.float32 from Float32-dtype .median()/.quantile()
+    calls, pd.NA, pd.NaT) aren't natively JSON-serializable - convert them."""
+    if isinstance(o, np.integer):
+        return int(o)
+    if isinstance(o, np.floating):
+        return float(o)
+    if o is pd.NA or (isinstance(o, float) and o != o):
+        return None
+    raise TypeError(f"Object of type {type(o)} is not JSON serializable")
 
 
 def decade_str(v):
@@ -112,7 +125,7 @@ def run(songs: pd.DataFrame) -> dict:
         "opening_progression_number1_by_decade": opening_progression_by_decade(songs),
         "spotify_priors_by_hit_tier": spotify_priors_by_hit_tier(songs),
     }
-    OUT.write_text(json.dumps(out, indent=1))
+    OUT.write_text(json.dumps(out, indent=1, default=_json_default))
     print(f"[hits] -> {OUT} ({OUT.stat().st_size / 1024:.1f} KB); "
           f"spotify join rate {out['spotify_priors_by_hit_tier']['join_rate']}")
     return out

@@ -3,8 +3,9 @@
 // per-event application the scheduler calls. Notes stay on the straight grid;
 // the groove moves them at play time, deterministically.
 import type { Groove, GrooveName, Song, Track } from "./types";
+import { HUMAN_GROOVES, HUMAN_GROOVE_NAMES } from "./grooveHuman";
 
-export const GROOVE_NAMES: GrooveName[] = ["straight", "swing16", "swing8", "mpc16", "mpc8", "909", "sp1200", "garage-skip", "custom"];
+export const GROOVE_NAMES: GrooveName[] = ["straight", "swing16", "swing8", "mpc16", "mpc8", "909", "sp1200", "garage-skip", "custom", ...(HUMAN_GROOVE_NAMES as GrooveName[])];
 export const STRAIGHT_ROLES = ["kick", "clap", "sub"];
 const SLOTS = 16;
 const T16 = 1 / 12;  // beats: an offbeat 16th at full triplet swing (0.25 -> 0.333)
@@ -30,7 +31,11 @@ export function templateOffsets(name: GrooveName): { timing: number[]; accents: 
     case "sp1200": return { timing: fill((i) => (i % 4 === 3 ? 0.07 : odd(i) ? 0.045 : 0)), accents: fill((i) => (downbeat(i) ? 0.2 : odd(i) ? -0.35 : -0.1)) };
     // UK garage skip: past-triplet 16ths, the skip lands on the 4th 16th of beats 1 and 3, the 2 and 4 stay firm.
     case "garage-skip": return { timing: fill((i) => (i === 3 || i === 11 ? 0.12 : odd(i) ? 0.09 : 0)), accents: fill((i) => (i === 3 || i === 11 ? 0.35 : i === 4 || i === 12 ? 0.2 : odd(i) ? -0.3 : 0)) };
-    default: return { timing: zeros(), accents: zeros() };
+    default: {
+      // Measured from real drummers: the pocket of a style, relative to its downbeat.
+      const h = HUMAN_GROOVES[name];
+      return h ? { timing: h.timing, accents: h.accents } : { timing: zeros(), accents: zeros() };
+    }
   }
 }
 

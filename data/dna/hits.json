@@ -1,0 +1,137 @@
+{
+ "tempo_by_decade_number1_vs_never_charted": {
+  "1890": {
+   "number1_tempo_p50": null,
+   "never_charted_tempo_p50": null
+  },
+  "1900": {
+   "number1_tempo_p50": null,
+   "never_charted_tempo_p50": null
+  },
+  "1910": {
+   "number1_tempo_p50": null,
+   "never_charted_tempo_p50": null
+  },
+  "1920": {
+   "number1_tempo_p50": null,
+   "never_charted_tempo_p50": null
+  },
+  "1930": {
+   "number1_tempo_p50": null,
+   "never_charted_tempo_p50": null
+  },
+  "1940": {
+   "number1_tempo_p50": null,
+   "never_charted_tempo_p50": null
+  },
+  "1950": {
+   "number1_tempo_p50": null,
+   "never_charted_tempo_p50": null
+  },
+  "1960": {
+   "number1_tempo_p50": null,
+   "never_charted_tempo_p50": null
+  },
+  "1970": {
+   "number1_tempo_p50": null,
+   "never_charted_tempo_p50": null
+  },
+  "1980": {
+   "number1_tempo_p50": null,
+   "never_charted_tempo_p50": null
+  },
+  "1990": {
+   "number1_tempo_p50": null,
+   "never_charted_tempo_p50": null
+  },
+  "2000": {
+   "number1_tempo_p50": null,
+   "never_charted_tempo_p50": null
+  },
+  "2010": {
+   "number1_tempo_p50": null,
+   "never_charted_tempo_p50": null
+  },
+  "2020": {
+   "number1_tempo_p50": null,
+   "never_charted_tempo_p50": null
+  }
+ },
+ "mode_share_number1_vs_charted": {
+  "number1_major_share": null,
+  "charted_major_share": null
+ },
+ "first_chorus_bar_distribution_number1": {},
+ "top_structures_number1": [],
+ "harmony_class_share_number1_vs_everything": {
+  "number1": {},
+  "everything": {
+   "modal_mixture": 0.4962,
+   "other": 0.2259,
+   "minor_axis": 0.092,
+   "blues": 0.0767,
+   "axis": 0.0411,
+   "doo_wop": 0.0296,
+   "two_chord": 0.0223,
+   "andalusian": 0.0156,
+   "one_chord": 0.0006
+  }
+ },
+ "median_duration_number1_by_decade": {
+  "1890": null,
+  "1900": null,
+  "1910": null,
+  "1920": null,
+  "1930": null,
+  "1940": null,
+  "1950": null,
+  "1960": null,
+  "1970": null,
+  "1980": null,
+  "1990": null,
+  "2000": null,
+  "2010": null,
+  "2020": null
+ },
+ "opening_progression_number1_by_decade": {
+  "1950": null,
+  "1960": null,
+  "1970": null,
+  "1980": null,
+  "1990": null,
+  "2000": null,
+  "2010": null,
+  "2020": null
+ },
+ "spotify_priors_by_hit_tier": {
+  "join_rate": 0.1389,
+  "billboard_songs": 32745,
+  "matched": 4549,
+  "by_hit_tier": {
+   "charted": {
+    "energy_p50": 0.7039999961853027,
+    "danceability_p50": 0.5960000157356262,
+    "valence_p50": 0.5199999809265137,
+    "n": 1407
+   },
+   "number1": {
+    "energy_p50": 0.6029999852180481,
+    "danceability_p50": 0.6309999823570251,
+    "valence_p50": 0.6679999828338623,
+    "n": 629
+   },
+   "top10": {
+    "energy_p50": 0.6589999794960022,
+    "danceability_p50": 0.578000009059906,
+    "valence_p50": 0.6290000081062317,
+    "n": 1303
+   },
+   "top40": {
+    "energy_p50": 0.6679999828338623,
+    "danceability_p50": 0.5910000205039978,
+    "valence_p50": 0.5329999923706055,
+    "n": 1210
+   }
+  }
+ }
+}

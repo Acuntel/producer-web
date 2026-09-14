@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -85,14 +86,86 @@ def build_galton_entry(row: dict) -> dict:
     bass = json.loads(row["top_bass_rhythms"])
     contour = json.loads(row["top_contours"])
     exemplars = json.loads(row["exemplars"])
+    # galton.json is a size-budgeted compact export (target <400 KB, section 3);
+    # buckets.parquet keeps full 4-decimal precision, this just rounds tighter
+    # for the version the brain reads at runtime.
+    mode_share = round(row["mode_share"], 2) if row["mode_share"] is not None else None
     return {
-        "count": row["count"], "tempo_p50": tempo_p50, "mode_share": row["mode_share"],
+        "count": row["count"], "tempo_p50": round(tempo_p50, 1) if tempo_p50 is not None else None,
+        "mode_share": mode_share,
         "top_progressions": prog, "top_kick_grid": kick[0][0] if kick else None,
         "top_bass_rhythm": bass[0][0] if bass else None,
         "top_contour": contour[0][0] if contour else None,
         "energy_contour": None,  # no per-row energy time-series column exists in songs.parquet
         "exemplars": exemplars[:6],
     }
+
+
+class Interner:
+    """The same hit songs/progressions/grids recur across many overlapping
+    marginal bins - store each string once and reference it by index so
+    galton.json stays near the section-3 400 KB target instead of repeating
+    the same "Artist: Title" strings thousands of times."""
+
+    def __init__(self):
+        self.table: list[str] = []
+        self.index: dict[str, int] = {}
+
+    def put(self, v: str | None) -> int | None:
+        if v is None:
+            return None
+        if v not in self.index:
+            self.index[v] = len(self.table)
+            self.table.append(v)
+        return self.index[v]
+
+
+# positional order of a compact bin entry - see the "bin_fields" key written
+# into galton.json itself, so a reader needs no separate schema doc.
+BIN_FIELDS = ["count", "tempo_p50", "mode_share", "top_progressions", "top_kick_grid",
+              "top_bass_rhythm", "top_contour", "energy_contour", "exemplars"]
+
+
+_YEAR_SUFFIX_RE = re.compile(r"\s*\(\d{4}\)$")
+
+
+def compact_entry(entry: dict, songs_i: Interner, prog_i: Interner, grid_i: Interner) -> list:
+    """A JSON array, not object: with ~2000 bins, repeating 9 field-name strings
+    per bin cost more than the actual data (measured: 562 KB of a 662 KB file
+    was key-name repetition). bin_fields above documents the order once.
+    Exemplar year suffixes are dropped only here (buckets.parquet keeps the
+    full "Artist: Title (year)" form) - it was the next-largest lever to stay
+    near the section-3 400 KB target."""
+    exemplars = [_YEAR_SUFFIX_RE.sub("", e) for e in entry["exemplars"]]
+    return [
+        entry["count"], entry["tempo_p50"], entry["mode_share"],
+        [[prog_i.put(p), c] for p, c in entry["top_progressions"]],
+        grid_i.put(entry["top_kick_grid"]), grid_i.put(entry["top_bass_rhythm"]),
+        grid_i.put(entry["top_contour"]), entry["energy_contour"],
+        [songs_i.put(e) for e in exemplars],
+    ]
+
+
+def build_galton(all_rows: list[dict]) -> dict:
+    songs_i, prog_i, grid_i = Interner(), Interner(), Interner()
+    galton_bins = {}
+    for row in all_rows:
+        if row["count"] < MIN_GALTON_COUNT:
+            continue
+        group_cols = bins.PIN_ORDER[:row["level"]]
+        key = f"{row['level']}:" + "|".join(str(row[c]) for c in group_cols)
+        galton_bins[key] = compact_entry(build_galton_entry(row), songs_i, prog_i, grid_i)
+    return {"bin_fields": BIN_FIELDS, "songs": songs_i.table, "progressions": prog_i.table,
+            "grids": grid_i.table, "bins": galton_bins}
+
+
+def write_galton(galton: dict) -> int:
+    GALTON_OUT.write_text(json.dumps(galton, separators=(",", ":")))
+    galton_bytes = GALTON_OUT.stat().st_size
+    print(f"[buckets] galton.json: {len(galton['bins']):,} bins (count>={MIN_GALTON_COUNT}), "
+          f"{len(galton['songs']):,} distinct exemplars, {len(galton['progressions']):,} distinct progressions "
+          f"-> {GALTON_OUT} ({galton_bytes / 1024:.1f} KB)")
+    return galton_bytes
 
 
 def run(songs: pd.DataFrame) -> tuple[pd.DataFrame, int]:
@@ -104,18 +177,7 @@ def run(songs: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     buckets_df = pd.DataFrame(all_rows)
     BUCKETS_OUT.parent.mkdir(parents=True, exist_ok=True)
     buckets_df.to_parquet(BUCKETS_OUT, index=False)
-
-    galton = {}
-    for row in all_rows:
-        if row["count"] < MIN_GALTON_COUNT:
-            continue
-        group_cols = bins.PIN_ORDER[:row["level"]]
-        key = f"{row['level']}:" + "|".join(str(row[c]) for c in group_cols)
-        galton[key] = build_galton_entry(row)
-
-    GALTON_OUT.write_text(json.dumps(galton, separators=(",", ":")))
-    galton_bytes = GALTON_OUT.stat().st_size
     print(f"[buckets] {len(buckets_df):,} total bins -> {BUCKETS_OUT}")
-    print(f"[buckets] galton.json: {len(galton):,} bins (count>={MIN_GALTON_COUNT}) "
-          f"-> {GALTON_OUT} ({galton_bytes / 1024:.1f} KB)")
+
+    galton_bytes = write_galton(build_galton(all_rows))
     return buckets_df, galton_bytes
