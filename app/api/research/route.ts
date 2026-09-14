@@ -26,20 +26,20 @@ export async function POST(req: Request) {
   const lines: string[] = [];
   let kind: "artist" | "song" | "genre" | "none" = "none";
 
-  // 1. The store: artist first, then a record by title, then the bins for a genre.
+  // 1. The store, in parallel: a record "artist - title", an artist by name, a record by title.
   const dash = query.match(/^(.+?)\s+[-:]\s+(.+)$/);
-  if (dash) {
-    const songs = await lookupSongs(dash[2], dash[1], 4);
-    if (songs.length) { kind = "song"; lines.push(...songs.map(songLine)); }
-  }
-  if (!lines.length) {
-    const a = await lookupArtist(query);
-    if (a) { kind = "artist"; lines.push(artistLine(a, await artistSongs(a.artist_norm, 8))); }
-  }
-  if (!lines.length && !dash) {
-    const songs = await lookupSongs(query, undefined, 4);
-    if (songs.length) { kind = "song"; lines.push(...songs.map(songLine)); }
-  }
+  const [bySplit, artist, byTitle] = await Promise.all([
+    dash ? lookupSongs(dash[2], dash[1], 4) : Promise.resolve([]),
+    lookupArtist(query),
+    dash ? Promise.resolve([]) : lookupSongs(query, undefined, 4),
+  ]);
+  if (bySplit.length) { kind = "song"; lines.push(...bySplit.map(songLine)); }
+  else if (artist) { kind = "artist"; lines.push(artistLine(artist, await artistSongs(artist.artist_norm, 8))); }
+  else if (byTitle.length) { kind = "song"; lines.push(...byTitle.map(songLine)); }
+  // A decade in the words ("80s", "1990s", "nineties") becomes a pin.
+  const decadeWord = query.toLowerCase().match(/\b(19|20)?(\d0)s\b/) ?? null;
+  const DECADE_NAMES: Record<string, string> = { fifties: "1950", sixties: "1960", seventies: "1970", eighties: "1980", nineties: "1990", noughties: "2000", "two thousands": "2000" };
+  const decade = decadeWord ? `${decadeWord[1] ?? (Number(decadeWord[2]) >= 30 ? "19" : "20")}${decadeWord[2]}` : Object.entries(DECADE_NAMES).find(([w]) => query.toLowerCase().includes(w))?.[1] ?? null;
   const fams = familiesIn(query);
   const lane = laneNamed(query);
   if (fams.length || lane) {
@@ -49,8 +49,9 @@ export async function POST(req: Request) {
     for (const f of fams.length ? fams : ["electronic"]) {
       // One bin per mode, so a minor-leaning lane is not answered with the major bin alone.
       const picks = ["minor", "major"].flatMap((mode) => {
-        const withTempo = tempoBand ? binsFor({ family: f, tempo_band: tempoBand, mode }, 1) : [];
-        return withTempo.length ? withTempo : binsFor({ family: f, mode }, 1);
+        const base = { family: f, mode, ...(decade ? { decade } : {}) };
+        const withTempo = tempoBand && !decade ? binsFor({ ...base, tempo_band: tempoBand }, 1) : [];
+        return withTempo.length ? withTempo : binsFor(base, 1).length ? binsFor(base, 1) : binsFor({ family: f, mode }, 1);
       });
       for (const b of picks) {
         const sig = `${b.count}|${b.exemplars.slice(0, 3).join(",")}`;
