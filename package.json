@@ -11,7 +11,9 @@
     "speak": "node tests/speak.e2e.mjs http://localhost:3111",
     "shots": "node tests/stage.shot.mjs http://localhost:3111 /tmp/producer-shots 1440 900 && node tests/stage.shot.mjs http://localhost:3111 /tmp/producer-shots 390 844",
     "serve": "next start -p 3111",
-    "deploy": "vercel --prod --yes --archive=tgz"
+    "deploy": "vercel --prod --yes --archive=tgz",
+    "ritual": "node tests/ritual.e2e.mjs http://localhost:3111",
+    "serve:mock": "PRODUCER_MOCK=1 next start -p 3111"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",

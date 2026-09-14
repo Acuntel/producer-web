@@ -147,3 +147,33 @@ export function binLine(b: Bin): string {
   const progs = b.progressions.slice(0, 3).map((p) => `${p[0]} (${p[1]})`).join("; ");
   return `Bin [${where}] (${b.count} songs): tempo p50 ${b.tempo ?? "?"}, major ${pct(b.modeMajor ?? undefined)}${progs ? `; progressions ${progs}` : ""}${b.kick ? `; kick ${b.kick}` : ""}${b.bass ? `; bass ${b.bass}` : ""}${b.contour ? `; hook ${b.contour}` : ""}${b.exemplars.length ? `; like ${b.exemplars.slice(0, 4).join(", ")}` : ""}.`;
 }
+
+// The canon: what DJs actually play, read from their mixes (dna_canon). Two questions:
+// who plays this artist, and what does this DJ play.
+export async function canonLines(name: string): Promise<string[]> {
+  const sb = supabaseAdmin(); if (!sb) return [];
+  const n = norm(name); if (!n) return [];
+  const out: string[] = [];
+  try {
+    const [played, mixes] = await Promise.all([
+      sb.from("dna_canon").select("dj,mix_name,position_sec,title").ilike("artist_norm", `%${n}%`).limit(8),
+      sb.from("dna_canon_mixes").select("name,dj,entries").ilike("dj", `%${name.trim()}%`).limit(3),
+    ]);
+    const rows = (played.data ?? []) as { dj: string; mix_name: string; position_sec: number | null; title: string }[];
+    if (rows.length) {
+      const by = new Map<string, string[]>();
+      for (const r of rows) { const k = r.dj || r.mix_name; by.set(k, [...(by.get(k) ?? []), `${r.title}${typeof r.position_sec === "number" ? ` at ${mmss(r.position_sec)}` : ""}`]); }
+      out.push(`Played by DJs: ${[...by.entries()].map(([dj, ts]) => `${dj} (${ts.slice(0, 3).join(", ")})`).join("; ")}.`);
+    }
+    const mx = (mixes.data ?? []) as { name: string; dj: string; entries: number }[];
+    if (mx.length) {
+      const r = await sb.from("dna_canon").select("artist,title,year,label").in("mix_name", mx.map((m) => m.name)).limit(60);
+      const recs = (r.data ?? []) as { artist: string; title: string; year: number | null; label: string | null }[];
+      const seen = new Set<string>(); const picks: string[] = [];
+      for (const x of recs) { const k = `${x.artist}|${x.title}`; if (seen.has(k) || !x.artist) continue; seen.add(k); picks.push(`${x.artist}: ${x.title}${x.year ? ` (${x.year})` : ""}`); if (picks.length >= 10) break; }
+      if (picks.length) out.push(`${mx[0].dj} plays (from ${mx.map((m) => m.name).join(", ")}): ${picks.join(", ")}.`);
+    }
+  } catch { /* tables may be empty */ }
+  return out;
+}
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;

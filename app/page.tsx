@@ -32,7 +32,7 @@ export default function App() {
   // Server and client must render the same first frame: the harness flag is read after mount.
   const [view, setView] = useState<"landing" | "stage">("landing");
   const [typed, setTyped] = useState(false);
-  useEffect(() => { if (harnessMode()) { setTyped(true); setView("stage"); } }, []);
+  useEffect(() => { if (harnessMode()) { setTyped(true); if (!/[?&]landing=1/.test(window.location.search)) setView("stage"); } }, []);
   const [showAccount, setShowAccount] = useState(false);
   const [showAnalyze, setShowAnalyze] = useState(false);
   const snapshotRef = useRef<(s: Song, m: SnapshotMeta) => void>(() => {});

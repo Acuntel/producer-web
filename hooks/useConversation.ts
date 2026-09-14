@@ -82,6 +82,7 @@ export function useConversation(d: Deps) {
     auditionRef.current = null; setAuditioning(false);
     await s.pause();
     doneWork(id, "played");
+    s.append("assistant", "In or out?");
     await dRef.current.voice.speak("In or out?");
   }, [addWork, doneWork, progressWork]);
 

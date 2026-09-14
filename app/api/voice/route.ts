@@ -3,6 +3,7 @@
 // control object and the usage. Target: first sentence inside a second.
 import { brainClient } from "@/lib/brain/client";
 import { VOICE_SYSTEM, parseVoice, voiceUser, type VoiceState } from "@/lib/brain/voice";
+import { mockVoice, mockRequested } from "@/lib/brain/mock";
 
 export const maxDuration = 30;
 const MODEL = process.env.PRODUCER_VOICE_MODEL || "claude-haiku-4-5";
@@ -21,9 +22,16 @@ function friendly(e: unknown): { say: string; control: Record<string, never>; de
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as Body | null;
   if (!body?.state || !body.utterance) return Response.json({ say: "Say that again?", control: {}, detail: "bad request" }, { status: 200 });
+  const wantsStream = (req.headers.get("accept") ?? "").includes("ndjson");
+  if (mockRequested(req)) {
+    // Harness only (PRODUCER_MOCK=1 on the server AND ?mock=1): deterministic answers, same wire shape, no key needed.
+    const m = mockVoice(body.state, body.utterance);
+    if (!wantsStream) return Response.json({ ...m, model: "mock", ms: 1, keySource: "mock" });
+    const lines = [JSON.stringify({ type: "say", text: m.say }), JSON.stringify({ type: "final", ...m, model: "mock", ms: 1, firstSentenceMs: 1, keySource: "mock" })];
+    return new Response(lines.join("\n") + "\n", { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" } });
+  }
   const { client, source } = await brainClient(req);
   if (!client) return Response.json({ say: "The studio brain is not connected yet. Add your Anthropic API key in Settings.", control: {}, detail: "no key" });
-  const wantsStream = (req.headers.get("accept") ?? "").includes("ndjson");
   const params = {
     model: MODEL,
     max_tokens: 400,
@@ -48,6 +56,12 @@ export async function POST(req: Request) {
         if (stopped) return;
         const cut = buf.indexOf("@@");
         const region = cut >= 0 ? buf.slice(0, cut) : buf;
+        // The first words go out at the first clause (a comma after four or more words) so the voice
+        // starts before the sentence closes; everything after is spoken sentence by sentence.
+        if (!firstAt && spoken === 0) {
+          const clause = /^([^.!?,]{12,}?,)\s/.exec(region);
+          if (clause && clause[1].split(/\s+/).length >= 4) { firstAt = Date.now() - t0; push({ type: "say", text: clause[1] }); spoken = clause[0].length; }
+        }
         const re = /[^.!?]+[.!?]+["')\]]*(\s+|$)/g;
         let m: RegExpExecArray | null; let end = 0;
         while ((m = re.exec(region)) !== null) {

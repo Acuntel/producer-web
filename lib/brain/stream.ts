@@ -6,7 +6,12 @@ export type StreamReply = { say: string; ops?: unknown[] | null; song?: unknown;
 // The governor can force economy mode (every Hands call on the fast model) once a record passes its spend target.
 let forcedEconomy = false;
 export const forceEconomy = (on: boolean) => { forcedEconomy = on; };
-export const economyQuery = () => (forcedEconomy || (typeof window !== "undefined" && /[?&]economy=1/.test(window.location.search)) ? "?economy=1" : "");
+export const economyQuery = () => {
+  const q: string[] = [];
+  if (forcedEconomy || (typeof window !== "undefined" && /[?&]economy=1/.test(window.location.search))) q.push("economy=1");
+  if (typeof window !== "undefined" && /[?&]mock=1/.test(window.location.search)) q.push("mock=1");   // harness only; the server also needs PRODUCER_MOCK=1
+  return q.length ? `?${q.join("&")}` : "";
+};
 
 export async function exchange(body: unknown, onSay: (say: string) => void, url = "/api/chat"): Promise<StreamReply> {
   const r = await fetch(url + economyQuery(), { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" }, body: JSON.stringify(body) });

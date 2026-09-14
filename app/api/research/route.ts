@@ -4,13 +4,13 @@
 // the answer is cached for everyone.
 import { brainClient } from "@/lib/brain/client";
 import { supabaseAdmin } from "@/lib/account/supabase";
-import { lookupArtist, lookupSongs, artistSongs, artistLine, songLine, binsFor, binLine, norm } from "@/lib/brain/galton";
+import { lookupArtist, lookupSongs, artistSongs, artistLine, songLine, binsFor, binLine, norm, canonLines } from "@/lib/brain/galton";
 import { laneNamed, laneInfo } from "@/lib/brain/laneNames";
 
 export const maxDuration = 30;
 const MODEL = process.env.PRODUCER_VOICE_MODEL || "claude-haiku-4-5";
 
-const FAMILY_WORDS: Record<string, string> = { house: "electronic", techno: "electronic", trance: "electronic", garage: "electronic", edm: "electronic", dance: "electronic", dnb: "electronic", "drum and bass": "electronic", dubstep: "electronic", disco: "electronic", rap: "hiphop", "hip hop": "hiphop", hiphop: "hiphop", trap: "hiphop", drill: "hiphop", pop: "pop", rock: "rock", metal: "metal", country: "country", "r&b": "rnb", rnb: "rnb", soul: "rnb", funk: "rnb", jazz: "jazz", reggae: "world", afro: "world", afrobeats: "world", amapiano: "world", latin: "latin", reggaeton: "latin", folk: "folk", indie: "rock" };
+const FAMILY_WORDS: Record<string, string> = { house: "house", techno: "techno", trance: "trance", garage: "garage", edm: "electronic", dance: "electronic", club: "electronic", electro: "electronic", dnb: "dnb", "drum and bass": "dnb", jungle: "dnb", dubstep: "dubstep", hardstyle: "hardstyle", "hard dance": "hardstyle", rave: "hardstyle", disco: "disco", rap: "hiphop", "hip hop": "hiphop", hiphop: "hiphop", trap: "hiphop", drill: "hiphop", pop: "pop", rock: "rock", metal: "metal", country: "country", "r&b": "rnb", rnb: "rnb", soul: "rnb", funk: "rnb", jazz: "jazz", reggae: "world", afrobeats: "world", amapiano: "world", latin: "latin", reggaeton: "latin", folk: "folk", indie: "rock" };
 
 function familiesIn(q: string): string[] {
   const t = q.toLowerCase(); const out = new Set<string>();
@@ -28,14 +28,16 @@ export async function POST(req: Request) {
 
   // 1. The store, in parallel: a record "artist - title", an artist by name, a record by title.
   const dash = query.match(/^(.+?)\s+[-:]\s+(.+)$/);
-  const [bySplit, artist, byTitle] = await Promise.all([
+  const [bySplit, artist, byTitle, canon] = await Promise.all([
     dash ? lookupSongs(dash[2], dash[1], 4) : Promise.resolve([]),
     lookupArtist(query),
     dash ? Promise.resolve([]) : lookupSongs(query, undefined, 4),
+    dash ? canonLines(dash[1]) : canonLines(query),
   ]);
   if (bySplit.length) { kind = "song"; lines.push(...bySplit.map(songLine)); }
   else if (artist) { kind = "artist"; lines.push(artistLine(artist, await artistSongs(artist.artist_norm, 8))); }
   else if (byTitle.length) { kind = "song"; lines.push(...byTitle.map(songLine)); }
+  if (canon.length) { if (kind === "none") kind = "artist"; lines.push(...canon); }
   // A decade in the words ("80s", "1990s", "nineties") becomes a pin.
   const decadeWord = query.toLowerCase().match(/\b(19|20)?(\d0)s\b/) ?? null;
   const DECADE_NAMES: Record<string, string> = { fifties: "1950", sixties: "1960", seventies: "1970", eighties: "1980", nineties: "1990", noughties: "2000", "two thousands": "2000" };
@@ -46,7 +48,7 @@ export async function POST(req: Request) {
     const info = lane ? laneInfo(lane) : null;
     const tempoBand = info ? bandFor(info.home) : body?.song?.bpm ? bandFor(body.song.bpm) : null;
     const seen = new Set<string>();
-    for (const f of fams.length ? fams : ["electronic"]) {
+    for (const f of fams.length ? fams : [lane && /house/.test(lane) ? "house" : lane && /techno/.test(lane) ? "techno" : "electronic"]) {
       // One bin per mode, so a minor-leaning lane is not answered with the major bin alone.
       const picks = ["minor", "major"].flatMap((mode) => {
         const base = { family: f, mode, ...(decade ? { decade } : {}) };

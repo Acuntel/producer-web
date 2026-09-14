@@ -16,6 +16,7 @@ import { laneRecipe } from "@/lib/brain/lanes";
 import { dnaLaneFor, laneNamed } from "@/lib/brain/laneNames";
 import { brainClient } from "@/lib/brain/client";
 import { skillsFor, skillsBlock } from "@/lib/brain/skills";
+import { mockHands, mockRequested } from "@/lib/brain/mock";
 
 export const maxDuration = 60;
 
@@ -44,6 +45,10 @@ export async function POST(req: Request) {
   const input = (await req.json()) as ExchangeInput;
   if (!input || typeof input !== "object" || !input.song || !Array.isArray((input.song as { tracks?: unknown }).tracks)) {
     return Response.json({ say: "I need the current song to work on. Reload the studio and try again.", ops: null, song: null, action: null, detail: "missing song" });
+  }
+  if (mockRequested(req)) {
+    const m = mockHands(input.song);
+    return Response.json({ say: m.say, ops: m.ops, song: m.song, action: null, listen: m.listen, expect: null, alternative: null, usage: null, model: "mock", keySource: "mock" });
   }
   const { client, source } = await brainClient(req);
   if (!client) {

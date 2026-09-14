@@ -7,16 +7,24 @@ from __future__ import annotations
 from collections import Counter
 
 FAMILIES = ["pop", "rock", "hiphop", "rnb", "country", "electronic", "latin",
-            "jazz", "classical", "folk", "metal", "world", "other"]
+            "jazz", "classical", "folk", "metal", "world", "other",
+            # electronic, split so the studio's dance lanes land in bins of their own kind
+            "house", "techno", "trance", "garage", "dnb", "dubstep", "hardstyle", "disco"]
 
 # Checked in this order; first substring hit on a tag assigns that tag's family.
-# Order matters where genres overlap (e.g. "garage" -> electronic before rock,
-# "punk" -> rock before metal).
+# Order matters where genres overlap (e.g. "garage" -> garage before rock,
+# "punk" -> rock before metal). The dance families come first so "deep-house"
+# is house, not the electronic umbrella.
 KEYWORDS: list[tuple[str, list[str]]] = [
-    ("electronic", ["house", "techno", "edm", "trance", "garage", "dnb",
-                     "drum-and-bass", "drum and bass", "dubstep", "disco",
-                     "electro", "idm", "hardstyle", "breakbeat", "club",
-                     "j-dance", "dance"]),
+    ("house", ["house"]),
+    ("techno", ["techno"]),
+    ("trance", ["trance"]),
+    ("garage", ["garage", "2-step", "2step", "speed garage"]),
+    ("dnb", ["dnb", "drum-and-bass", "drum and bass", "jungle"]),
+    ("dubstep", ["dubstep"]),
+    ("hardstyle", ["hardstyle", "hardcore techno", "gabber"]),
+    ("disco", ["disco"]),
+    ("electronic", ["edm", "electro", "idm", "breakbeat", "club", "j-dance", "dance", "electronic", "ambient", "trip-hop"]),
     ("hiphop", ["hip-hop", "hiphop", "hip hop", "rap", "trap", "grime"]),
     ("rnb", ["r-n-b", "rnb", "r&b", "soul", "funk", "motown"]),
     ("country", ["country", "honky-tonk", "honky tonk", "bluegrass", "americana"]),
@@ -35,6 +43,8 @@ KEYWORDS: list[tuple[str, list[str]]] = [
                "afrobeat", "indian", "iranian", "turkish", "malay", "j-idol",
                "anime", "bollywood"]),
 ]
+
+DANCE_FAMILIES = {"house", "techno", "trance", "garage", "dnb", "dubstep", "hardstyle", "disco", "electronic"}
 
 
 def tag_family(tag: str) -> str | None:
@@ -76,6 +86,8 @@ _GENERIC_LANE_FAMILIES = {"rnb", "country", "latin", "jazz", "classical",
 
 
 def derive_lane(family: str | None, tempo: float | None) -> str | None:
+    if family in DANCE_FAMILIES:
+        family = "electronic"
     """Studio lane from family + tempo, per docs/DNA_SPEC.md section 2.
     electronic: tempo picks tech-house/hard-house/melodic/dnb, else null (can't
     tell without tempo). hiphop -> trap/hiphop always. pop -> pop, rock -> rock.
