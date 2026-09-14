@@ -177,3 +177,18 @@ export async function canonLines(name: string): Promise<string[]> {
   return out;
 }
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+/** Records the studio has heard itself (any user), matched by artist or title. */
+export async function heardLines(name: string): Promise<string[]> {
+  const sb = supabaseAdmin(); if (!sb) return [];
+  const n = norm(name); if (!n) return [];
+  try {
+    const r = await sb.from("dna_heard").select("title,artist,year,tempo,key_name,bars,energy_contour,heard_count").or(`artist_norm.ilike.*${n}*,title_norm.ilike.*${n}*`).order("heard_count", { ascending: false }).limit(4);
+    const rows = (r.data ?? []) as { title: string | null; artist: string | null; year: number | null; tempo: number | null; key_name: string | null; bars: number | null; energy_contour: number[] | null; heard_count: number }[];
+    return rows.filter((x) => x.title).map((x) => {
+      const e = x.energy_contour ?? [];
+      const peak = e.length ? e.indexOf(Math.max(...e)) * 8 : null;
+      return `Heard by the studio: ${x.artist ?? "?"}: ${x.title}${x.year ? ` (${x.year})` : ""}${x.tempo ? `, ${Math.round(x.tempo)} BPM` : ""}${x.key_name ? `, ${x.key_name}` : ""}${x.bars ? `, ${x.bars} bars` : ""}${peak !== null ? `, peak energy around bar ${peak}` : ""}${x.heard_count > 1 ? `, heard ${x.heard_count} times` : ""}.`;
+    });
+  } catch { return []; }
+}

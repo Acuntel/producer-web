@@ -57,6 +57,8 @@ export function useStems(d: Deps) {
           void dRef.current.send(`The record could not be pulled in: ${msg} Tell the user in one sentence what to do instead (play it in another tab and use Capture what is playing, or upload the file). Do not change the song.`, { hidden: true });
         }
         if (r.status === "done" && announced.current !== id) {
+          // The record joins the store's heard table; a failure here is silent, the job is done either way.
+          void fetch("/api/dna/heard", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: id }) }).catch(() => {});
           announced.current = id;
           const res = r.result as StemsResult | null;
           if (res?.kind === "tracklist") {

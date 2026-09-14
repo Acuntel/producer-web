@@ -61,6 +61,28 @@ if (hc?.number1) {
   lines.push("");
   lines.push(`Harmony families among number ones (n=${hc.number1_n}) vs everything: ` + Object.entries(hc.number1).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `${k} ${Math.round(v * 100)}% (all ${Math.round((hc.everything?.[k] ?? 0) * 100)}%)`).join(", ") + ". Read: number ones borrow chords (modal mixture) as often as everything else and lean on blues and andalusian moves more than the average record; the four-chord axis loop is rarer among number ones than its reputation.");
 }
+const x = h.extra ?? {};
+if (x.keys_of_number_ones?.top?.length) { lines.push(""); lines.push(`## Keys of number ones (n=${x.keys_of_number_ones.n}): ${x.keys_of_number_ones.top.slice(0, 6).join(", ")}. Read: the top spot lives in the guitar and piano keys; a record in C, G or D major sits where most number ones sit.`); }
+const g = x.groove_by_hit_tier;
+if (g && g.number1 && g.charted) {
+  lines.push("");
+  lines.push("## Groove by hit tier (MIDI grids of the same songs)");
+  lines.push("| tier | syncopation p50 | four on the floor | top hook contours | n |");
+  lines.push("| --- | --- | --- | --- | --- |");
+  for (const t of ["number1", "top10", "top40", "charted", "never_charted"]) { const v = g[t]; if (!v) continue; lines.push(`| ${t} | ${v.syncopation_p50 ?? "?"} | ${v.four_on_the_floor_share !== null && v.four_on_the_floor_share !== undefined ? Math.round(v.four_on_the_floor_share * 100) + "%" : "?"} | ${Object.entries(v.top_contours ?? {}).map(([k, p]) => `${k} ${Math.round(p * 100)}%`).join(", ")} | ${v.n} |`); }
+  const n1 = g.number1, ch = g.charted;
+  const wave1 = n1.top_contours?.wave ?? 0, waveC = ch.top_contours?.wave ?? 0;
+  lines.push("");
+  lines.push(`Read: number ones carry LESS drum syncopation than the rest of the chart (${n1.syncopation_p50} vs ${ch.syncopation_p50}) and their hooks MOVE more (a wave contour in ${Math.round(wave1 * 100)}% of number ones against ${Math.round(waveC * 100)}%). The floor stays simple; the melody does the work. MOVE: for a hit, keep the kick and snare plain, put the motion in the hook's contour, not in the drums.`);
+}
+const tv = x.tempo_vs_valence_by_decade;
+if (tv && Object.keys(tv).length) { lines.push(""); lines.push("Tempo against happiness (valence), by decade: " + Object.entries(tv).sort().map(([d, v]) => `${d}s r=${v.tempo_valence_r} (n=${v.n})`).join(", ") + ". Read: faster is only slightly happier; valence is carried by mode, hook and brightness, not by tempo."); }
+const cv = x.chord_vocab_by_hit_tier;
+if (cv && Object.keys(cv).length) lines.push("Chord vocabulary by tier: " + Object.entries(cv).map(([t, v]) => `${t} ${v.chord_vocab_p50} (n=${v.n})`).join(", ") + ".");
+const fc2 = x.first_chorus_bar_by_decade;
+if (fc2 && Object.keys(fc2).length) lines.push("First chorus bar by decade (chart songs): " + Object.entries(fc2).sort().map(([d, v]) => `${d}s bar ${v.first_chorus_bar_p50} (n=${v.n})`).join(", ") + ".");
+const fam = x.family_of_number_ones_by_decade;
+if (fam && Object.keys(fam).length) lines.push("Which family took number one, by decade: " + Object.entries(fam).sort().map(([d, v]) => `${d}s ${Object.entries(v.top).map(([k, p]) => `${k} ${Math.round(p * 100)}%`).join("/")}`).join("; ") + ".");
 lines.push("");
 lines.push("## The checklist the studio scores a 'make it a hit' ask against");
 lines.push("- Danceability first: straight kick, medium syncopation in hats and bass, a clear downbeat every bar.");

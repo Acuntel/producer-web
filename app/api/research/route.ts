@@ -4,7 +4,7 @@
 // the answer is cached for everyone.
 import { brainClient } from "@/lib/brain/client";
 import { supabaseAdmin } from "@/lib/account/supabase";
-import { lookupArtist, lookupSongs, artistSongs, artistLine, songLine, binsFor, binLine, norm, canonLines } from "@/lib/brain/galton";
+import { lookupArtist, lookupSongs, artistSongs, artistLine, songLine, binsFor, binLine, norm, canonLines, heardLines } from "@/lib/brain/galton";
 import { laneNamed, laneInfo } from "@/lib/brain/laneNames";
 
 export const maxDuration = 30;
@@ -28,16 +28,18 @@ export async function POST(req: Request) {
 
   // 1. The store, in parallel: a record "artist - title", an artist by name, a record by title.
   const dash = query.match(/^(.+?)\s+[-:]\s+(.+)$/);
-  const [bySplit, artist, byTitle, canon] = await Promise.all([
+  const [bySplit, artist, byTitle, canon, heard] = await Promise.all([
     dash ? lookupSongs(dash[2], dash[1], 4) : Promise.resolve([]),
     lookupArtist(query),
     dash ? Promise.resolve([]) : lookupSongs(query, undefined, 4),
     dash ? canonLines(dash[1]) : canonLines(query),
+    heardLines(dash ? dash[2] : query),
   ]);
   if (bySplit.length) { kind = "song"; lines.push(...bySplit.map(songLine)); }
   else if (artist) { kind = "artist"; lines.push(artistLine(artist, await artistSongs(artist.artist_norm, 8))); }
   else if (byTitle.length) { kind = "song"; lines.push(...byTitle.map(songLine)); }
   if (canon.length) { if (kind === "none") kind = "artist"; lines.push(...canon); }
+  if (heard.length) { if (kind === "none") kind = "song"; lines.push(...heard); }
   // A decade in the words ("80s", "1990s", "nineties") becomes a pin.
   const decadeWord = query.toLowerCase().match(/\b(19|20)?(\d0)s\b/) ?? null;
   const DECADE_NAMES: Record<string, string> = { fifties: "1950", sixties: "1960", seventies: "1970", eighties: "1980", nineties: "1990", noughties: "2000", "two thousands": "2000" };

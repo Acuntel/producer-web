@@ -35,6 +35,22 @@ Chord vocabulary of a number one: 8 distinct chords at the median. Simple harmon
 
 Harmony families among number ones (n=219) vs everything: modal_mixture 45% (all 50%), other 31% (all 23%), blues 7% (all 8%), minor_axis 5% (all 9%), andalusian 5% (all 2%), doo_wop 3% (all 3%). Read: number ones borrow chords (modal mixture) as often as everything else and lean on blues and andalusian moves more than the average record; the four-chord axis loop is rarer among number ones than its reputation.
 
+## Keys of number ones (n=311): C major: 11%, Db major: 11%, G major: 10%, D major: 9%, A major: 5%, F major: 5%. Read: the top spot lives in the guitar and piano keys; a record in C, G or D major sits where most number ones sit.
+
+## Groove by hit tier (MIDI grids of the same songs)
+| tier | syncopation p50 | four on the floor | top hook contours | n |
+| --- | --- | --- | --- | --- |
+| number1 | 0.119 | 14% | flat 32%, wave 28%, arch 16% | 475 |
+| top10 | 0.091 | 13% | flat 34%, wave 22%, fall 16% | 982 |
+| top40 | 0.101 | 16% | flat 46%, wave 20%, fall 14% | 770 |
+| charted | 0.155 | 18% | flat 45%, wave 19%, arch 16% | 434 |
+| never_charted | 0.176 | 17% | flat 31%, wave 27%, arch 16% | 7479 |
+
+Read: number ones carry LESS drum syncopation than the rest of the chart (0.119 vs 0.155) and their hooks MOVE more (a wave contour in 28% of number ones against 19%). The floor stays simple; the melody does the work. MOVE: for a hit, keep the kick and snare plain, put the motion in the hook's contour, not in the drums.
+Chord vocabulary by tier: charted 5 (n=292), number1 6 (n=99), top10 6 (n=211), top40 5 (n=238).
+First chorus bar by decade (chart songs): 1960s bar 13.5 (n=34), 1970s bar 13.5 (n=60), 1980s bar 22 (n=88), 1990s bar 19 (n=44), 2000s bar 17 (n=84), 2010s bar 15.5 (n=142), 2020s bar 16 (n=104).
+Which family took number one, by decade: 1960s rock 77%/rnb 9%/jazz 7%; 1970s disco 48%/folk 15%/rock 15%; 1980s disco 34%/rock 27%/pop 23%; 2010s electronic 45%/pop 20%/hiphop 16%; 2020s pop 41%/hiphop 23%/electronic 23%.
+
 ## The checklist the studio scores a 'make it a hit' ask against
 - Danceability first: straight kick, medium syncopation in hats and bass, a clear downbeat every bar.
 - Valence: a lifted hook (arch contour, small intervals, one twist), major color or a bright minor chorus.

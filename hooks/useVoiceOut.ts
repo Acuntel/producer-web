@@ -36,6 +36,7 @@ export function useVoiceOut(d: Deps = {}) {
   // Fetch one sentence as PCM and schedule it; resolves when the audio has finished playing.
   const playSentence = useCallback(async (text: string, gen: number): Promise<boolean> => {
     if (voiceOk.current === false) return false;
+    if (typeof window !== "undefined" && /[?&]voice=local/.test(window.location.search)) return false;   // force the free voice (harness, or a user's choice)
     const ac = new AbortController(); abortsRef.current.push(ac);
     try {
       const r = await fetch("/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, format: "pcm" }), signal: ac.signal });
@@ -89,7 +90,7 @@ export function useVoiceOut(d: Deps = {}) {
       sourcesRef.current.push(src); src.onended = () => { sourcesRef.current = sourcesRef.current.filter((s) => s !== src); };
       await new Promise((res) => setTimeout(res, Math.max(0, (nextAtRef.current - c.currentTime) * 1000)));
       return true;
-    } catch { return false; }
+    } catch (e) { console.warn("kokoro: local voice failed", e instanceof Error ? e.message : e); return false; }
   }, []);
   const browserSpeak = (text: string) => new Promise<void>((res) => {
     if (typeof speechSynthesis === "undefined") { res(); return; }

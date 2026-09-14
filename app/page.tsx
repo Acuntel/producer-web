@@ -33,6 +33,8 @@ export default function App() {
   const [view, setView] = useState<"landing" | "stage">("landing");
   const [typed, setTyped] = useState(false);
   useEffect(() => { if (harnessMode()) { setTyped(true); if (!/[?&]landing=1/.test(window.location.search)) setView("stage"); } }, []);
+  // No paid voice configured: the free voice starts downloading now, so it is ready by the first reply.
+  useEffect(() => { fetch("/api/health").then((r) => r.json()).then((h: { voice?: boolean }) => { if (h && h.voice === false) void import("@/lib/voice/kokoro").then((m) => m.loadKokoro()); }).catch(() => {}); }, []);
   const [showAccount, setShowAccount] = useState(false);
   const [showAnalyze, setShowAnalyze] = useState(false);
   const snapshotRef = useRef<(s: Song, m: SnapshotMeta) => void>(() => {});

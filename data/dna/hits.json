@@ -522,5 +522,167 @@
    "one_chord": 0.0006
   }
  },
- "chord_vocab_p50_number1": 8.0
+ "chord_vocab_p50_number1": 8.0,
+ "extra": {
+  "keys_of_number_ones": {
+   "n": 311,
+   "top": [
+    "C major: 11%",
+    "Db major: 11%",
+    "G major: 10%",
+    "D major: 9%",
+    "A major: 5%",
+    "F major: 5%",
+    "Ab major: 5%",
+    "E major: 5%"
+   ]
+  },
+  "groove_by_hit_tier": {
+   "charted": {
+    "n": 434,
+    "syncopation_p50": 0.155,
+    "swing_p50": 0.5,
+    "four_on_the_floor_share": 0.179,
+    "top_contours": {
+     "flat": 0.45,
+     "wave": 0.19,
+     "arch": 0.16
+    }
+   },
+   "number1": {
+    "n": 475,
+    "syncopation_p50": 0.119,
+    "swing_p50": 0.5,
+    "four_on_the_floor_share": 0.144,
+    "top_contours": {
+     "flat": 0.32,
+     "wave": 0.28,
+     "arch": 0.16
+    }
+   },
+   "top10": {
+    "n": 982,
+    "syncopation_p50": 0.091,
+    "swing_p50": 0.5,
+    "four_on_the_floor_share": 0.134,
+    "top_contours": {
+     "flat": 0.34,
+     "wave": 0.22,
+     "fall": 0.16
+    }
+   },
+   "top40": {
+    "n": 770,
+    "syncopation_p50": 0.101,
+    "swing_p50": 0.5,
+    "four_on_the_floor_share": 0.162,
+    "top_contours": {
+     "flat": 0.46,
+     "wave": 0.2,
+     "fall": 0.14
+    }
+   },
+   "never_charted": {
+    "n": 7479,
+    "syncopation_p50": 0.176,
+    "swing_p50": 0.5,
+    "four_on_the_floor_share": 0.168,
+    "top_contours": {
+     "flat": 0.31,
+     "wave": 0.27,
+     "arch": 0.16
+    }
+   }
+  },
+  "chord_vocab_by_hit_tier": {
+   "charted": {
+    "n": 292,
+    "chord_vocab_p50": 5.0
+   },
+   "number1": {
+    "n": 99,
+    "chord_vocab_p50": 6.0
+   },
+   "top10": {
+    "n": 211,
+    "chord_vocab_p50": 6.0
+   },
+   "top40": {
+    "n": 238,
+    "chord_vocab_p50": 5.0
+   }
+  },
+  "first_chorus_bar_by_decade": {
+   "1960": {
+    "n": 34,
+    "first_chorus_bar_p50": 13.5
+   },
+   "1970": {
+    "n": 60,
+    "first_chorus_bar_p50": 13.5
+   },
+   "1980": {
+    "n": 88,
+    "first_chorus_bar_p50": 22.0
+   },
+   "1990": {
+    "n": 44,
+    "first_chorus_bar_p50": 19.0
+   },
+   "2000": {
+    "n": 84,
+    "first_chorus_bar_p50": 17.0
+   },
+   "2010": {
+    "n": 142,
+    "first_chorus_bar_p50": 15.5
+   },
+   "2020": {
+    "n": 104,
+    "first_chorus_bar_p50": 16.0
+   }
+  },
+  "family_of_number_ones_by_decade": {
+   "1960": {
+    "n": 70,
+    "top": {
+     "rock": 0.77,
+     "rnb": 0.09,
+     "jazz": 0.07
+    }
+   },
+   "1970": {
+    "n": 48,
+    "top": {
+     "disco": 0.48,
+     "folk": 0.15,
+     "rock": 0.15
+    }
+   },
+   "1980": {
+    "n": 71,
+    "top": {
+     "disco": 0.34,
+     "rock": 0.27,
+     "pop": 0.23
+    }
+   },
+   "2010": {
+    "n": 44,
+    "top": {
+     "electronic": 0.45,
+     "pop": 0.2,
+     "hiphop": 0.16
+    }
+   },
+   "2020": {
+    "n": 22,
+    "top": {
+     "pop": 0.41,
+     "hiphop": 0.23,
+     "electronic": 0.23
+    }
+   }
+  }
+ }
 }
