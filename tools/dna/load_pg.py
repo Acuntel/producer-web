@@ -68,6 +68,8 @@ def copy_dataframe(cur, table: str, df: pd.DataFrame, json_cols: set[str] = froz
                 vals = []
                 for col, v in zip(cols, row):
                     v = clean(v)
+                    # Integer columns arrive as floats once a fragment carried a gap ("1990.0"): whole floats go as ints.
+                    if isinstance(v, float) and v == v and v.is_integer(): v = int(v)
                     if col in json_cols and v is not None and not isinstance(v, Json):
                         v = Json(v if isinstance(v, dict) else json.loads(v) if isinstance(v, str) else v)
                     vals.append(v)
