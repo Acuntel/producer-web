@@ -123,7 +123,7 @@ def calibrate_acousticbrainz(df: pd.DataFrame) -> pd.DataFrame:
     sp = df[df["source"] == "spotify"].assign(_k=key[df["source"] == "spotify"]).drop_duplicates("_k").set_index("_k")
     native = pd.read_parquet(RAW / "acousticbrainz_songs.parquet", columns=["id"] + CAL_FEATURES).drop_duplicates("id").set_index("id")
     a = df.loc[ab, ["id", "tempo"]].join(native, on="id").assign(_k=key[ab]).drop_duplicates("_k").set_index("_k")
-    both = a.join(sp[["energy", "valence", "danceability"]], rsuffix="_sp", how="inner")
+    both = a.join(sp[["energy", "valence", "danceability"]].rename(columns=lambda c: f"{c}_sp"), how="inner")
     report = {"overlap": int(len(both)), "fits": {}}
     if len(both) < 2000:
         report["note"] = "too little overlap to calibrate"; (DATA_DIR / "calibration.json").write_text(json.dumps(report, indent=1)); return df
