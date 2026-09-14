@@ -243,3 +243,29 @@ Not yet built from this document: server-side usage rows (the meter is per brows
 3. **The taste ledger into the store.** Every "in" and "out" he says, every A or B he keeps, with the feel and the numbers of the moment, becomes a row. The Hands read his ledger the way they read the lane DNA; over months the producer learns what "boppy" means in his hands, not the average listener's.
 4. **The ears as the reward.** The research spine already pointed at it: generate, render, hear, compare to the references and the canon, revise. Run that loop without him in the room (the initiative loop exists) so the producer arrives at the session with three candidates already graded, and he judges instead of waits.
 5. **The discovery engine.** The extra questions tonight were hand-written. The next version asks the store its own questions: every pair of columns across eight hundred thousand rows, ranked by how much a hit tier separates them, with the era and the family held fixed, and writes what it finds in plain sentences with the sample size. That is the inquisitive machine the brief describes, and the store is now big enough to feed it.
+
+## 12. Every song its own address (2026-09-14, the fourth stretch)
+
+Brady asked whether the machine actually understands each song and sorts each one uniquely. The honest read on 09-14 morning: every song has its own DNA record, but the board is coarse. Most pins read unknown for most songs, no bin has all eight pins known, the median full bin holds 24 songs and the largest 67,407, and family is known for 4% of songs. This stretch fixes those shortfalls with what is already on disk plus one new public input.
+
+### 12.1 What must be true at the end
+
+- Every audio-measured song (AcousticBrainz, Spotify) carries a fingerprint: 32 numbers that place it in a space where distance means "sounds like". Fewer than 1% of songs share an exact fingerprint.
+- "Sounds like X" is answered from the fingerprint in under 100 ms in-process, no database, and the answer for a DJ-played record is judged against the canon: its ten nearest neighbours contain records from the same mixes more often than chance.
+- The board has pins every audio-measured song can answer: tempo band, mode, energy band, feel quadrant, decade, family, voice, then the sparse ones (meter feel, structure, harmony, hit tier). Full-depth bins with every audio pin known exist, and the share of songs in bins with three or more unknown pins falls below half.
+- Family coverage rises from 4% toward the majority of named songs: an artist's known family propagates to the artist's other songs, DJ canon plays give a dance family, and MusicBrainz's own artist genre tags (CC0, joined on the artist id AcousticBrainz already carries) label the rest of the corpus that MusicBrainz knows.
+- AcousticBrainz energy, valence and danceability are calibrated to the Spotify scale on the 10,225 shared recordings (energy R2 0.56, valence 0.19, danceability 0.25), and the spec records those numbers.
+- The masterprompt, the spec, the gym log and memory say what shipped and with what numbers.
+
+### 12.2 Mechanism
+
+1. Wider read of the dumps already on disk: all eighteen highlevel classifiers (about sixty probabilities per recording), the rhythm extras (tempo histogram peaks, onset rate, danceability) and tuning. No new AcousticBrainz download.
+2. Fingerprint: standardise, PCA to 32 dimensions, int8. Shipped as flat binaries (keys sorted for binary search, vectors, names with offsets, a few stats) under data/prints, traced into the research function. Brute-force nearest neighbours over a million rows is a 36 MB scan.
+3. Pins: energy band from calibrated energy quartiles, feel quadrant from the valence and arousal reads, voice from the voice classifier. New pin order puts the universal pins first. Buckets and galton.json rebuild; the shipped subset stays under two megabytes.
+4. Family: artist propagation inside the rollup, canon DJ family, MusicBrainz artist genres from the JSON dump. Each step reports the coverage it adds.
+5. Calibration: linear fits from the moods, danceability, voice, timbre and log tempo to the Spotify measures, applied to AcousticBrainz rows before the rollup.
+6. Proof lines: fingerprint duplicate rate, neighbour test against the canon with a random baseline, in-process latency, pin coverage before and after, family coverage before and after, one live probe per new behaviour.
+
+### 12.3 Constraints carried
+
+Free Supabase tier: the fingerprints do not enter Postgres. No agents unless a job is repetitive and well specified. No em dashes in copy. Deploy through `npm run deploy`.
