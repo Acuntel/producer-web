@@ -8,6 +8,11 @@ Input:  data/dna/raw/ab/*.tar.zst   (highlevel parts; rhythm and tonal feature t
 Output: data/dna/raw/acousticbrainz_songs.parquet in the DNA record shape.
 
   <dna-venv>/bin/python tools/dna/acousticbrainz.py [--limit N]
+
+Staged so the work overlaps the downloads (each stage caches under data/dna/raw/ab/):
+  AB_STAGE=features   parse the rhythm and tonal CSVs once -> features.parquet (no name filter)
+  AB_STAGE=highlevel AB_PART=<n>   parse one highlevel part -> highlevel-<n>.parquet
+  (no stage)          parse any part without a cache, join the caches, write the DNA parquet
 """
 from __future__ import annotations
 
@@ -92,22 +97,32 @@ def parse_highlevel(raw: bytes) -> dict | None:
     }
 
 
-def parse_features(path: Path, want: dict[str, str], keep_ids: set[str]) -> pd.DataFrame:
+class _NoSeek(io.RawIOBase):
+    """A streamed tar member as a plain raw stream: pandas asks for seekable() and the tar's stream object has none."""
+    def __init__(self, f): self.f = f
+    def readable(self): return True
+    def seekable(self): return False
+    def readinto(self, b):
+        data = self.f.read(len(b)); n = len(data); b[:n] = data; return n
+
+
+def parse_features(path: Path, want: dict[str, str], keep_ids: set[str] | None = None) -> pd.DataFrame:
     """A lowlevel feature dump: one huge CSV inside the tar (mbid, submission_offset, ...). Streamed in
-    chunks, first submission per recording, only the recordings we have names for."""
+    chunks, first submission per recording, filtered to keep_ids when given."""
     proc = subprocess.Popen(["zstd", "-dc", str(path)], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     frames = []; seen = 0
     with tarfile.open(fileobj=proc.stdout, mode="r|") as tar:
         for m in tar:
             if not m.isfile() or not m.name.endswith(".csv"): continue
-            f = tar.extractfile(m)
-            if f is None: continue
+            raw_f = tar.extractfile(m)
+            if raw_f is None: continue
+            f = io.BufferedReader(_NoSeek(raw_f), buffer_size=1 << 22)
             header = f.readline().decode("utf-8", "ignore").strip().split(",")
             cols = [c for c in header if c in want or c in ("mbid", "submission_offset")]
             for chunk in pd.read_csv(f, names=header, usecols=cols, chunksize=1_000_000, low_memory=False):
                 seen += len(chunk)
                 if "submission_offset" in chunk.columns: chunk = chunk[chunk["submission_offset"] == 0]
-                chunk = chunk[chunk["mbid"].isin(keep_ids)]
+                if keep_ids is not None: chunk = chunk[chunk["mbid"].isin(keep_ids)]
                 if len(chunk): frames.append(chunk.rename(columns=want)[["mbid"] + [v for k, v in want.items() if k in cols]])
                 if seen % 5_000_000 < 1_000_000: print(f"[acousticbrainz] {path.name}: {seen:,} rows read, {sum(len(x) for x in frames):,} kept", flush=True)
             break
@@ -116,31 +131,80 @@ def parse_features(path: Path, want: dict[str, str], keep_ids: set[str]) -> pd.D
     return pd.concat(frames, ignore_index=True).drop_duplicates("mbid")
 
 
+RHYTHM_WANT = {"bpm": "tempo", "danceability": "rhythm_danceability", "onset_rate": "onset_rate"}
+TONAL_WANT = {"key_key": "key_name", "key_scale": "mode"}
+
+
+def stage_features() -> Path:
+    """Both feature CSVs, every recording's first submission, joined on mbid and cached."""
+    out = RAW / "features.parquet"
+    t0 = time.time()
+    rhythm = next(iter(RAW.glob("*rhythm.tar.zst")), None); tonal = next(iter(RAW.glob("*tonal.tar.zst")), None)
+    rf = parse_features(rhythm, RHYTHM_WANT) if rhythm else pd.DataFrame(columns=["mbid"])
+    print(f"[acousticbrainz] rhythm: {len(rf):,} recordings in {time.time() - t0:.0f}s", flush=True)
+    tf = parse_features(tonal, TONAL_WANT) if tonal else pd.DataFrame(columns=["mbid"])
+    print(f"[acousticbrainz] tonal: {len(tf):,} recordings in {time.time() - t0:.0f}s", flush=True)
+    df = rf.merge(tf, on="mbid", how="outer") if len(tf) else rf
+    df.to_parquet(out, index=False)
+    print(f"[acousticbrainz] wrote {out} ({len(df):,} recordings) in {time.time() - t0:.0f}s", flush=True)
+    return out
+
+
+def parse_part(p: Path, limit: int | None = None) -> pd.DataFrame:
+    t0 = time.time(); rows: list[dict] = []; seen = 0
+    for name, raw in stream_tar(p):
+        if not name.endswith(".json"): continue
+        seen += 1
+        r = parse_highlevel(raw)
+        if r: rows.append(r)
+        if seen % 200_000 == 0: print(f"[acousticbrainz] {p.name}: {seen:,} files, {len(rows):,} named", flush=True)
+        if limit and len(rows) >= limit: break
+    df = pd.DataFrame(rows)
+    print(f"[acousticbrainz] {p.name}: {seen:,} files -> {len(df):,} named recordings in {time.time() - t0:.0f}s", flush=True)
+    return df
+
+
+def part_cache(p: Path) -> Path:
+    n = p.stem.replace(".tar", "").rsplit("-", 1)[-1]
+    return RAW / f"highlevel-{n}.parquet"
+
+
+def stage_highlevel(part: str) -> Path:
+    p = next(iter(RAW.glob(f"acousticbrainz-highlevel-json-*-{part}.tar.zst")), None)
+    if not p: sys.exit(f"no highlevel part {part} in {RAW}")
+    df = parse_part(p)
+    out = part_cache(p); df.to_parquet(out, index=False)
+    print(f"[acousticbrainz] wrote {out}", flush=True)
+    return out
+
+
 def main() -> None:
+    stage = os.environ.get("AB_STAGE")
+    if stage == "features": stage_features(); return
+    if stage == "highlevel": stage_highlevel(os.environ["AB_PART"]); return
     limit = int(sys.argv[sys.argv.index("--limit") + 1]) if "--limit" in sys.argv else None
     parts = sorted(RAW.glob("acousticbrainz-highlevel-json-*.tar.zst"))
     if not parts: sys.exit(f"no highlevel parts in {RAW}")
-    t0 = time.time(); rows: list[dict] = []; seen = 0
+    t0 = time.time(); frames = []
     for p in parts:
-        for name, raw in stream_tar(p):
-            if not name.endswith(".json"): continue
-            seen += 1
-            r = parse_highlevel(raw)
-            if r: rows.append(r)
-            if seen % 100_000 == 0: print(f"[acousticbrainz] {p.name}: {seen:,} files, {len(rows):,} named", flush=True)
-            if limit and len(rows) >= limit: break
-        if limit and len(rows) >= limit: break
-    df = pd.DataFrame(rows)
-    print(f"[acousticbrainz] highlevel: {seen:,} files -> {len(df):,} named recordings in {time.time() - t0:.0f}s", flush=True)
-    # Tempo and key from the feature dumps when present.
-    rhythm = next(iter(RAW.glob("*rhythm.tar.zst")), None); tonal = next(iter(RAW.glob("*tonal.tar.zst")), None)
-    ids = set(df["mbid"].dropna())
-    if rhythm and rhythm.stat().st_size > 1_000_000 and os.environ.get("AB_SKIP_FEATURES") != "1":
-        rf = parse_features(rhythm, {"bpm": "tempo", "danceability": "rhythm_danceability", "onset_rate": "onset_rate"}, ids)
-        if "tempo" in rf.columns: df = df.merge(rf[["mbid", "tempo"]], on="mbid", how="left")
-    if tonal and tonal.stat().st_size > 1_000_000 and os.environ.get("AB_SKIP_FEATURES") != "1":
-        tf = parse_features(tonal, {"key_key": "key_name", "key_scale": "mode"}, ids)
-        if "key_name" in tf.columns: df = df.merge(tf[["mbid"] + [c for c in ("key_name", "mode") if c in tf.columns]], on="mbid", how="left")
+        c = part_cache(p)
+        if c.exists() and not limit: frames.append(pd.read_parquet(c)); print(f"[acousticbrainz] {p.name}: cached {len(frames[-1]):,} rows", flush=True)
+        else: frames.append(parse_part(p, limit))
+        if limit and sum(len(f) for f in frames) >= limit: break
+    df = pd.concat(frames, ignore_index=True)
+    print(f"[acousticbrainz] highlevel: {len(df):,} named recordings in {time.time() - t0:.0f}s", flush=True)
+    # Tempo and key from the feature dumps: the cache when the features stage ran, else streamed now.
+    if os.environ.get("AB_SKIP_FEATURES") != "1":
+        cache = RAW / "features.parquet"
+        if cache.exists(): feats = pd.read_parquet(cache)
+        else:
+            ids = set(df["mbid"].dropna())
+            rhythm = next(iter(RAW.glob("*rhythm.tar.zst")), None); tonal = next(iter(RAW.glob("*tonal.tar.zst")), None)
+            feats = parse_features(rhythm, RHYTHM_WANT, ids) if rhythm and rhythm.stat().st_size > 1_000_000 else pd.DataFrame(columns=["mbid"])
+            if tonal and tonal.stat().st_size > 1_000_000:
+                tf = parse_features(tonal, TONAL_WANT, ids); feats = feats.merge(tf, on="mbid", how="outer") if len(tf) else feats
+        cols = [c for c in ("tempo", "key_name", "mode") if c in feats.columns]
+        if cols: df = df.merge(feats[["mbid"] + cols].drop_duplicates("mbid"), on="mbid", how="left")
     if "tempo" not in df.columns: df["tempo"] = None
     if "key_name" not in df.columns: df["key_name"] = None
     if "mode" not in df.columns: df["mode"] = None
