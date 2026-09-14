@@ -115,7 +115,7 @@ export default function App() {
               <span className="grid h-7 w-7 place-items-center rounded-lg bg-ink text-stage"><Icon name="logo" size={15} /></span>
               <span className="hidden sm:inline">The Producer</span>
             </button>
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-3">
               <StatusLine song={song} cost={studio.cost} measured={measured} paused={paused} started={started} />
               {account.enabled && <button onClick={() => setShowAccount(true)} aria-label={account.user ? "Your account" : "Sign in"} className="grid h-8 w-8 place-items-center rounded-full bg-s2 text-ink-3 transition-colors hover:text-ink"><Icon name="user" size={15} /></button>}
             </div>
@@ -139,13 +139,6 @@ export default function App() {
                 </div>
               )}
               {studio.listenHint && <p className="flex items-start gap-1.5 text-sm text-live"><Icon name="ear" size={15} className="mt-0.5 shrink-0" /><span>{studio.listenHint}</span></p>}
-              {(convo.brainDown ?? studio.brainDown) && (
-                <div className="rounded-2xl border border-warn/40 bg-warn/10 px-4 py-3" data-role="brain-down">
-                  <p className="text-sm font-semibold text-warn">{(convo.brainDown ?? studio.brainDown) === "credits" ? "The producer's brain is out of credits." : "The producer's API key is not working."}</p>
-                  <p className="mt-1 text-sm text-ink-2">{(convo.brainDown ?? studio.brainDown) === "credits" ? "The music keeps playing and every move is saved. Add credits at console.anthropic.com, or use your own key from your account." : "Check the key in your account."}</p>
-                  {account.enabled && <button onClick={() => setShowAccount(true)} className="mt-2 text-sm font-medium text-live hover:underline">Use my own API key</button>}
-                </div>
-              )}
             </div>
             <div className="flex min-h-0 flex-col justify-end">
               <Ribbon lines={studio.messages} interim={speak.interim} speakingText={voiceOut.current} thinking={convo.thinking || studio.busy} tall />
@@ -154,6 +147,12 @@ export default function App() {
         </div>
       )}
 
+      {view === "stage" && (convo.brainDown ?? studio.brainDown) && (
+        <div className="relative z-10 mx-4 shrink-0 rounded-2xl border border-warn/40 bg-warn/10 px-4 py-2.5 sm:mx-8" data-role="brain-down">
+          <p className="text-sm font-semibold text-warn">{(convo.brainDown ?? studio.brainDown) === "credits" ? "The producer's brain is out of credits." : "The producer's API key is not working."}</p>
+          <p className="mt-0.5 text-xs text-ink-2 sm:text-sm">{(convo.brainDown ?? studio.brainDown) === "credits" ? "The music keeps playing and every move is saved. Add credits at console.anthropic.com, or use your own key from your account." : "Check the key in your account."}{account.enabled && <button onClick={() => setShowAccount(true)} className="ml-2 font-medium text-live hover:underline">Use my own API key</button>}</p>
+        </div>
+      )}
       <footer className="relative z-10 flex shrink-0 flex-col items-center gap-2 px-4 pb-6 pt-2">
         <SpeakButton state={button} level={speak.level} onPress={() => void speak.press()} onRelease={speak.release} hint={micHint} />
         {typed && (

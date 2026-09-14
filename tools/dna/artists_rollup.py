@@ -1,80 +1,84 @@
 """data/dna/artists.parquet: one row per artist_norm. docs/DNA_SPEC.md section 3.
+
+Fully vectorized: no per-artist Python loop. Scalar stats use pandas'
+groupby reductions (quantile/median/mean/min/max are Cython, not per-group
+Python calls); "most common X" stats reuse bucket_stats.top_n_map's
+groupby+sort+head trick, which is the same idea at n=1.
 """
 from __future__ import annotations
 
-from collections import Counter
+import json
 from pathlib import Path
 
 import pandas as pd
 
+import bucket_stats
+
 OUT = Path(__file__).resolve().parents[2] / "data" / "dna" / "artists.parquet"
+GROUP = ["artist_norm"]
 
 
-def mode_or_none(s: pd.Series):
-    s = s.dropna()
-    if s.empty:
-        return None
-    return s.value_counts().idxmax()
-
-
-def top_n(s: pd.Series, n: int) -> list[list]:
-    s = s.dropna()
-    if s.empty:
-        return []
-    counts = s.value_counts().head(n)
-    return [[str(k), int(v)] for k, v in counts.items()]
-
-
-def exemplars(g: pd.DataFrame, n: int = 12) -> list[str]:
-    g2 = g.copy()
-    g2["_peak"] = g2["chart_peak"].fillna(10_000)
-    g2["_pop"] = g2["popularity"].fillna(-1)
-    g2 = g2.sort_values(["_peak", "_pop"], ascending=[True, False])
-    out = []
-    for _, r in g2.head(n).iterrows():
-        title = r.get("title")
-        if not title or title in out:
-            continue
-        out.append(f"{title} ({int(r['year'])})" if pd.notna(r.get("year")) else str(title))
-    return out[:n]
-
-
-def build_one(artist_norm: str, g: pd.DataFrame) -> dict:
-    chart = g["chart_peak"].notna()
-    mode_known = g["mode"].dropna()
-    return {
-        "artist_norm": artist_norm,
-        "display_name": mode_or_none(g["artist"]),
-        "song_count": len(g),
-        "chart_songs": int(chart.sum()),
-        "number_ones": int((g["hit_tier"] == "number1").sum()),
-        "first_year": int(g["year"].min()) if g["year"].notna().any() else None,
-        "last_year": int(g["year"].max()) if g["year"].notna().any() else None,
-        "decades": sorted(int(d) for d in g["decade"].dropna().unique()),
-        "families": sorted(str(f) for f in g["family"].dropna().unique()),
-        "tempo_p10": round(g["tempo"].quantile(0.10), 2) if g["tempo"].notna().any() else None,
-        "tempo_p50": round(g["tempo"].quantile(0.50), 2) if g["tempo"].notna().any() else None,
-        "tempo_p90": round(g["tempo"].quantile(0.90), 2) if g["tempo"].notna().any() else None,
-        "mode_major_share": round((mode_known == "major").mean(), 4) if len(mode_known) else None,
-        "top_keys": top_n(g["key_pc"], 3),
-        "top_progressions": top_n(g["progression"], 5),
-        "top_harmony_class": mode_or_none(g["harmony_class"]),
-        "energy_p50": round(g["energy"].median(), 4) if g["energy"].notna().any() else None,
-        "valence_p50": round(g["valence"].median(), 4) if g["valence"].notna().any() else None,
-        "danceability_p50": round(g["danceability"].median(), 4) if g["danceability"].notna().any() else None,
-        "structure_mode": mode_or_none(g["structure"]),
-        "kick_grid_mode": mode_or_none(g["kick_grid"]),
-        "bass_rhythm_mode": mode_or_none(g["bass_rhythm"]),
-        "melody_contour_mode": mode_or_none(g["melody_contour"]),
-        "exemplars": exemplars(g),
-    }
+def top1(m: dict, key: tuple) -> str | None:
+    vals = m.get(key)
+    return vals[0][0] if vals else None
 
 
 def run(songs: pd.DataFrame) -> pd.DataFrame:
-    have_artist = songs[songs["artist_norm"].notna() & (songs["artist_norm"] != "")]
-    rows = [build_one(artist_norm, g) for artist_norm, g in have_artist.groupby("artist_norm")]
-    df = pd.DataFrame(rows)
+    df = songs[songs["artist_norm"].notna() & (songs["artist_norm"] != "")].copy()
+    df["_is_major"] = df["mode"].map({"major": 1.0, "minor": 0.0})
+    df["_is_number1"] = (df["hit_tier"] == "number1").astype(int)
+
+    g = df.groupby("artist_norm", observed=True)
+    base = pd.DataFrame({
+        "song_count": g.size(),
+        "chart_songs": g["chart_peak"].count(),
+        "number_ones": g["_is_number1"].sum(),
+        "first_year": g["year"].min(),
+        "last_year": g["year"].max(),
+        "tempo_p10": g["tempo"].quantile(0.10),
+        "tempo_p50": g["tempo"].quantile(0.50),
+        "tempo_p90": g["tempo"].quantile(0.90),
+        "mode_major_share": g["_is_major"].mean(),
+        "energy_p50": g["energy"].median(),
+        "valence_p50": g["valence"].median(),
+        "danceability_p50": g["danceability"].median(),
+    }).reset_index()
+
+    decades = g["decade"].apply(lambda s: sorted(int(d) for d in s.dropna().unique()))
+    families = g["family"].apply(lambda s: sorted(str(f) for f in s.dropna().unique()))
+    base["decades"] = base["artist_norm"].map(decades)
+    base["families"] = base["artist_norm"].map(families)
+
+    display_name = bucket_stats.top_n_map(df, GROUP, "artist", 1)
+    top_keys = bucket_stats.top_n_map(df, GROUP, "key_pc", 3)
+    top_progressions = bucket_stats.top_n_map(df, GROUP, "progression", 5)
+    top_harmony = bucket_stats.top_n_map(df, GROUP, "harmony_class", 1)
+    structure_m = bucket_stats.top_n_map(df, GROUP, "structure", 1)
+    kick_m = bucket_stats.top_n_map(df, GROUP, "kick_grid", 1)
+    bass_m = bucket_stats.top_n_map(df, GROUP, "bass_rhythm", 1)
+    contour_m = bucket_stats.top_n_map(df, GROUP, "melody_contour", 1)
+    exemplars = bucket_stats.exemplar_map(df, GROUP, 12)
+
+    def key(artist_norm: str) -> tuple:
+        return (artist_norm,)
+
+    base["display_name"] = base["artist_norm"].apply(lambda a: top1(display_name, key(a)))
+    # nested [[value, count], ...] pairs: json-encode so pyarrow doesn't have to
+    # infer a type across irregular nested python objects (it chokes on that).
+    base["top_keys"] = base["artist_norm"].apply(lambda a: json.dumps(top_keys.get(key(a), [])))
+    base["top_progressions"] = base["artist_norm"].apply(lambda a: json.dumps(top_progressions.get(key(a), [])))
+    base["top_harmony_class"] = base["artist_norm"].apply(lambda a: top1(top_harmony, key(a)))
+    base["structure_mode"] = base["artist_norm"].apply(lambda a: top1(structure_m, key(a)))
+    base["kick_grid_mode"] = base["artist_norm"].apply(lambda a: top1(kick_m, key(a)))
+    base["bass_rhythm_mode"] = base["artist_norm"].apply(lambda a: top1(bass_m, key(a)))
+    base["melody_contour_mode"] = base["artist_norm"].apply(lambda a: top1(contour_m, key(a)))
+    base["exemplars"] = base["artist_norm"].apply(lambda a: exemplars.get(key(a), []))
+
+    for col in ("tempo_p10", "tempo_p50", "tempo_p90", "mode_major_share",
+                "energy_p50", "valence_p50", "danceability_p50"):
+        base[col] = base[col].round(4)
+
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(OUT, index=False)
-    print(f"[artists] {len(df):,} artists from {len(have_artist):,} attributable rows -> {OUT}")
-    return df
+    base.to_parquet(OUT, index=False)
+    print(f"[artists] {len(base):,} artists from {len(df):,} attributable rows -> {OUT}")
+    return base

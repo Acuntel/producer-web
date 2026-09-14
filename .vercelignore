@@ -1,0 +1,7 @@
+data/dna/
+worker/
+tests/fixtures/
+docs/
+knowledge/
+.claude/
+*.log

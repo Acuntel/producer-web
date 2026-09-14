@@ -71,6 +71,6 @@ def quantile_map(df: pd.DataFrame, group_cols: list[str], numeric_cols: list[str
 
 
 def _r(v):
-    if v is None or v != v:
+    if pd.isna(v):  # pd.NA / NaN - `v != v` is ambiguous for pd.NA, so use pd.isna
         return None
     return round(float(v), 4)
