@@ -72,9 +72,12 @@ Rows from different sources describing the same song stay separate rows (the `id
 
 `data/dna/artists.parquet`: one row per `artist_norm`: display name (most common spelling), song_count, chart_songs, number_ones, first_year, last_year, decades[], families[], tempo_p10/p50/p90, mode_major_share, top_keys (3), top_progressions (5 with counts), top_harmony_class, energy_p50, valence_p50, danceability_p50, structure_mode (the most common structure string), kick_grid_mode, bass_rhythm_mode, melody_contour_mode, exemplars (up to 12 titles ordered by chart_peak then popularity).
 
-`data/dna/buckets.parquet`: the Galton bins. Bin key = (tempo_band, meter_feel, mode, decade, family, structure_archetype, harmony_class, hit_tier) with these pins:
+`data/dna/buckets.parquet`: the Galton bins. Bin key = (tempo_band, mode, energy_band, feel, decade, family, voice, meter_feel, structure_archetype, harmony_class, hit_tier); the pins every audio-measured song can answer come first (since 09-14, section 12 of the masterprompt) with these pins:
 
 - tempo_band: `<90`, `90-110`, `110-122`, `122-132`, `132-145`, `145-160`, `>160`
+- energy_band: `low` (<0.4), `mid` (<0.6), `high` (<0.8), `peak`; on the Spotify scale (AcousticBrainz rows calibrated, see section 8)
+- feel: `sun` (bright, calm), `lift` (bright, driving), `rush` (dark, driving), `gut` (dark, slow) from valence_read and arousal_read at 0.5
+- voice: `vocal` / `instrumental` from the voice probability (AcousticBrainz) or 1 - instrumentalness (Spotify) at 0.5
 - meter_feel: `four_floor` (kick on all four beats), `backbeat` (snare 2 and 4, kick not on every beat), `broken`, `halftime`, `unknown` (no grid)
 - mode: major | minor | unknown
 - decade
@@ -119,3 +122,11 @@ If no DSN is given or the connection fails, skip loading, say so in the report, 
 ## 7. Loading on the Supabase free tier (learned 2026-09-13)
 
 The project's database has about 500 MB. A truncate and COPY inside one transaction keeps the old rows on disk until the commit, so a reload of `dna_songs` (354 MB with its indexes) fails with "No space left on device" while the previous copy still exists. The loader therefore commits after every table, and `DNA_SKIP_PATTERNS=1` leaves `dna_patterns` (647k rows, 105 MB) out of Postgres; the app reads patterns from `data/dna/patterns.parquet` only. To reload: `DNA_SKIP_PATTERNS=1 <dna-venv>/bin/python tools/dna/load_pg.py` (the DSN comes from data/dna/PG_DSN). If the songs table must shrink further, drop the trigram index on artist_norm (the btree covers exact artist lookups; the app only needs the title trigram).
+
+## 8. Fingerprints and calibration (09-14, section 12 of the masterprompt)
+
+`tools/dna/prints.py` -> `data/prints/`: every AcousticBrainz-measured recording as 32 int8 numbers. Features: the eighteen highlevel classifiers' probabilities (complements dropped), log tempo, log onset rate, rhythm danceability, tuning deviation, the tempo histogram peak ratio, key as sin/cos, mode. Standardised on a 300k sample, PCA to 32, one global int8 scale (manifest.json carries it). Files: keys.u64 (sorted sha1-8 of `artist_norm|title_norm`, little endian), vec.i8 (row-major in key order), akeys.u64 + arows.u32 (artist key -> rows), names.txt.gz + offs.u32 (artist TAB title), meta.bin (12 bytes: tempo x10 u16, key u8 (255 unknown), mode u8, year u16, energy u8, valence u8, arousal u8, voice u8, family index u8, pad). proof.json: duplicate rate and the canon neighbour test. The server (`lib/brain/prints.ts`) loads the files once and answers nearest-by-sound with a brute-force scan; the research lane prints a record's address and its neighbours, and "sounds like X" looks X up first.
+
+Calibration (`rollup.calibrate_acousticbrainz`): on the recordings AcousticBrainz and Spotify share, a linear map from the AcousticBrainz reads (valence, energy, danceability, acousticness) and log tempo to each Spotify measure, applied to every AcousticBrainz row before the rollups. `data/dna/calibration.json` records the overlap, R2 and coefficients per measure.
+
+Family fills (`rollup.fill_family`): MusicBrainz artist genres (`tools/dna/mb_genres.py` -> `data/dna/raw/mb_artist_genres.parquet`, CC0) joined on the artist gid, then on an unambiguous artist name, then the family the store already knows for the artist from any source.
