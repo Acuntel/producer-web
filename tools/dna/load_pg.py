@@ -16,11 +16,12 @@ import numpy as np
 import pandas as pd
 
 DATA = Path(__file__).resolve().parents[2] / "data" / "dna"
-MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "0008_dna.sql"
+MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "supabase" / "migrations"
+MIGRATIONS = ["0008_dna.sql", "0009_dna_performer_raw.sql"]
 
 
 def load_ddl() -> str:
-    return MIGRATION.read_text()
+    return "\n".join((MIGRATIONS_DIR / name).read_text() for name in MIGRATIONS)
 
 
 def resolve_dsn(cli_dsn: str | None) -> str | None:

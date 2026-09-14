@@ -1,9 +1,9 @@
 {
  "join_counts": {
-  "billboard_x_spotify": 4549,
-  "billboard_x_chordonomicon": 987,
-  "billboard_x_mcgill": 724,
-  "billboard_x_lakh": 5780
+  "billboard_x_spotify": 4381,
+  "billboard_x_chordonomicon": 955,
+  "billboard_x_mcgill": 752,
+  "billboard_x_lakh": 5891
  },
  "tempo_by_decade_number1_vs_never_charted": {
   "by_decade": {
@@ -12,76 +12,76 @@
     "number1_n": 11
    },
    "1960": {
-    "number1_tempo_p50": 102.97000122070312,
-    "number1_n": 153
+    "number1_tempo_p50": 104.08000183105469,
+    "number1_n": 158
    },
    "1970": {
-    "number1_tempo_p50": 109.69000244140625,
-    "number1_n": 93
+    "number1_tempo_p50": 109.54000091552734,
+    "number1_n": 92
    },
    "1980": {
     "number1_tempo_p50": 115.08999633789062,
     "number1_n": 149
    },
    "1990": {
-    "number1_tempo_p50": 117.44999694824219,
-    "number1_n": 22
+    "number1_tempo_p50": 119.87000274658203,
+    "number1_n": 21
    },
    "2000": {
     "number1_tempo_p50": 116.94999694824219,
     "number1_n": 31
    },
    "2010": {
-    "number1_tempo_p50": 123.94000244140625,
-    "number1_n": 82
+    "number1_tempo_p50": 124.00499725341797,
+    "number1_n": 74
    },
    "2020": {
-    "number1_tempo_p50": 108.97000122070312,
-    "number1_n": 88
+    "number1_tempo_p50": 107.0,
+    "number1_n": 83
    }
   },
   "never_charted_tempo_p50_overall": 120.0199966430664,
-  "never_charted_n": 85199,
+  "never_charted_n": 85376,
   "note": "never-charted has no decade breakdown: Spotify's dataset carries no release year"
  },
  "mode_share_number1_vs_charted": {
-  "number1_major_share": 0.6709,
-  "number1_n": 629,
-  "charted_major_share": 0.7087,
-  "charted_n": 4549
+  "number1_major_share": 0.6742,
+  "number1_n": 620,
+  "charted_major_share": 0.7115,
+  "charted_n": 4381
  },
  "spotify_priors_by_hit_tier": {
-  "join_rate": 0.1389,
+  "join_rate": 0.1338,
   "billboard_songs": 32745,
-  "matched": 4549,
+  "matched": 4381,
   "by_hit_tier": {
    "charted": {
-    "energy_p50": 0.7039999961853027,
+    "energy_p50": 0.7009999752044678,
     "valence_p50": 0.5199999809265137,
-    "danceability_p50": 0.5960000157356262,
-    "duration_p50": 209.8000030517578,
-    "n": 1407
+    "danceability_p50": 0.5889999866485596,
+    "duration_p50": 212.26600646972656,
+    "n": 1331
    },
    "number1": {
-    "energy_p50": 0.6029999852180481,
-    "valence_p50": 0.6679999828338623,
+    "energy_p50": 0.6000000238418579,
+    "valence_p50": 0.6620000004768372,
     "danceability_p50": 0.6309999823570251,
-    "duration_p50": 218.78599548339844,
-    "n": 629
+    "duration_p50": 218.8459930419922,
+    "n": 620
    },
    "top10": {
-    "energy_p50": 0.6589999794960022,
-    "valence_p50": 0.6290000081062317,
-    "danceability_p50": 0.578000009059906,
-    "duration_p50": 207.46600341796875,
-    "n": 1303
+    "energy_p50": 0.6579999923706055,
+    "valence_p50": 0.6349999904632568,
+    "danceability_p50": 0.5690000057220459,
+    "duration_p50": 207.5399932861328,
+    "n": 1252
    },
    "top40": {
     "energy_p50": 0.6679999828338623,
-    "valence_p50": 0.5329999923706055,
-    "danceability_p50": 0.5910000205039978,
-    "duration_p50": 211.2465057373047,
-    "n": 1210
+    "valence_p50": 0.5350000262260437,
+    "danceability_p50": 0.5889999866485596,
+    "duration_p50": 211.52000427246094,
+    "n": 1178
    }
   }
  },
@@ -89,27 +89,27 @@
   "1960": {
    "charted": {
     "energy_p50": 0.4690000116825104,
-    "danceability_p50": 0.515999972820282,
+    "danceability_p50": 0.5189999938011169,
     "valence_p50": 0.6629999876022339,
-    "n": 71
+    "n": 69
    },
    "number1": {
     "energy_p50": 0.5690000057220459,
-    "danceability_p50": 0.5600000023841858,
+    "danceability_p50": 0.5709999799728394,
     "valence_p50": 0.7730000019073486,
-    "n": 153
+    "n": 159
    },
    "top10": {
-    "energy_p50": 0.5220000147819519,
-    "danceability_p50": 0.5460000038146973,
-    "valence_p50": 0.6549999713897705,
-    "n": 167
+    "energy_p50": 0.5205000042915344,
+    "danceability_p50": 0.5400000214576721,
+    "valence_p50": 0.6539999842643738,
+    "n": 164
    },
    "top40": {
-    "energy_p50": 0.4819999933242798,
-    "danceability_p50": 0.578499972820282,
-    "valence_p50": 0.7315000295639038,
-    "n": 78
+    "energy_p50": 0.4690000116825104,
+    "danceability_p50": 0.5770000219345093,
+    "valence_p50": 0.7289999723434448,
+    "n": 77
    }
   },
   "1970": {
@@ -120,30 +120,30 @@
     "n": 69
    },
    "number1": {
-    "energy_p50": 0.6589999794960022,
+    "energy_p50": 0.6579999923706055,
     "danceability_p50": 0.6370000243186951,
-    "valence_p50": 0.7049999833106995,
-    "n": 93
+    "valence_p50": 0.6949999928474426,
+    "n": 92
    },
    "top10": {
-    "energy_p50": 0.5985000133514404,
-    "danceability_p50": 0.5770000219345093,
-    "valence_p50": 0.7009999752044678,
-    "n": 122
+    "energy_p50": 0.5989999771118164,
+    "danceability_p50": 0.578000009059906,
+    "valence_p50": 0.6949999928474426,
+    "n": 123
    },
    "top40": {
-    "energy_p50": 0.6800000071525574,
+    "energy_p50": 0.6865000128746033,
     "danceability_p50": 0.5354999899864197,
-    "valence_p50": 0.6825000047683716,
+    "valence_p50": 0.6850000023841858,
     "n": 126
    }
   },
   "1980": {
    "charted": {
-    "energy_p50": 0.7829999923706055,
-    "danceability_p50": 0.6579999923706055,
-    "valence_p50": 0.6710000038146973,
-    "n": 87
+    "energy_p50": 0.7804999947547913,
+    "danceability_p50": 0.6589999794960022,
+    "valence_p50": 0.671500027179718,
+    "n": 88
    },
    "number1": {
     "energy_p50": 0.718999981880188,
@@ -154,14 +154,14 @@
    "top10": {
     "energy_p50": 0.7490000128746033,
     "danceability_p50": 0.6190000176429749,
-    "valence_p50": 0.6980000138282776,
+    "valence_p50": 0.6909999847412109,
     "n": 195
    },
    "top40": {
-    "energy_p50": 0.7960000038146973,
-    "danceability_p50": 0.5885000228881836,
-    "valence_p50": 0.7200000286102295,
-    "n": 116
+    "energy_p50": 0.796999990940094,
+    "danceability_p50": 0.5924999713897705,
+    "valence_p50": 0.7264999747276306,
+    "n": 112
    }
   },
   "1990": {
@@ -172,16 +172,16 @@
     "n": 118
    },
    "number1": {
-    "energy_p50": 0.5350000262260437,
-    "danceability_p50": 0.5770000219345093,
-    "valence_p50": 0.32850000262260437,
-    "n": 22
+    "energy_p50": 0.5329999923706055,
+    "danceability_p50": 0.5699999928474426,
+    "valence_p50": 0.29899999499320984,
+    "n": 21
    },
    "top10": {
-    "energy_p50": 0.7170000076293945,
+    "energy_p50": 0.7200000286102295,
     "danceability_p50": 0.5690000057220459,
     "valence_p50": 0.609000027179718,
-    "n": 113
+    "n": 111
    },
    "top40": {
     "energy_p50": 0.7319999933242798,
@@ -193,8 +193,8 @@
   "2000": {
    "charted": {
     "energy_p50": 0.8125,
-    "danceability_p50": 0.5145000219345093,
-    "valence_p50": 0.5015000104904175,
+    "danceability_p50": 0.5139999985694885,
+    "valence_p50": 0.4909999966621399,
     "n": 244
    },
    "number1": {
@@ -218,54 +218,54 @@
   },
   "2010": {
    "charted": {
-    "energy_p50": 0.7039999961853027,
-    "danceability_p50": 0.6140000224113464,
-    "valence_p50": 0.4690000116825104,
-    "n": 439
+    "energy_p50": 0.6990000009536743,
+    "danceability_p50": 0.6019999980926514,
+    "valence_p50": 0.45500001311302185,
+    "n": 407
    },
    "number1": {
-    "energy_p50": 0.6169999837875366,
-    "danceability_p50": 0.6899999976158142,
-    "valence_p50": 0.49950000643730164,
-    "n": 82
+    "energy_p50": 0.621999979019165,
+    "danceability_p50": 0.6664999723434448,
+    "valence_p50": 0.48249998688697815,
+    "n": 74
    },
    "top10": {
-    "energy_p50": 0.6934999823570251,
-    "danceability_p50": 0.6065000295639038,
-    "valence_p50": 0.6079999804496765,
-    "n": 254
+    "energy_p50": 0.699999988079071,
+    "danceability_p50": 0.5960000157356262,
+    "valence_p50": 0.6190000176429749,
+    "n": 221
    },
    "top40": {
     "energy_p50": 0.6679999828338623,
     "danceability_p50": 0.6230000257492065,
     "valence_p50": 0.4790000021457672,
-    "n": 305
+    "n": 289
    }
   },
   "2020": {
    "charted": {
-    "energy_p50": 0.6729999780654907,
-    "danceability_p50": 0.7139999866485596,
+    "energy_p50": 0.6700000166893005,
+    "danceability_p50": 0.6970000267028809,
     "valence_p50": 0.5149999856948853,
-    "n": 367
+    "n": 325
    },
    "number1": {
     "energy_p50": 0.5630000233650208,
-    "danceability_p50": 0.8115000128746033,
+    "danceability_p50": 0.8360000252723694,
     "valence_p50": 0.531000018119812,
-    "n": 88
+    "n": 83
    },
    "top10": {
     "energy_p50": 0.3319999873638153,
     "danceability_p50": 0.48399999737739563,
-    "valence_p50": 0.5299999713897705,
-    "n": 252
+    "valence_p50": 0.5839999914169312,
+    "n": 239
    },
    "top40": {
     "energy_p50": 0.5559999942779541,
-    "danceability_p50": 0.5899999737739563,
+    "danceability_p50": 0.5860000252723694,
     "valence_p50": 0.5210000276565552,
-    "n": 307
+    "n": 296
    }
   },
   "1950": {
@@ -273,7 +273,7 @@
     "energy_p50": 0.8759999871253967,
     "danceability_p50": 0.6470000147819519,
     "valence_p50": 0.9490000009536743,
-    "n": 58
+    "n": 57
    }
   }
  },
@@ -284,37 +284,37 @@
   },
   "1960": {
    "median_duration_sec": 154.1999969482422,
-   "n": 153
+   "n": 159
   },
   "1970": {
-   "median_duration_sec": 245.1999969482422,
-   "n": 93
+   "median_duration_sec": 245.01300048828125,
+   "n": 92
   },
   "1980": {
    "median_duration_sec": 249.24899291992188,
    "n": 149
   },
   "1990": {
-   "median_duration_sec": 274.39300537109375,
-   "n": 22
+   "median_duration_sec": 280.0400085449219,
+   "n": 21
   },
   "2000": {
    "median_duration_sec": 228.3459930419922,
    "n": 31
   },
   "2010": {
-   "median_duration_sec": 204.5594940185547,
-   "n": 82
+   "median_duration_sec": 206.3730010986328,
+   "n": 74
   },
   "2020": {
    "median_duration_sec": 191.82200622558594,
-   "n": 88
+   "n": 83
   }
  },
  "progression_reach": {
   "billboard_songs": 32745,
-  "reached_progression": 1394,
-  "reach_rate": 0.0426
+  "reached_progression": 1376,
+  "reach_rate": 0.042
  },
  "opening_progression_number1_by_decade": {
   "1950": {
@@ -325,7 +325,7 @@
   "1960": {
    "opening": "V I V I",
    "source": "chordonomicon",
-   "n": 26
+   "n": 34
   },
   "1970": {
    "opening": "I V IV V",
@@ -350,21 +350,21 @@
   "2010": {
    "opening": "i bVI bIII bVII",
    "source": "chordonomicon",
-   "n": 13
+   "n": 12
   },
   "2020": {
    "opening": "bIII i bVI bIII",
    "source": "chordonomicon",
-   "n": 10
+   "n": 8
   }
  },
  "structure_kick_grid_charted_vs_never_charted": {
-  "charted_n": 5780,
-  "never_charted_n": 11205,
+  "charted_n": 5891,
+  "never_charted_n": 11094,
   "charted_top_structures": [
    [
     "C C C C C C C C C C C C O",
-    94
+    96
    ],
    [
     "C C C C C C C C C C C C C O",
@@ -372,21 +372,21 @@
    ],
    [
     "C C C C C C C C C C O",
-    74
+    77
    ],
    [
     "C C C C C C C C C O",
-    70
+    73
    ],
    [
-    "C C C C C C C C C C C C C C C O",
-    65
+    "C C C C C C C C C C C O",
+    68
    ]
   ],
   "never_charted_top_structures": [
    [
     "C C C C C C C C C C C C O",
-    133
+    131
    ],
    [
     "C C C C C C C C C C C C C O",
@@ -394,59 +394,59 @@
    ],
    [
     "C C C C C C C C C C O",
-    116
+    113
    ],
    [
     "C C C C C C C C C C C O",
-    115
+    111
    ],
    [
     "C C C C C C C C C O",
-    111
+    108
    ]
   ],
   "charted_top_kick_grids": [
    [
     "X.......X.......",
-    877
+    904
    ],
    [
     "X...X...X...X...",
-    604
+    617
    ],
    [
     "X.....X.X.......",
-    415
+    423
    ],
    [
     "................",
-    397
+    401
    ],
    [
     "X...............",
-    210
+    214
    ]
   ],
   "never_charted_top_kick_grids": [
    [
     "X.......X.......",
-    1448
+    1421
    ],
    [
     "................",
-    1224
+    1220
    ],
    [
     "X...X...X...X...",
-    1162
+    1149
    ],
    [
     "X.....X.X.......",
-    599
+    591
    ],
    [
     "X...............",
-    459
+    455
    ]
   ]
  },
@@ -454,20 +454,16 @@
   "p10": 7.0,
   "p50": 20.0,
   "p90": 42.0,
-  "n": 161
+  "n": 165
  },
  "top_structures_number1": [
   [
    "X",
-   37
+   38
   ],
   [
    "I V C V C B C",
    5
-  ],
-  [
-   "I C V C V C O",
-   4
   ],
   [
    "V C V",
@@ -475,6 +471,10 @@
   ],
   [
    "I C V C V B C",
+   3
+  ],
+  [
+   "I V C V C",
    3
   ],
   [
@@ -500,16 +500,16 @@
  ],
  "harmony_class_share_number1_vs_everything": {
   "number1": {
-   "modal_mixture": 0.4516,
-   "other": 0.3041,
-   "blues": 0.0737,
-   "minor_axis": 0.0507,
-   "andalusian": 0.0507,
-   "doo_wop": 0.0276,
-   "two_chord": 0.023,
-   "axis": 0.0184
+   "modal_mixture": 0.4395,
+   "other": 0.3094,
+   "blues": 0.0717,
+   "andalusian": 0.0583,
+   "minor_axis": 0.0493,
+   "doo_wop": 0.0269,
+   "two_chord": 0.0224,
+   "axis": 0.0224
   },
-  "number1_n": 217,
+  "number1_n": 223,
   "everything": {
    "modal_mixture": 0.4962,
    "other": 0.2259,

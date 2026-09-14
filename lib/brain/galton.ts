@@ -61,14 +61,33 @@ export const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[Ì
 const KEYS = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
 const pct = (x: number | undefined) => (typeof x === "number" ? `${Math.round(x * 100)}%` : "?");
 
+// Billboard writes "Elvis Presley With The Jordanaires" and "Bill Haley And His Comets" as separate performers.
+// The store keeps them split; the lookup folds the variants into the head so the counts are the person's.
+const variantPatterns = (n: string) => [`${n} with %`, `${n} and the %`, `${n} and his %`, `${n} and her %`, `${n} & the %`, `${n} & his %`];
+
 export async function lookupArtist(name: string): Promise<ArtistRow | null> {
   const sb = supabaseAdmin(); if (!sb) return null;
   const n = norm(name); if (!n) return null;
   try {
+    let head: ArtistRow | null = null;
     const exact = await sb.from("dna_artists").select("*").eq("artist_norm", n).limit(1);
-    if (exact.data?.length) return exact.data[0] as ArtistRow;
-    const like = await sb.from("dna_artists").select("*").ilike("artist_norm", `%${n}%`).order("song_count", { ascending: false }).limit(1);
-    if (like.data?.length) return like.data[0] as ArtistRow;
+    if (exact.data?.length) head = exact.data[0] as ArtistRow;
+    else {
+      const like = await sb.from("dna_artists").select("*").ilike("artist_norm", `%${n}%`).order("song_count", { ascending: false }).limit(1);
+      if (like.data?.length) head = like.data[0] as ArtistRow;
+    }
+    if (!head) return null;
+    const variants = await Promise.all(variantPatterns(head.artist_norm).map((pat) => sb.from("dna_artists").select("artist_norm,song_count,chart_songs,number_ones,exemplars").like("artist_norm", pat).limit(5)));
+    const rows = variants.flatMap((v) => (v.data ?? []) as Pick<ArtistRow, "artist_norm" | "song_count" | "chart_songs" | "number_ones" | "exemplars">[]);
+    if (!rows.length) return head;
+    const merged: ArtistRow = { ...head };
+    for (const r of rows) {
+      merged.song_count += r.song_count ?? 0;
+      merged.chart_songs = (merged.chart_songs ?? 0) + (r.chart_songs ?? 0);
+      merged.number_ones = (merged.number_ones ?? 0) + (r.number_ones ?? 0);
+      merged.exemplars = [...(r.exemplars ?? []).slice(0, 4), ...(merged.exemplars ?? [])].slice(0, 12);
+    }
+    return merged;
   } catch { /* the tables may not exist yet */ }
   return null;
 }
@@ -86,9 +105,14 @@ export async function lookupSongs(title: string, artist?: string, limit = 6): Pr
 
 export async function artistSongs(artistNorm: string, limit = 8): Promise<SongRow[]> {
   const sb = supabaseAdmin(); if (!sb) return [];
+  const cols = "title,artist,year,tempo,key_pc,mode,chart_peak,chart_weeks,hit_tier,progression,structure,energy,valence,danceability,family,source";
   try {
-    const r = await sb.from("dna_songs").select("title,artist,year,tempo,key_pc,mode,chart_peak,chart_weeks,hit_tier,progression,structure,energy,valence,danceability,family,source").eq("artist_norm", artistNorm).order("chart_peak", { ascending: true, nullsFirst: false }).limit(limit);
-    return (r.data ?? []) as SongRow[];
+    const [own, ...withs] = await Promise.all([
+      sb.from("dna_songs").select(cols).eq("artist_norm", artistNorm).order("chart_peak", { ascending: true, nullsFirst: false }).limit(limit),
+      ...variantPatterns(artistNorm).slice(0, 2).map((pat) => sb.from("dna_songs").select(cols).like("artist_norm", pat).not("chart_peak", "is", null).order("chart_peak", { ascending: true }).limit(limit)),
+    ]);
+    const all = [...(own.data ?? []), ...withs.flatMap((w) => w.data ?? [])] as SongRow[];
+    return all.sort((a, b) => (a.chart_peak ?? 999) - (b.chart_peak ?? 999)).slice(0, limit);
   } catch { return []; }
 }
 

@@ -4,8 +4,10 @@ weeks (max wks_on_chart), weeks_at_1, entries.
 """
 from __future__ import annotations
 
+import re
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 
 import pandas as pd
@@ -16,6 +18,44 @@ import schema
 import util
 
 OUT = Path(__file__).resolve().parents[2] / "data" / "dna" / "raw" / "billboard_songs.parquet"
+
+# Billboard credits featured/backing acts inline: "Elvis Presley With The
+# Jordanaires", "Elvis Presley And The Jordanaires", "Bill Haley And His
+# Comets". util.norm_artist already collapses "&"/" and " to a space (so
+# "and"/"&" never survive into artist_norm) - this has to match on the RAW
+# performer string, before that collapsing, to catch all three forms; a
+# literal match against artist_norm (which is what the fold rule was first
+# specified against) would only ever catch the "with" case.
+FOLD_RE = re.compile(r"^(.+?)\s+(with|and|&)\s+(the\s+|his\s+|her\s+)?(.+)$", re.IGNORECASE)
+
+
+def apply_performer_fold(rows: list[dict]) -> int:
+    """Fold "X with/and/& (the/his/her) Y"-credited rows into the head artist X
+    when X already charts on its own with more songs than this credited
+    variant - e.g. Elvis Presley's post-1958 #1s are split across "Elvis
+    Presley", "... With The Jordanaires" and "... And The Jordanaires" as
+    three distinct Billboard performer strings otherwise. performer_raw keeps
+    the literal chart credit; artist/artist_norm become the head."""
+    counts = Counter(r["artist_norm"] for r in rows if r["artist_norm"])
+    folded = 0
+    for r in rows:
+        performer = r["artist"]
+        m = FOLD_RE.match(performer)
+        if not m:
+            continue
+        head_raw = m.group(1).strip()
+        head_norm = util.norm_artist(head_raw)
+        if not head_norm or head_norm == r["artist_norm"]:
+            continue
+        if counts.get(head_norm, 0) <= counts.get(r["artist_norm"], 0):
+            continue
+        r["performer_raw"] = performer
+        r["artist"] = head_raw
+        r["artist_norm"] = head_norm
+        r["join_key"] = f"{head_norm}|{r['title_norm']}"
+        r["id"] = util.stable_id("billboard", head_norm, r["title_norm"])
+        folded += 1
+    return folded
 
 
 def run() -> pd.DataFrame | None:
@@ -67,12 +107,15 @@ def run() -> pd.DataFrame | None:
         })
         rows.append(row)
 
+    folded = apply_performer_fold(rows)
+
     out = schema.to_frame(rows)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     out.to_parquet(OUT, index=False)
     dt = time.time() - t0
     print(f"[billboard] {n_raw:,} chart rows ({dropped} dropped for bad date) "
-          f"-> {len(out):,} songs in {dt:.1f}s -> {OUT}")
+          f"-> {len(out):,} songs, {folded:,} folded into a head performer "
+          f"in {dt:.1f}s -> {OUT}")
     return out
 
 

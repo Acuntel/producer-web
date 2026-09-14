@@ -9,6 +9,8 @@ import pandas as pd
 # name -> pandas dtype string. list<string> columns use "object" (python lists).
 COLUMNS: list[tuple[str, str]] = [
     ("id", "string"), ("source", "string"), ("title", "string"), ("artist", "string"),
+    ("performer_raw", "string"),  # billboard only: the literal chart credit before
+    # the "with/and/& the Jordanaires"-style fold into a head artist (billboard.py)
     ("artist_norm", "string"), ("title_norm", "string"), ("join_key", "string"),
     ("year", "Int16"), ("decade", "Int16"), ("genres", "object"), ("family", "string"),
     ("lane", "string"), ("tempo", "Float32"), ("key_pc", "Int8"), ("mode", "string"),
