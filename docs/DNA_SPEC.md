@@ -115,3 +115,7 @@ If no DSN is given or the connection fails, skip loading, say so in the report, 
 - Print timings per stage. Print how many rows each stage dropped and why.
 - Never invent a number. If a field cannot be derived for a source, it stays null.
 - The final report lists: rows per source, join rate between billboard and spotify, bins written, galton.json size, load status, and five example lookups printed from the parquet: "elvis presley", "john summit", "kettama", the 122-132/four_floor/minor/2020/electronic bin, and the top opening progressions of number ones in the 1960s.
+
+## 7. Loading on the Supabase free tier (learned 2026-09-13)
+
+The project's database has about 500 MB. A truncate and COPY inside one transaction keeps the old rows on disk until the commit, so a reload of `dna_songs` (354 MB with its indexes) fails with "No space left on device" while the previous copy still exists. The loader therefore commits after every table, and `DNA_SKIP_PATTERNS=1` leaves `dna_patterns` (647k rows, 105 MB) out of Postgres; the app reads patterns from `data/dna/patterns.parquet` only. To reload: `DNA_SKIP_PATTERNS=1 <dna-venv>/bin/python tools/dna/load_pg.py` (the DSN comes from data/dna/PG_DSN). If the songs table must shrink further, drop the trigram index on artist_norm (the btree covers exact artist lookups; the app only needs the title trigram).

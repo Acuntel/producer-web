@@ -98,6 +98,7 @@ def run(dsn: str | None, dry_run: bool) -> None:
         songs["genres"] = songs["genres"].apply(lambda v: list(v) if isinstance(v, (list, np.ndarray)) else None)
         with conn.cursor() as cur:
             copy_dataframe(cur, "public.dna_songs", songs)
+        conn.commit()   # one table per transaction: the free tier cannot hold the old rows and the new ones at once
 
         artists_path = DATA / "artists.parquet"
         if artists_path.exists():
@@ -109,6 +110,7 @@ def run(dsn: str | None, dry_run: bool) -> None:
             # inference) - the DDL declares them jsonb, so load as JSON, not text[].
             with conn.cursor() as cur:
                 copy_dataframe(cur, "public.dna_artists", artists, json_cols={"top_keys", "top_progressions"})
+            conn.commit()
 
         buckets_path = DATA / "buckets.parquet"
         if buckets_path.exists():
@@ -121,9 +123,11 @@ def run(dsn: str | None, dry_run: bool) -> None:
             slim = buckets[[c for c in keep if c in buckets.columns] + ["stats"]]
             with conn.cursor() as cur:
                 copy_dataframe(cur, "public.dna_buckets", slim, json_cols={"stats"})
+            conn.commit()
 
         patterns_path = DATA / "patterns.parquet"
-        if patterns_path.exists():
+        # The app reads patterns from parquet only; on the free tier the 647k-row table costs 105 MB of the 500 MB.
+        if patterns_path.exists() and os.environ.get("DNA_SKIP_PATTERNS") != "1":
             patterns = pd.read_parquet(patterns_path)
             with conn.cursor() as cur:
                 copy_dataframe(cur, "public.dna_patterns", patterns)
