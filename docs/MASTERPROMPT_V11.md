@@ -226,7 +226,7 @@ Each phase ends with a measured proof, a screenshot looked at, a commit, and a g
 
 ## 10. Status at the end of the first session (2026-09-13 night)
 
-Built, proven and deployed: sections 3 (the product), 4.1 (the voice loop), 4.2 (the two-lane brain and the meter), 4.4 (feel), the Galton store's first pass (4.3: seven sources ingested, the bins shipped in data/galton.json, the row tables loading into Supabase, the human grooves and the hit statistics wired into the engine and the Hands), and the ship gates (6E). Proof lines met before the Anthropic balance ran dry: e2e ALL PASSED (voice first sentence 1198 ms, hands ops on Sonnet, two cents a move), the real push-to-talk path (commit 204 ms after release), screenshots at 1440 and 390 with a clean DOM audit, production on both aliases.
+Built, proven and deployed: sections 3 (the product), 4.1 (the voice loop), 4.2 (the two-lane brain and the meter), 4.4 (feel), the Galton store's first pass (4.3: seven sources ingested, 820,668 song rows and 39,802 artist rows live in Supabase with the bins shipped in data/galton.json, the human grooves and the hit statistics wired into the engine and the Hands), and the ship gates (6E). Proof lines met before the Anthropic balance ran dry: e2e ALL PASSED (voice first sentence 1198 ms, hands ops on Sonnet, two cents a move), the real push-to-talk path (commit 204 ms after release), screenshots at 1440 and 390 with a clean DOM audit, production on both aliases.
 
 Blocked on one thing outside the repo: the house Anthropic key has no credit, and every key on this machine is in the same organization. Add credits at console.anthropic.com (or paste a key in the account sheet) and the stage comes alive; nothing else is waiting.
 
