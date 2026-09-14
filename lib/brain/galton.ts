@@ -50,9 +50,9 @@ export const galtonBuiltAt = () => GALTON.builtAt ?? null;
 export const galtonSize = () => Object.keys(GALTON.bins ?? {}).length;
 
 export type ArtistRow = {
-  artist_norm: string; display: string; song_count: number; chart_songs?: number; number_ones?: number; first_year?: number; last_year?: number;
+  artist_norm: string; display_name: string; song_count: number; chart_songs?: number; number_ones?: number; first_year?: number; last_year?: number;
   decades?: number[]; families?: string[]; tempo_p10?: number; tempo_p50?: number; tempo_p90?: number; mode_major_share?: number; top_keys?: string[];
-  top_progressions?: unknown; top_harmony_class?: string; energy_p50?: number; valence_p50?: number; danceability_p50?: number; structure_mode?: string;
+  top_progressions?: unknown; top_keys_pc?: unknown; top_harmony_class?: string; energy_p50?: number; valence_p50?: number; danceability_p50?: number; structure_mode?: string;
   kick_grid_mode?: string; bass_rhythm_mode?: string; melody_contour_mode?: string; exemplars?: string[];
 };
 export type SongRow = { title: string; artist: string; year?: number; tempo?: number; key_pc?: number; mode?: string; chart_peak?: number; chart_weeks?: number; hit_tier?: string; progression?: string; structure?: string; energy?: number; valence?: number; danceability?: number; family?: string; source: string };
@@ -92,19 +92,25 @@ export async function artistSongs(artistNorm: string, limit = 8): Promise<SongRo
   } catch { return []; }
 }
 
+const shortProg = (p: string) => p.split(/\s+/).slice(0, 8).join(" ");
+const keyNames = (v: unknown): string => {
+  if (!Array.isArray(v)) return "";
+  return (v as unknown[]).slice(0, 3).map((k) => { const pc = Array.isArray(k) ? Number(k[0]) : Number(k); return Number.isFinite(pc) && pc >= 0 && pc < 12 ? KEYS[pc] : typeof k === "string" ? k : ""; }).filter(Boolean).join(", ");
+};
 export function artistLine(a: ArtistRow, songs: SongRow[] = []): string {
-  const keys = (a.top_keys ?? []).slice(0, 3).join(", ");
-  const progs = Array.isArray(a.top_progressions) ? (a.top_progressions as unknown[]).slice(0, 3).map((p) => (Array.isArray(p) ? String(p[0]) : String(p))).join("; ") : "";
+  const keys = keyNames(a.top_keys);
+  const progs = Array.isArray(a.top_progressions) ? (a.top_progressions as unknown[]).slice(0, 3).map((p) => shortProg(Array.isArray(p) ? String(p[0]) : String(p))).join("; ") : "";
   const hits = songs.filter((s) => s.chart_peak).slice(0, 5).map((s) => `${s.title}${s.year ? ` (${s.year})` : ""}${s.chart_peak ? ` #${s.chart_peak}` : ""}`).join(", ");
   const years = a.first_year && a.last_year ? `${a.first_year} to ${a.last_year}` : "";
+  const fam = a.families?.length ? ` (${a.families.slice(0, 2).join(", ")})` : "";
   return [
-    `${a.display}: ${a.song_count} songs in the store${years ? `, ${years}` : ""}${a.chart_songs ? `, ${a.chart_songs} charted, ${a.number_ones ?? 0} number ones` : ""}.`,
-    a.tempo_p50 ? `Tempo p50 ${Math.round(a.tempo_p50)} (p10 ${Math.round(a.tempo_p10 ?? 0)}, p90 ${Math.round(a.tempo_p90 ?? 0)}); major ${pct(a.mode_major_share)}${keys ? `; keys ${keys}` : ""}.` : "",
-    progs ? `Progressions: ${progs}${a.top_harmony_class ? ` (${a.top_harmony_class})` : ""}.` : "",
-    a.structure_mode ? `Structure: ${a.structure_mode}${a.melody_contour_mode ? `; hook contour ${a.melody_contour_mode}` : ""}${a.kick_grid_mode ? `; kick ${a.kick_grid_mode}` : ""}${a.bass_rhythm_mode ? `; bass ${a.bass_rhythm_mode}` : ""}.` : "",
+    `${a.display_name}${fam}: ${a.song_count} songs in the store${years ? `, ${years}` : ""}${a.chart_songs ? `, ${a.chart_songs} charted on the Hot 100, ${a.number_ones ?? 0} number ones` : ""}.`,
+    a.tempo_p50 ? `Tempo p50 ${Math.round(a.tempo_p50)} (p10 ${Math.round(a.tempo_p10 ?? 0)}, p90 ${Math.round(a.tempo_p90 ?? 0)}); major ${pct(a.mode_major_share)}${keys ? `; home keys ${keys}` : ""}.` : "",
+    progs ? `Progressions: ${progs}${a.top_harmony_class && a.top_harmony_class !== "other" ? ` (${a.top_harmony_class})` : ""}.` : "",
+    [a.structure_mode && a.structure_mode !== "X" ? `form ${a.structure_mode}` : "", a.melody_contour_mode ? `hook contour ${a.melody_contour_mode}` : "", a.kick_grid_mode && !/^X\.{15}$/.test(a.kick_grid_mode) ? `kick ${a.kick_grid_mode}` : "", a.bass_rhythm_mode ? `bass ${a.bass_rhythm_mode}` : ""].filter(Boolean).join("; ") + (a.melody_contour_mode || a.bass_rhythm_mode ? "." : ""),
     typeof a.energy_p50 === "number" ? `Energy ${a.energy_p50.toFixed(2)}, valence ${(a.valence_p50 ?? 0).toFixed(2)}, danceability ${(a.danceability_p50 ?? 0).toFixed(2)}.` : "",
     hits ? `Biggest: ${hits}.` : (a.exemplars?.length ? `Known for: ${a.exemplars.slice(0, 5).join(", ")}.` : ""),
-  ].filter(Boolean).join(" ");
+  ].filter((x) => x && x !== ".").join(" ");
 }
 
 export function songLine(s: SongRow): string {
