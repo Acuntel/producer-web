@@ -52,20 +52,30 @@ def clean(v):
     return v
 
 
-def copy_dataframe(cur, table: str, df: pd.DataFrame, json_cols: set[str] = frozenset()):
+def copy_dataframe(cur, table: str, df: pd.DataFrame, json_cols: set[str] = frozenset(), conn=None, chunk: int = 50_000):
+    """Truncate once, then COPY in committed chunks: the pooled connection cancels any single
+    statement that runs too long, and the free tier cannot hold two copies of a big table."""
     from psycopg.types.json import Json
     cols = list(df.columns)
     cur.execute(f"truncate table {table}")
-    with cur.copy(f"COPY {table} ({', '.join(cols)}) FROM STDIN") as copy:
-        for row in df.itertuples(index=False):
-            vals = []
-            for col, v in zip(cols, row):
-                v = clean(v)
-                if col in json_cols and v is not None and not isinstance(v, Json):
-                    v = Json(v if isinstance(v, dict) else json.loads(v) if isinstance(v, str) else v)
-                vals.append(v)
-            copy.write_row(vals)
-    print(f"[load_pg] {table}: {len(df):,} rows loaded")
+    if conn is not None:
+        conn.commit()
+    n = len(df)
+    for start in range(0, n, chunk):
+        part = df.iloc[start:start + chunk]
+        with cur.copy(f"COPY {table} ({', '.join(cols)}) FROM STDIN") as copy:
+            for row in part.itertuples(index=False):
+                vals = []
+                for col, v in zip(cols, row):
+                    v = clean(v)
+                    if col in json_cols and v is not None and not isinstance(v, Json):
+                        v = Json(v if isinstance(v, dict) else json.loads(v) if isinstance(v, str) else v)
+                    vals.append(v)
+                copy.write_row(vals)
+        if conn is not None:
+            conn.commit()
+        print(f"[load_pg] {table}: {min(start + chunk, n):,}/{n:,} rows", flush=True)
+    print(f"[load_pg] {table}: {n:,} rows loaded", flush=True)
 
 
 def run(dsn: str | None, dry_run: bool) -> None:
@@ -88,17 +98,26 @@ def run(dsn: str | None, dry_run: bool) -> None:
         return
 
     with conn:
+        conn.execute("set statement_timeout = 0")
+        conn.execute("set idle_in_transaction_session_timeout = 0")
         with conn.cursor() as cur:
             cur.execute(ddl)
         conn.commit()
-        print("[load_pg] DDL applied")
+        print("[load_pg] DDL applied", flush=True)
+        # The trigram indexes make the big copy several times slower: drop them, copy, rebuild.
+        conn.execute("drop index if exists public.dna_songs_artist_norm_trgm_idx")
+        conn.execute("drop index if exists public.dna_songs_title_norm_trgm_idx")
+        conn.commit()
 
         songs = pd.read_parquet(DATA / "songs.parquet")
         # parquet round-trips list<string> columns as numpy.ndarray, not list
         songs["genres"] = songs["genres"].apply(lambda v: list(v) if isinstance(v, (list, np.ndarray)) else None)
         with conn.cursor() as cur:
-            copy_dataframe(cur, "public.dna_songs", songs)
-        conn.commit()   # one table per transaction: the free tier cannot hold the old rows and the new ones at once
+            copy_dataframe(cur, "public.dna_songs", songs, conn=conn)
+        with conn.cursor() as cur:
+            cur.execute(ddl)   # rebuilds the trigram indexes (create index if not exists)
+        conn.commit()
+        print("[load_pg] indexes rebuilt", flush=True)
 
         artists_path = DATA / "artists.parquet"
         if artists_path.exists():
@@ -109,7 +128,7 @@ def run(dsn: str | None, dry_run: bool) -> None:
             # nested [[value, count], ...] pairs don't survive pyarrow's plain-list
             # inference) - the DDL declares them jsonb, so load as JSON, not text[].
             with conn.cursor() as cur:
-                copy_dataframe(cur, "public.dna_artists", artists, json_cols={"top_keys", "top_progressions"})
+                copy_dataframe(cur, "public.dna_artists", artists, json_cols={"top_keys", "top_progressions"}, conn=conn)
             conn.commit()
 
         buckets_path = DATA / "buckets.parquet"
@@ -122,7 +141,7 @@ def run(dsn: str | None, dry_run: bool) -> None:
                 lambda r: json.dumps({c: json.loads(r[c]) if isinstance(r[c], str) else r[c] for c in stat_cols}), axis=1)
             slim = buckets[[c for c in keep if c in buckets.columns] + ["stats"]]
             with conn.cursor() as cur:
-                copy_dataframe(cur, "public.dna_buckets", slim, json_cols={"stats"})
+                copy_dataframe(cur, "public.dna_buckets", slim, json_cols={"stats"}, conn=conn)
             conn.commit()
 
         patterns_path = DATA / "patterns.parquet"
@@ -130,7 +149,7 @@ def run(dsn: str | None, dry_run: bool) -> None:
         if patterns_path.exists() and os.environ.get("DNA_SKIP_PATTERNS") != "1":
             patterns = pd.read_parquet(patterns_path)
             with conn.cursor() as cur:
-                copy_dataframe(cur, "public.dna_patterns", patterns)
+                copy_dataframe(cur, "public.dna_patterns", patterns, conn=conn)
 
         conn.commit()
     print("[load_pg] done")
