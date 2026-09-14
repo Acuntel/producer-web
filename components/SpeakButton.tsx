@@ -20,7 +20,7 @@ export function SpeakButton({
   const down = (e: React.PointerEvent) => {
     if (state === "disabled") return;
     e.preventDefault();
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic events have no live pointer */ }
     if (toggled.current) { toggled.current = false; downAt.current = null; onRelease(); return; }
     downAt.current = performance.now();
     onPress();

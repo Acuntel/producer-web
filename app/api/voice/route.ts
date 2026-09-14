@@ -9,6 +9,15 @@ const MODEL = process.env.PRODUCER_VOICE_MODEL || "claude-haiku-4-5";
 
 type Body = { state: VoiceState; utterance: string };
 
+// Errors become one honest spoken line; the raw detail rides along unspoken.
+function friendly(e: unknown): { say: string; control: Record<string, never>; detail: string; down: "credits" | "key" | null } {
+  const msg = e instanceof Error ? e.message : "unknown error";
+  if (/credit|billing/i.test(msg)) return { say: "My brain's account is out of credits. Top it up, or add your own key, and we are back.", control: {}, detail: msg.slice(0, 200), down: "credits" };
+  if (/invalid.*api.?key|authentication|401/i.test(msg)) return { say: "That API key is not working. Check it in Settings and we are back.", control: {}, detail: msg.slice(0, 200), down: "key" };
+  if (/rate.?limit|429|overloaded|529/i.test(msg)) return { say: "Give me a few seconds, too many requests at once. Say that again.", control: {}, detail: msg.slice(0, 200), down: null };
+  return { say: "One second, my brain hiccuped. Say that again?", control: {}, detail: msg.slice(0, 200), down: null };
+}
+
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as Body | null;
   if (!body?.state || !body.utterance) return Response.json({ say: "Say that again?", control: {}, detail: "bad request" }, { status: 200 });
@@ -28,7 +37,7 @@ export async function POST(req: Request) {
       const text = (resp as { content: { type: string; text?: string }[] }).content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("");
       const { say, control } = parseVoice(text);
       return Response.json({ say, control, usage: (resp as { usage: unknown }).usage, model: MODEL, ms: Date.now() - t0, keySource: source });
-    } catch (e) { return Response.json({ say: "One second, my brain hiccuped. Say that again?", control: {}, detail: e instanceof Error ? e.message.slice(0, 200) : "error" }); }
+    } catch (e) { return Response.json(friendly(e)); }
   }
   const enc = new TextEncoder();
   const stream = new ReadableStream({
@@ -59,7 +68,9 @@ export async function POST(req: Request) {
         const { say, control } = parseVoice(buf);
         push({ type: "final", say, control, usage: resp.usage, model: MODEL, ms: Date.now() - t0, firstSentenceMs: firstAt, keySource: source });
       } catch (e) {
-        push({ type: "final", say: "One second, my brain hiccuped. Say that again?", control: {}, detail: e instanceof Error ? e.message.slice(0, 200) : "error" });
+        const f = friendly(e);
+        push({ type: "say", text: f.say });
+        push({ type: "final", ...f });
       } finally { controller.close(); }
     },
   });

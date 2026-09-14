@@ -20,10 +20,14 @@ const b64 = (a: Int16Array) => { const u = new Uint8Array(a.buffer, a.byteOffset
 const SILENCE = b64(new Int16Array(1600));   // 100 ms of nothing, rides with the commit
 
 export function useSpeak(d: Deps) {
-  const [status, setStatus] = useState<SpeakStatus>("idle");
+  const [status, setStatusState] = useState<SpeakStatus>("idle");
+  const statusRef = useRef<SpeakStatus>("idle");
+  const setStatus = (s: SpeakStatus) => { statusRef.current = s; setStatusState(s); };
   const [level, setLevel] = useState(0);
   const [interim, setInterim] = useState("");
-  const [engine, setEngine] = useState<"scribe" | "webspeech" | null>(null);
+  const [engine, setEngineState] = useState<"scribe" | "webspeech" | null>(null);
+  const engineRef = useRef<"scribe" | "webspeech" | null>(null);
+  const setEngine = (e: "scribe" | "webspeech" | null) => { engineRef.current = e; setEngineState(e); };
   const dRef = useRef(d); dRef.current = d;
   const holdingRef = useRef(false);
   const streamRef = useRef<MediaStream | null>(null);
@@ -79,7 +83,10 @@ export function useSpeak(d: Deps) {
     const t = text.trim();
     setInterim(""); partialRef.current = "";
     setStatus("idle");
-    if (t) dRef.current.onFinal(t, Math.round(performance.now() - releaseAtRef.current));
+    const ms = Math.round(performance.now() - releaseAtRef.current);
+    console.info(`speak: ${t ? "committed" : "nothing heard"} ${ms} ms after release${t ? `: "${t.slice(0, 80)}"` : ""}`);
+    if (typeof window !== "undefined" && /[?&](e2e|voice)=1/.test(window.location.search)) { const w = window as unknown as { __stt?: unknown[] }; (w.__stt ??= []).push({ text: t, ms, engine: engineRef.current }); }
+    if (t) dRef.current.onFinal(t, ms);
   }, []);
 
   const closeWs = useCallback(() => { const ws = wsRef.current; wsRef.current = null; try { ws?.close(); } catch {} }, []);
@@ -101,9 +108,8 @@ export function useSpeak(d: Deps) {
       else if (t === "auth_error" || t === "quota_exceeded" || t === "rate_limited") { console.warn("scribe", t); closeWs(); finish(partialRef.current); }
     };
     ws.onerror = () => { console.warn("scribe: socket error"); };
-    ws.onclose = () => { if (wsRef.current === ws) { wsRef.current = null; if (!holdingRef.current && status !== "idle") finish(partialRef.current); } };
+    ws.onclose = () => { if (wsRef.current === ws) { wsRef.current = null; if (!holdingRef.current && statusRef.current !== "idle") finish(partialRef.current); } };
     return true;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [closeWs, finish, warmToken]);
 
   function commitScribe(ws: WebSocket) {

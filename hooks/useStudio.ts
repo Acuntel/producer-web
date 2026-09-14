@@ -5,7 +5,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SEED_SONG, applyOps, migrateSong, withReferenceGroove, History, diffSongs, type Song, type Note, type Role } from "@/lib/song";
 import { levelOps, levelLine } from "@/lib/song/level";
-import { exchange } from "@/lib/brain/stream";
+import { exchange, forceEconomy } from "@/lib/brain/stream";
+
+const SPEND_TARGET = 5;   // dollars per record at list prices; the masterprompt's target
 import { movesFromOps, type LaneMove } from "@/lib/song/moves";
 import { stripWake, quickGate, classify } from "@/lib/brain/attend";
 import type { Engine, Position } from "@/lib/engine";
@@ -36,7 +38,7 @@ export const isGenericTitle = (t: string) => /^(untitled|untitled record|new rec
 const isBlank = (s: Song) => s.tracks.length === 0 && isGenericTitle(s.title);
 const loadLibrary = (): SavedSong[] => { try { return JSON.parse(localStorage.getItem(LIB_KEY) ?? "[]"); } catch { return []; } };
 const persistLibrary = (lib: SavedSong[]) => { try { localStorage.setItem(LIB_KEY, JSON.stringify(lib.slice(0, 30))); } catch {} };
-const isE2E = () => typeof window !== "undefined" && window.location.search.includes("e2e");
+const isE2E = () => typeof window !== "undefined" && /[?&](e2e|voice)=1/.test(window.location.search);
 
 export type SnapshotMeta = { label?: string; newProject?: boolean; facts?: unknown; chat?: { role: "user" | "assistant"; content: string }[]; blank?: boolean };
 
@@ -111,7 +113,17 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
 
   const flash = useCallback((t: string) => { setToast(t); setTimeout(() => setToast(""), 1800); }, []);
   // The meter: every brain call adds its list-price cost to this record's running total.
-  const spend = useCallback((model: string | undefined, usage: unknown) => { const usd = costOf(model, usage as Usage); if (!usd) return; setCost(addCost(songRef.current.title, usd)); }, []);
+  const governedRef = useRef(false);
+  const spend = useCallback((model: string | undefined, usage: unknown) => {
+    const usd = costOf(model, usage as Usage); if (!usd) return;
+    const total = addCost(songRef.current.title, usd); setCost(total);
+    // The five dollar governor: past the target, the deep model is kept for blueprints only, and the user is told once.
+    if (total > SPEND_TARGET && !governedRef.current) {
+      governedRef.current = true; forceEconomy(true);
+      const line = `This record has passed ${SPEND_TARGET} dollars in brain spend, so I am switching the everyday moves to the fast model. Blueprints keep the deep one.`;
+      flash(`Past $${SPEND_TARGET}: fast model for everyday moves`); say(line);
+    }
+  }, [flash, say]);
   useEffect(() => { setCost(costFor(song.title)); }, [song.title]);
   const landMoves = useCallback((ops: unknown[], before: Song, after: Song) => {
     const m = movesFromOps(ops, before, after); if (!m.length) return;

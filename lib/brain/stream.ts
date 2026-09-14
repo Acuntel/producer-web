@@ -3,7 +3,10 @@
 // with the ops. Harness callers that receive plain JSON still work.
 export type StreamReply = { say: string; ops?: unknown[] | null; song?: unknown; action?: unknown; listen?: string | null; expect?: unknown[] | null; alternative?: unknown[] | null; detail?: string; usage?: unknown; saidEarly?: boolean };
 
-export const economyQuery = () => (typeof window !== "undefined" && /[?&]economy=1/.test(window.location.search) ? "?economy=1" : "");
+// The governor can force economy mode (every Hands call on the fast model) once a record passes its spend target.
+let forcedEconomy = false;
+export const forceEconomy = (on: boolean) => { forcedEconomy = on; };
+export const economyQuery = () => (forcedEconomy || (typeof window !== "undefined" && /[?&]economy=1/.test(window.location.search)) ? "?economy=1" : "");
 
 export async function exchange(body: unknown, onSay: (say: string) => void, url = "/api/chat"): Promise<StreamReply> {
   const r = await fetch(url + economyQuery(), { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" }, body: JSON.stringify(body) });

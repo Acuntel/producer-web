@@ -139,6 +139,13 @@ export default function App() {
                 </div>
               )}
               {studio.listenHint && <p className="flex items-start gap-1.5 text-sm text-live"><Icon name="ear" size={15} className="mt-0.5 shrink-0" /><span>{studio.listenHint}</span></p>}
+              {(convo.brainDown ?? studio.brainDown) && (
+                <div className="rounded-2xl border border-warn/40 bg-warn/10 px-4 py-3" data-role="brain-down">
+                  <p className="text-sm font-semibold text-warn">{(convo.brainDown ?? studio.brainDown) === "credits" ? "The producer's brain is out of credits." : "The producer's API key is not working."}</p>
+                  <p className="mt-1 text-sm text-ink-2">{(convo.brainDown ?? studio.brainDown) === "credits" ? "The music keeps playing and every move is saved. Add credits at console.anthropic.com, or use your own key from your account." : "Check the key in your account."}</p>
+                  {account.enabled && <button onClick={() => setShowAccount(true)} className="mt-2 text-sm font-medium text-live hover:underline">Use my own API key</button>}
+                </div>
+              )}
             </div>
             <div className="flex min-h-0 flex-col justify-end">
               <Ribbon lines={studio.messages} interim={speak.interim} speakingText={voiceOut.current} thinking={convo.thinking || studio.busy} tall />

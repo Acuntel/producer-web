@@ -213,3 +213,21 @@ Brady's deeper brief is in docs/ROUND_0906C_MASTERPROMPT.md. This part ships the
 - The limit itself, measured after recovery: a request every 3 s ran 30 times clean (0.18 to 0.31 s each); at a 0.5 s gap the 21st and 22nd requests timed out, the next two crawled (7 s, 1.2 s) and then it answered again. So the service allows about 20 requests per ten seconds; going slightly over costs seconds, hammering through the block costs fifteen minutes. The gate's defaults (one every 2 s, twelve a minute) sit well under it.
 - Gates on production (2026-09-07 05:1x, producer-udfy6xybh + worker fcc26e91): upload named from its sound and served by the identity cache in 8 s, the identify route in 1.2 s, kick used and saved to the cloud project, finder 1.3 s for 16 candidates, by-name record from the link cache in 4 s, the six minute mix read as a tracklist in 26 s with six records and their pitch moves, YouTube refused in one line, test user removed. The brain-dependent steps (breakdown, slice by voice, rendered vocal) still wait on the empty Anthropic key.
 - The two hour Essential Mix, by name, through the screen on production (2026-09-07 06:2x-06:4x): first run named 9 records to minute 32 and then hit the ten minute cooldown after four timeouts, and the screen said nothing about it. With the graded backoff (a slow answer holds 10 s, a timeout holds 30 s and retries once, six timeouts inside three minutes are the real block) the second run read the whole set: fetch 26 s over HLS, first entries on screen at 64 s, 93 cuts over 42 audio boundaries, 23 named, 20 entries from Chloé Robinson's "Pax" at 1:05 to KETTAMA's "Samba Soccer 2001" at 95:40, done in 8 minutes 11 seconds with no cooldown. A partial read now says how far it got and Keep going resumes from there. The same mix asked for again by link came back from the mix cache in 3 s.
+
+## 2026-09-13 night: V11, the one-control stage and the two-lane brain (Brady's 30-minute brief)
+
+The brief and its reading: docs/MASTERPROMPT_V11.md. The store contract: docs/DNA_SPEC.md.
+
+### Shipped locally (commit "V11 stage: one control...")
+- The front rebuilt: landing (New project / Existing project), then the stage: black, the edge glow (pink while it listens, violet while it thinks, green while it speaks), the record visible and untouchable, the conversation in large type, work cards, one Speak button. Fourteen components, two hooks and the browser TTS file deleted.
+- Push to talk with the realtime engine in manual-commit mode: the release sends the commit, so the end of the sentence is known the moment the finger lifts. Web Speech falls back with stop() on release. The producer's voice streams as PCM straight into Web Audio, sentence by sentence, with the music ducked under it.
+- The two-lane brain: the Voice (Haiku 4.5, streamed) answers within a second and hands the Hands (the full contract on Sonnet, Opus for blueprints) a precise task, starts research, or plays an audition. Research drops a name down the Galton board (store tables plus data/galton.json) with a one-search web fallback and a cache.
+- The meter: every brain call priced at list on the client, the record's running cost on the stage.
+- Feel: valence, arousal, tension, warmth and his words, on every render and reference, in both lanes' context.
+
+### Gates
+- tsc clean, next build green, 61 unit tests green, e2e ALL PASSED on the local build: greeting, voice first sentence 1198 ms from the typed ask (route 1731 ms), hands ops on Sonnet (transpose, drive, cutoff, goto drop), status 126 BPM -9.4 LUFS, cost $0.02 for the move. Screenshots at 1440 and 390 looked at: no clipping, no text under 12 px, no emoji.
+
+### Traps
+- A hydration mismatch (window.location read in a useState initializer) threw React #418 and silently stopped the harness boot; the old page had the same bug hidden by a later click.
+- The Supabase project had paused itself (free tier); accounts on the live site were dead until it was restored through the management API.

@@ -33,6 +33,7 @@ export function useConversation(d: Deps) {
   const [thinking, setThinking] = useState(false);
   const [auditioning, setAuditioning] = useState(false);
   const [timing, setTiming] = useState<Timing | null>(null);
+  const [brainDown, setBrainDown] = useState<"credits" | "key" | null>(null);
   const dRef = useRef(d); dRef.current = d;
   const turnRef = useRef(0);
   const researchRef = useRef<string[]>([]);
@@ -153,12 +154,13 @@ export function useConversation(d: Deps) {
         let i: number;
         while ((i = buf.indexOf("\n")) >= 0) {
           const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (!line) continue;
-          let o: { type?: string; text?: string; say?: string; control?: VoiceControl; usage?: unknown; model?: string; ms?: number }; try { o = JSON.parse(line); } catch { continue; }
+          let o: { type?: string; text?: string; say?: string; control?: VoiceControl; usage?: unknown; model?: string; ms?: number; down?: "credits" | "key" | null }; try { o = JSON.parse(line); } catch { continue; }
           if (o.type === "say" && o.text && turn === turnRef.current) { if (!firstWord) firstWord = Math.round(performance.now() - t0); void dRef.current.voice.speak(o.text); }
           else if (o.type === "final") {
             finalSay = o.say ?? ""; control = o.control ?? {}; if (o.usage) s.spend(o.model, o.usage);
+            setBrainDown(o.down ?? null);
             const tm = { stt: sttMs, firstWord, voiceMs: o.ms ?? Math.round(performance.now() - t0) }; setTiming(tm);
-            if (/[?&]e2e=1/.test(window.location.search)) { const w = window as unknown as { __voice?: unknown[] }; (w.__voice ??= []).push({ ask: t, say: finalSay, control, ...tm, wall: Math.round(performance.now() - t0) }); }
+            if (/[?&](e2e|voice)=1/.test(window.location.search)) { const w = window as unknown as { __voice?: unknown[] }; (w.__voice ??= []).push({ ask: t, say: finalSay, control, ...tm, wall: Math.round(performance.now() - t0) }); }
           }
         }
       }
@@ -171,5 +173,5 @@ export function useConversation(d: Deps) {
     } finally { setThinking(false); }
   }, [act, buildState]);
 
-  return { hear, interrupt, audition, work, research, thinking, auditioning, timing };
+  return { hear, interrupt, audition, work, research, thinking, auditioning, timing, brainDown };
 }

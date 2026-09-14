@@ -48,9 +48,16 @@ def empty_row() -> dict:
     return {name: None for name in COLUMN_NAMES}
 
 
+_INT_RANGES = {"Int8": (-128, 127), "Int16": (-32768, 32767)}
+
+
 def to_frame(rows: list[dict]) -> pd.DataFrame:
     """Build a DataFrame with exactly COLUMNS, in order, cast to the declared
-    dtypes (nullable so missing fields stay null, never invented)."""
+    dtypes (nullable so missing fields stay null, never invented). A value
+    that doesn't fit its declared int width (corrupt source metadata, e.g. a
+    malformed MIDI time-signature numerator) is nulled rather than clamped or
+    silently wrapped - clamping would print a plausible-looking but false
+    number, which is worse than admitting we don't trust the field."""
     df = pd.DataFrame(rows)
     for name in COLUMN_NAMES:
         if name not in df.columns:
@@ -59,8 +66,17 @@ def to_frame(rows: list[dict]) -> pd.DataFrame:
     for name, dtype in COLUMNS:
         if dtype == "object":
             continue
+        if dtype in _INT_RANGES:
+            lo, hi = _INT_RANGES[dtype]
+            numeric = pd.to_numeric(df[name], errors="coerce")
+            out_of_range = numeric.notna() & ((numeric < lo) | (numeric > hi))
+            n_bad = int(out_of_range.sum())
+            if n_bad:
+                print(f"[schema] {name}: {n_bad} value(s) out of {dtype} range, nulled")
+            df[name] = numeric.where(~out_of_range)
         try:
             df[name] = df[name].astype(dtype)
-        except (TypeError, ValueError):
-            df[name] = pd.array(df[name], dtype=dtype)
+        except (TypeError, ValueError) as e:
+            print(f"[schema] {name}: cast to {dtype} failed ({e}); nulling unparseable values")
+            df[name] = pd.to_numeric(df[name], errors="coerce").astype(dtype)
     return df
