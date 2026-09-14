@@ -151,15 +151,18 @@ def stage_features() -> Path:
 
 
 def parse_part(p: Path, limit: int | None = None) -> pd.DataFrame:
-    t0 = time.time(); rows: list[dict] = []; seen = 0
+    """Rows are flushed into frames every 100k so a million-record part never sits in memory as dicts."""
+    t0 = time.time(); rows: list[dict] = []; frames: list[pd.DataFrame] = []; seen = 0; named = 0
     for name, raw in stream_tar(p):
         if not name.endswith(".json"): continue
         seen += 1
         r = parse_highlevel(raw)
-        if r: rows.append(r)
-        if seen % 200_000 == 0: print(f"[acousticbrainz] {p.name}: {seen:,} files, {len(rows):,} named", flush=True)
-        if limit and len(rows) >= limit: break
-    df = pd.DataFrame(rows)
+        if r: rows.append(r); named += 1
+        if len(rows) >= 100_000: frames.append(pd.DataFrame(rows)); rows = []
+        if seen % 200_000 == 0: print(f"[acousticbrainz] {p.name}: {seen:,} files, {named:,} named", flush=True)
+        if limit and named >= limit: break
+    if rows: frames.append(pd.DataFrame(rows))
+    df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     print(f"[acousticbrainz] {p.name}: {seen:,} files -> {len(df):,} named recordings in {time.time() - t0:.0f}s", flush=True)
     return df
 
