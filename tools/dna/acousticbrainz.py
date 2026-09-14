@@ -92,24 +92,28 @@ def parse_highlevel(raw: bytes) -> dict | None:
     }
 
 
-def parse_features(path: Path, want: dict[str, str]) -> pd.DataFrame:
-    """A lowlevel feature dump: CSV files inside the tar. Keep the columns named in `want` (source -> output)."""
-    frames = []
-    for name, raw in stream_tar(path):
-        if not name.endswith(".csv"): continue
-        head = raw[:4096].decode("utf-8", "ignore").splitlines()[0]
-        cols = [c.strip() for c in head.split(",")]
-        keep = [c for c in cols if c in want or c in ("mbid", "recording_mbid", "gid", "submission_offset", "offset")]
-        if not any(c in want for c in keep): continue
-        df = pd.read_csv(io.BytesIO(raw), usecols=keep, low_memory=False)
-        idcol = next((c for c in ("recording_mbid", "mbid", "gid") if c in df.columns), None)
-        if not idcol: continue
-        df = df.rename(columns={idcol: "mbid", **{k: v for k, v in want.items() if k in df.columns}})
-        frames.append(df[["mbid"] + [v for v in want.values() if v in df.columns]])
-        print(f"[acousticbrainz] {path.name}: {name} {len(df):,} rows", flush=True)
+def parse_features(path: Path, want: dict[str, str], keep_ids: set[str]) -> pd.DataFrame:
+    """A lowlevel feature dump: one huge CSV inside the tar (mbid, submission_offset, ...). Streamed in
+    chunks, first submission per recording, only the recordings we have names for."""
+    proc = subprocess.Popen(["zstd", "-dc", str(path)], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    frames = []; seen = 0
+    with tarfile.open(fileobj=proc.stdout, mode="r|") as tar:
+        for m in tar:
+            if not m.isfile() or not m.name.endswith(".csv"): continue
+            f = tar.extractfile(m)
+            if f is None: continue
+            header = f.readline().decode("utf-8", "ignore").strip().split(",")
+            cols = [c for c in header if c in want or c in ("mbid", "submission_offset")]
+            for chunk in pd.read_csv(f, names=header, usecols=cols, chunksize=1_000_000, low_memory=False):
+                seen += len(chunk)
+                if "submission_offset" in chunk.columns: chunk = chunk[chunk["submission_offset"] == 0]
+                chunk = chunk[chunk["mbid"].isin(keep_ids)]
+                if len(chunk): frames.append(chunk.rename(columns=want)[["mbid"] + [v for k, v in want.items() if k in cols]])
+                if seen % 5_000_000 < 1_000_000: print(f"[acousticbrainz] {path.name}: {seen:,} rows read, {sum(len(x) for x in frames):,} kept", flush=True)
+            break
+    proc.wait()
     if not frames: return pd.DataFrame(columns=["mbid"])
-    out = pd.concat(frames, ignore_index=True)
-    return out.drop_duplicates("mbid")
+    return pd.concat(frames, ignore_index=True).drop_duplicates("mbid")
 
 
 def main() -> None:
@@ -130,11 +134,12 @@ def main() -> None:
     print(f"[acousticbrainz] highlevel: {seen:,} files -> {len(df):,} named recordings in {time.time() - t0:.0f}s", flush=True)
     # Tempo and key from the feature dumps when present.
     rhythm = next(iter(RAW.glob("*rhythm.tar.zst")), None); tonal = next(iter(RAW.glob("*tonal.tar.zst")), None)
-    if rhythm and rhythm.stat().st_size > 1_000_000:
-        rf = parse_features(rhythm, {"bpm": "tempo", "rhythm.bpm": "tempo", "danceability": "rhythm_danceability"})
+    ids = set(df["mbid"].dropna())
+    if rhythm and rhythm.stat().st_size > 1_000_000 and os.environ.get("AB_SKIP_FEATURES") != "1":
+        rf = parse_features(rhythm, {"bpm": "tempo", "danceability": "rhythm_danceability", "onset_rate": "onset_rate"}, ids)
         if "tempo" in rf.columns: df = df.merge(rf[["mbid", "tempo"]], on="mbid", how="left")
-    if tonal and tonal.stat().st_size > 1_000_000:
-        tf = parse_features(tonal, {"key_key": "key_name", "tonal.key_key": "key_name", "key_scale": "mode", "tonal.key_scale": "mode"})
+    if tonal and tonal.stat().st_size > 1_000_000 and os.environ.get("AB_SKIP_FEATURES") != "1":
+        tf = parse_features(tonal, {"key_key": "key_name", "key_scale": "mode"}, ids)
         if "key_name" in tf.columns: df = df.merge(tf[["mbid"] + [c for c in ("key_name", "mode") if c in tf.columns]], on="mbid", how="left")
     if "tempo" not in df.columns: df["tempo"] = None
     if "key_name" not in df.columns: df["key_name"] = None
