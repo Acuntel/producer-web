@@ -39,7 +39,8 @@ def exemplar_map(df: pd.DataFrame, group_cols: list[str], n: int) -> dict:
         key = key if isinstance(key, tuple) else (key,)
         names = []
         for _, r in g.iterrows():
-            artist = r.get("artist") or "Unknown"
+            artist = r.get("artist")
+            artist = "Unknown" if pd.isna(artist) else artist
             title = r.get("title")
             year = f" ({int(r['year'])})" if pd.notna(r.get("year")) else ""
             names.append(f"{artist}: {title}{year}")

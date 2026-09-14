@@ -62,7 +62,7 @@ export function AnalyzeSheet({ stems, signedIn, onSignIn, onClose }: { stems: St
                 <div className="space-y-2">
                   <p className="text-sm text-ink-2">Name a record, a DJ mix or a show and the producer finds it on SoundCloud, Mixcloud and the Internet Archive; or upload a file; or capture what is playing in another tab. A record comes back named from its sound with tempo, key, structure, four stems, the drums sliced into one-shots and what the studio hears. A mix comes back as its tracklist, each record one tap from the studio.</p>
                   <form onSubmit={(e) => { e.preventDefault(); const v = query.trim(); if (!v) return; if (/^https?:\/\//i.test(v)) void stems.start({ url: v }); else void stems.find(v); }} className="flex gap-2">
-                    <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-line/60 bg-base px-3 py-2 focus-within:border-accent/60">
+                    <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-line/60 bg-stage px-3 py-2 focus-within:border-accent/60">
                       <Icon name="search" size={15} className="shrink-0 text-ink-3" />
                       <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Artist and title, a link, or a file link" aria-label="Find a record" className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-ink-3 focus:outline-none" />
                     </div>
@@ -185,7 +185,7 @@ export function AnalyzeSheet({ stems, signedIn, onSignIn, onClose }: { stems: St
                     </div>
                     {job.result.facts?.blocks && <EnergyStrip blocks={job.result.facts.blocks} best={job.result.facts.bestBars.startBar} />}
                     {job.result.hearing?.report && (
-                      <div className="mt-3 rounded-xl bg-base/60 p-3">
+                      <div className="mt-3 rounded-xl bg-stage/60 p-3">
                         <div className="eyebrow mb-1">What the studio hears</div>
                         <p className="text-sm leading-relaxed text-ink-2">{job.result.hearing.report}</p>
                         {!!job.result.hearing.clap?.descriptors?.length && (

@@ -99,7 +99,7 @@ export default function App() {
   const measured = studio.facts ? `${Math.round(studio.facts.tempo.bpm)} measured · ${studio.facts.loudness.integrated.toFixed(1)} LUFS` : null;
 
   return (
-    <main className="relative flex h-dvh flex-col overflow-hidden bg-base">
+    <main className="relative flex h-dvh flex-col overflow-hidden bg-stage">
       <Glow state={glow} level={speak.level} />
 
       {view === "landing" ? (
@@ -112,7 +112,7 @@ export default function App() {
         <div className="relative z-10 flex min-h-0 flex-1 flex-col px-4 pb-3 pt-4 sm:px-8 sm:pt-5">
           <header className="flex shrink-0 items-center justify-between gap-3">
             <button onClick={() => { if (playing) void studio.pause(); setView("landing"); }} className="flex items-center gap-2 text-sm font-semibold text-ink-2 transition-colors hover:text-ink" aria-label="Back to projects">
-              <span className="grid h-7 w-7 place-items-center rounded-lg bg-ink text-base"><Icon name="logo" size={15} /></span>
+              <span className="grid h-7 w-7 place-items-center rounded-lg bg-ink text-stage"><Icon name="logo" size={15} /></span>
               <span className="hidden sm:inline">The Producer</span>
             </button>
             <div className="flex items-center gap-3">

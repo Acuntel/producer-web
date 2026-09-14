@@ -17,7 +17,7 @@ export default {
       },
       // One surface scale. Higher number = closer to the viewer.
       colors: {
-        base: "rgb(var(--c-base) / <alpha-value>)",
+        stage: "rgb(var(--c-base) / <alpha-value>)",
         s1: "rgb(var(--c-s1) / <alpha-value>)",
         s2: "rgb(var(--c-s2) / <alpha-value>)",
         s3: "rgb(var(--c-s3) / <alpha-value>)",

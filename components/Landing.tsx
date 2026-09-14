@@ -23,7 +23,7 @@ export function Landing({ projects, device, signedIn, loading, onNew, onOpen, on
   return (
     <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-10">
       <div className="mb-10 flex flex-col items-center gap-3 text-center">
-        <span className="grid h-14 w-14 place-items-center rounded-2xl bg-ink text-base shadow-[0_0_60px_-10px_rgb(255_45_146/0.8)]"><Icon name="logo" size={26} /></span>
+        <span className="grid h-14 w-14 place-items-center rounded-2xl bg-ink text-stage shadow-[0_0_60px_-10px_rgb(255_45_146/0.8)]"><Icon name="logo" size={26} /></span>
         <h1 className="text-3xl font-semibold tracking-tight text-ink">The Producer</h1>
         <p className="max-w-[34ch] text-base text-ink-2">Talk. It builds the record in front of you. Nothing to click but this.</p>
       </div>

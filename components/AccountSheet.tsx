@@ -19,7 +19,7 @@ export function AccountSheet({ account, mode, onClose }: { account: Account; mod
   const body = account.user ? <Settings account={account} onClose={onClose} /> : <SignIn account={account} gate={mode === "gate"} onClose={onClose} />;
   if (mode === "gate") {
     return (
-      <div className="fixed inset-0 z-[60] grid place-items-center bg-base/85 p-4 backdrop-blur-md">
+      <div className="fixed inset-0 z-[60] grid place-items-center bg-stage/85 p-4 backdrop-blur-md">
         <div className="panel w-full max-w-md animate-slide-up rounded-3xl p-6 sm:p-7">{body}</div>
       </div>
     );
@@ -71,11 +71,11 @@ function SignIn({ account, gate, onClose }: { account: Account; gate: boolean; o
       <form onSubmit={submit} className="space-y-3">
         <label className="block">
           <span className="eyebrow mb-1 block">Email</span>
-          <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-xl border border-line/60 bg-base px-3 py-2.5 text-base text-ink placeholder:text-ink-3 focus:border-accent/60 focus:outline-none" placeholder="you@example.com" />
+          <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-xl border border-line/60 bg-stage px-3 py-2.5 text-base text-ink placeholder:text-ink-3 focus:border-accent/60 focus:outline-none" placeholder="you@example.com" />
         </label>
         <label className="block">
           <span className="eyebrow mb-1 block">Password</span>
-          <input type="password" required minLength={8} autoFocus={!!remembered} autoComplete={tab === "in" ? "current-password" : "new-password"} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-xl border border-line/60 bg-base px-3 py-2.5 text-base text-ink placeholder:text-ink-3 focus:border-accent/60 focus:outline-none" placeholder={tab === "up" ? "At least 8 characters" : "Your password"} />
+          <input type="password" required minLength={8} autoFocus={!!remembered} autoComplete={tab === "in" ? "current-password" : "new-password"} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-xl border border-line/60 bg-stage px-3 py-2.5 text-base text-ink placeholder:text-ink-3 focus:border-accent/60 focus:outline-none" placeholder={tab === "up" ? "At least 8 characters" : "Your password"} />
         </label>
         {err && <p role="alert" className="rounded-lg bg-warn/10 px-3 py-2 text-sm text-warn">{err}</p>}
         <Button tone="accent" type="submit" disabled={busy} className="w-full justify-center">{busy ? "One moment" : tab === "up" ? "Create my account" : "Sign in"}</Button>
@@ -140,7 +140,7 @@ function KeyField({ title, hint, placeholder, saved, onSave, onRemove, help }: {
       </div>
       <p className={`text-xs ${saved ? "text-live" : "text-ink-3"}`}>{hint}</p>
       <div className="flex gap-2">
-        <input type="password" autoComplete="off" spellCheck={false} value={value} onChange={(e) => { setValue(e.target.value); setOk(false); }} placeholder={placeholder} aria-label={title} className="min-w-0 flex-1 rounded-xl border border-line/60 bg-base px-3 py-2 font-mono text-sm text-ink placeholder:text-ink-3 focus:border-accent/60 focus:outline-none" />
+        <input type="password" autoComplete="off" spellCheck={false} value={value} onChange={(e) => { setValue(e.target.value); setOk(false); }} placeholder={placeholder} aria-label={title} className="min-w-0 flex-1 rounded-xl border border-line/60 bg-stage px-3 py-2 font-mono text-sm text-ink placeholder:text-ink-3 focus:border-accent/60 focus:outline-none" />
         <Button tone="accent" onClick={() => void save()} disabled={busy || !value.trim()}>{busy ? "Checking" : "Save"}</Button>
         {saved && <IconButton name="trash" label="Remove this key" onClick={() => void onRemove()} />}
       </div>

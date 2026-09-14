@@ -35,7 +35,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${sans.variable} ${mono.variable}`}>
-      <body className="bg-base font-sans text-ink antialiased">{children}</body>
+      <body className="bg-stage font-sans text-ink antialiased">{children}</body>
     </html>
   );
 }

@@ -70,7 +70,7 @@ export function SpeakButton({
             disabled:opacity-40
             ${holding ? "bg-accent text-accent-ink shadow-[0_0_0_6px_rgb(255_45_146/0.25),0_0_60px_rgb(255_45_146/0.6)]"
               : speaking ? "bg-live text-accent-ink shadow-[0_0_50px_rgb(57_255_136/0.45)]"
-              : "bg-ink text-base shadow-[0_0_0_1px_rgb(255_255_255/0.08)_inset,0_10px_40px_-12px_rgb(255_45_146/0.7)] hover:shadow-[0_0_0_1px_rgb(255_255_255/0.1)_inset,0_10px_50px_-10px_rgb(255_45_146/0.9)]"}`}
+              : "bg-ink text-stage shadow-[0_0_0_1px_rgb(255_255_255/0.08)_inset,0_10px_40px_-12px_rgb(255_45_146/0.7)] hover:shadow-[0_0_0_1px_rgb(255_255_255/0.1)_inset,0_10px_50px_-10px_rgb(255_45_146/0.9)]"}`}
         >
           <Icon name={speaking ? "stop" : "mic"} size={32} />
         </button>
