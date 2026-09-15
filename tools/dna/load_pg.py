@@ -17,7 +17,7 @@ import pandas as pd
 
 DATA = Path(__file__).resolve().parents[2] / "data" / "dna"
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "supabase" / "migrations"
-MIGRATIONS = ["0008_dna.sql", "0009_dna_performer_raw.sql", "0011_dna_voice.sql"]
+MIGRATIONS = ["0008_dna.sql", "0009_dna_performer_raw.sql", "0011_dna_voice.sql", "0012_dna_songs_lean.sql"]
 
 
 def load_ddl() -> str:
@@ -111,12 +111,13 @@ def run(dsn: str | None, dry_run: bool) -> None:
         conn.execute("drop index if exists public.dna_songs_title_norm_trgm_idx")
         conn.commit()
 
-        songs = pd.read_parquet(DATA / "songs.parquet")
+        # Only the columns the product's lookups read (lib/brain/galton.ts) plus the keys; the rest lives in parquet.
+        PG_SONG_COLS = ["id", "source", "title", "artist", "artist_norm", "title_norm", "year", "tempo", "key_pc", "mode",
+                        "chart_peak", "chart_weeks", "hit_tier", "progression", "structure", "energy", "valence", "danceability", "family"]
+        songs = pd.read_parquet(DATA / "songs.parquet", columns=PG_SONG_COLS)
         # The free tier holds about 500 MB: the millions of AcousticBrainz rows stay in parquet and the bins; only named sources load.
         skip = {s for s in os.environ.get("DNA_PG_SKIP_SOURCES", "acousticbrainz").split(",") if s}
         if skip: songs = songs[~songs["source"].isin(skip)]
-        # parquet round-trips list<string> columns as numpy.ndarray, not list
-        songs["genres"] = songs["genres"].apply(lambda v: list(v) if isinstance(v, (list, np.ndarray)) else None)
         with conn.cursor() as cur:
             copy_dataframe(cur, "public.dna_songs", songs, conn=conn)
         with conn.cursor() as cur:
@@ -144,7 +145,8 @@ def run(dsn: str | None, dry_run: bool) -> None:
             conn.commit()
 
         buckets_path = DATA / "buckets.parquet"
-        if buckets_path.exists():
+        # The product reads bins from data/galton.json; buckets load only on request (they were 203 MB of the tier).
+        if os.environ.get("DNA_PG_LOAD_BUCKETS") == "1" and buckets_path.exists():
             buckets = pd.read_parquet(buckets_path)
             keep = ["level", "tempo_band", "meter_feel", "mode", "decade", "family",
                     "structure_archetype", "harmony_class", "hit_tier", "count", "mode_share",

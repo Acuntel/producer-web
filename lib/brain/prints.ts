@@ -1,62 +1,85 @@
 // The fingerprints: every audio-measured recording as 32 int8 numbers where distance means "sounds like".
-// Built by tools/dna/prints.py into data/prints (flat binaries, traced into the research function).
-// Server only. Loaded once per process; a nearest-neighbour query is a brute-force scan of ~36 MB.
+// Built by tools/dna/prints.py into data/prints (layout v2: one order by artist key then title key, brotli
+// on disk, traced into the research function). Server only. Loaded once per process; a nearest-neighbour
+// query is a brute-force scan of ~36 MB.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { gunzipSync } from "node:zlib";
+import { brotliDecompressSync, gunzipSync } from "node:zlib";
 import { createHash } from "node:crypto";
 
-type Manifest = { n: number; dims: number; scale: number; families: string[]; builtAt?: string };
-type Store = { m: Manifest; keys: BigUint64Array; vec: Int8Array; akeys: BigUint64Array; arows: Uint32Array; names: Buffer; offs: Uint32Array; meta: Uint8Array };
+type Manifest = { v: number; n: number; dims: number; scale: number; codec?: string; families: string[]; builtAt?: string };
+type Store = { m: Manifest; akeys: BigUint64Array; tkeys: Uint32Array; vec: Int8Array; names: Buffer; offs: Uint32Array; meta: Uint8Array };
 export type Print = { row: number; artist: string; title: string; year: number | null; tempo: number | null; keyPc: number | null; mode: string | null; energy: number; valence: number; arousal: number; voice: string | null; family: string | null };
+const META = 9;
 
 let store: Store | null | undefined;
-const aligned = (buf: Buffer) => { const ab = new ArrayBuffer(buf.byteLength); new Uint8Array(ab).set(buf); return ab; };
+const aligned = (buf: Buffer | Uint8Array) => { const ab = new ArrayBuffer(buf.byteLength); new Uint8Array(ab).set(buf); return ab; };
 
 export function prints(): Store | null {
   if (store !== undefined) return store;
   try {
     const dir = join(process.cwd(), "data", "prints");
-    const rd = (f: string) => readFileSync(join(dir, f));
     const m = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as Manifest;
-    store = { m, keys: new BigUint64Array(aligned(rd("keys.u64"))), vec: new Int8Array(aligned(rd("vec.i8"))), akeys: new BigUint64Array(aligned(rd("akeys.u64"))),
-      arows: new Uint32Array(aligned(rd("arows.u32"))), names: gunzipSync(rd("names.txt.gz")), offs: new Uint32Array(aligned(rd("offs.u32"))), meta: new Uint8Array(aligned(rd("meta.bin"))) };
+    if (m.v !== 2) throw new Error(`prints layout v${m.v} is not v2`);
+    const raw = (f: string) => readFileSync(join(dir, f));
+    const packed = (f: string) => (m.codec === "gz" ? gunzipSync(raw(f)) : brotliDecompressSync(raw(f)));
+    const lens = new Uint16Array(aligned(packed("lens.u16.br")));
+    const offs = new Uint32Array(lens.length + 1); for (let i = 0; i < lens.length; i++) offs[i + 1] = offs[i] + lens[i];
+    store = { m, akeys: new BigUint64Array(aligned(raw("akeys.u64"))), tkeys: new Uint32Array(aligned(raw("tkeys.u32"))), vec: new Int8Array(aligned(packed("vec.i8.br"))),
+      names: packed("names.txt.br"), offs, meta: new Uint8Array(aligned(packed("meta.bin.br"))) };
   } catch { store = null; }
   return store;
 }
 export const printsCount = () => prints()?.m.n ?? 0;
 
-/** Same key as tools/dna/prints.py: the first eight bytes of sha1, little endian. */
+/** Same key as tools/dna/prints.py: the first eight bytes of sha1, little endian. Title keys keep the low 32 bits. */
 export const key64 = (s: string): bigint => createHash("sha1").update(s, "utf8").digest().readBigUInt64LE(0);
-function lowerBound(a: BigUint64Array, k: bigint): number { let lo = 0, hi = a.length; while (lo < hi) { const mid = (lo + hi) >>> 1; if (a[mid] < k) lo = mid + 1; else hi = mid; } return lo; }
+const key32 = (s: string): number => Number(key64(s) & 0xffffffffn);
+function bound(a: BigUint64Array, k: bigint, upper: boolean): number { let lo = 0, hi = a.length; while (lo < hi) { const mid = (lo + hi) >>> 1; if (upper ? a[mid] <= k : a[mid] < k) lo = mid + 1; else hi = mid; } return lo; }
+function range(s: Store, artistNorm: string): [number, number] { const k = key64(artistNorm); return [bound(s.akeys, k, false), bound(s.akeys, k, true)]; }
 
 export function findRow(artistNorm: string, titleNorm: string): number | null {
   const s = prints(); if (!s) return null;
-  const k = key64(`${artistNorm}|${titleNorm}`); const i = lowerBound(s.keys, k);
-  return i < s.keys.length && s.keys[i] === k ? i : null;
+  const [lo, hi] = range(s, artistNorm); const t = key32(titleNorm);
+  for (let i = lo; i < hi; i++) if (s.tkeys[i] === t) return i;
+  return null;
 }
 export function artistRows(artistNorm: string, limit = 24): number[] {
   const s = prints(); if (!s) return [];
-  const k = key64(artistNorm); const out: number[] = [];
-  for (let i = lowerBound(s.akeys, k); i < s.akeys.length && s.akeys[i] === k && out.length < limit; i++) out.push(s.arows[i]);
+  const [lo, hi] = range(s, artistNorm); const out: number[] = [];
+  for (let i = lo; i < hi && out.length < limit; i++) out.push(i);
   return out;
+}
+const fold = (t: string) => t.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/\(.*?\)|\[.*?\]|\b(feat|featuring|ft)\b.*$/g, "").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+/** A titled record among an artist's prints: the exact key first, then the closest title by folded name. */
+export function findRecord(artistNorm: string, titleNorm: string): number | null {
+  const exact = findRow(artistNorm, titleNorm); if (exact !== null) return exact;
+  const want = fold(titleNorm); if (!want) return null;
+  let best: { row: number; score: number } | null = null;
+  for (const row of artistRows(artistNorm, 400)) {
+    const have = fold(printOf(row).title); if (!have) continue;
+    const score = have === want ? 3 : have.startsWith(want) || want.startsWith(have) ? 2 : have.includes(want) || want.includes(have) ? 1 : 0;
+    if (score && (!best || score > best.score)) best = { row, score };
+    if (best?.score === 3) break;
+  }
+  return best?.row ?? null;
 }
 
 export function printOf(row: number): Print {
   const s = prints()!; const [artist, title] = s.names.subarray(s.offs[row], s.offs[row + 1]).toString("utf8").split("\t");
-  const o = row * 12, m = s.meta; const u16 = (i: number) => m[i] | (m[i + 1] << 8);
-  const tempo = u16(o) / 10, key = m[o + 2], mode = m[o + 3], year = u16(o + 4), voice = m[o + 9], fam = s.m.families[m[o + 10]] ?? "";
-  return { row, artist: artist ?? "", title: title ?? "", year: year || null, tempo: tempo || null, keyPc: key === 255 ? null : key, mode: mode === 1 ? "major" : mode === 2 ? "minor" : null,
-    energy: m[o + 6] / 255, valence: m[o + 7] / 255, arousal: m[o + 8] / 255, voice: voice === 1 ? "vocal" : voice === 2 ? "instrumental" : null, family: fam || null };
+  const o = row * META, m = s.meta; const u16 = (i: number) => m[i] | (m[i + 1] << 8);
+  const tempo = u16(o) / 10, year = u16(o + 2), packed = m[o + 7], key = packed & 15, mode = (packed >> 4) & 3, voice = (packed >> 6) & 3, fam = s.m.families[m[o + 8]] ?? "";
+  return { row, artist: artist ?? "", title: title ?? "", year: year || null, tempo: tempo || null, keyPc: key === 15 ? null : key, mode: mode === 1 ? "major" : mode === 2 ? "minor" : null,
+    energy: m[o + 4] / 255, valence: m[o + 5] / 255, arousal: m[o + 6] / 255, voice: voice === 1 ? "vocal" : voice === 2 ? "instrumental" : null, family: fam || null };
 }
 
 /** The k nearest by sound, other artists only (the same artist's other records are a different question). */
 export function nearest(row: number, k = 6): { p: Print; d: number }[] {
   const s = prints(); if (!s) return [];
-  const D = s.m.dims, n = s.m.n, vec = s.vec, q = vec.subarray(row * D, row * D + D);
-  const K = Math.max(k * 6, 36); const top: { i: number; d: number }[] = []; let worst = Infinity;
+  const D = s.m.dims, n = s.m.n, vec = s.vec, akeys = s.akeys, me = akeys[row], q = vec.subarray(row * D, row * D + D);
+  const K = Math.max(k * 4, 24); const top: { i: number; d: number }[] = []; let worst = Infinity;
   for (let i = 0; i < n; i++) {
-    if (i === row) continue;
+    if (akeys[i] === me) continue;
     const o = i * D; let d = 0;
     for (let j = 0; j < D; j++) { const x = vec[o + j] - q[j]; d += x * x; if (d >= worst) break; }
     if (d >= worst) continue;
@@ -64,10 +87,10 @@ export function nearest(row: number, k = 6): { p: Print; d: number }[] {
     top.splice(pos, 0, { i, d }); if (top.length > K) top.pop();
     if (top.length === K) worst = top[K - 1].d;
   }
-  const me = printOf(row); const seen = new Set<string>([`${me.artist}|${me.title}`.toLowerCase()]); const out: { p: Print; d: number }[] = [];
+  const seen = new Set<string>(); const out: { p: Print; d: number }[] = [];
   for (const t of top) {
     const p = printOf(t.i); const sig = `${p.artist}|${p.title}`.toLowerCase();
-    if (p.artist.toLowerCase() === me.artist.toLowerCase() || seen.has(sig)) continue;
+    if (seen.has(sig)) continue;
     seen.add(sig); out.push({ p, d: Math.sqrt(t.d) / s.m.scale }); if (out.length >= k) break;
   }
   return out;

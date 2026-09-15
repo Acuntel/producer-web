@@ -4,7 +4,10 @@
 # and comes straight back: the archive is built before the upload starts.
 set -e
 cd "$(dirname "$0")/.."
-RAW=data/dna/raw; ASIDE=../producer-data-raw.deploy
-[ -d $RAW ] && mv $RAW $ASIDE
-trap '[ -d $ASIDE ] && mv $ASIDE $RAW' EXIT
+# data/dna (offline parquet, the raw dumps) and tests/fixtures (spoken WAVs) are never read by the deployed app.
+ASIDE=../producer-web.deploy-aside; mkdir -p $ASIDE
+[ -d data/dna ] && mv data/dna $ASIDE/dna
+[ -d tests/fixtures ] && mv tests/fixtures $ASIDE/fixtures
+restore() { [ -d $ASIDE/dna ] && mv $ASIDE/dna data/dna; [ -d $ASIDE/fixtures ] && mv $ASIDE/fixtures tests/fixtures; rmdir $ASIDE 2>/dev/null; }
+trap restore EXIT
 npx vercel --prod --yes --archive=tgz "$@"

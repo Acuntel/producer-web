@@ -22,7 +22,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from util import norm_artist, norm_title, stable_id, fold_tempo  # noqa: E402
+from util import norm_artist, norm_title, stable_id, fold_tempo, uuid_bytes  # noqa: E402
 from families import family_from_genres, derive_lane  # noqa: E402
 from feel import compute_feel  # noqa: E402
 
@@ -67,7 +67,7 @@ def parse_highlevel(raw: bytes) -> dict | None:
     if not artist or not title: return None
     date = first(tags.get("date")) or first(tags.get("originaldate")) or ""
     year = int(date[:4]) if date[:4].isdigit() else None
-    mbid = first(tags.get("musicbrainz_recordingid"))
+    mbid = uuid_bytes(first(tags.get("musicbrainz_recordingid")))
     # Family from the two general genre models (with their confidence); the electronic sub-genre model only
     # says something when those call it dance or electronic.
     ROSA = {"cla": "classical", "dan": "electronic", "hip": "hiphop", "jaz": "jazz", "pop": "pop", "rhy": "rnb", "roc": "rock", "spe": "other"}
@@ -132,6 +132,7 @@ def parse_features(path: Path, want: dict[str, str], keep_ids: set[str] | None =
             for chunk in pd.read_csv(f, names=header, usecols=cols, chunksize=1_000_000, low_memory=False):
                 seen += len(chunk)
                 if "submission_offset" in chunk.columns: chunk = chunk[chunk["submission_offset"] == 0]
+                chunk = chunk.assign(mbid=chunk["mbid"].map(uuid_bytes))
                 if keep_ids is not None: chunk = chunk[chunk["mbid"].isin(keep_ids)]
                 if len(chunk): frames.append(chunk.rename(columns=want)[["mbid"] + [v for k, v in want.items() if k in cols]])
                 if seen % 5_000_000 < 1_000_000: print(f"[acousticbrainz] {path.name}: {seen:,} rows read, {sum(len(x) for x in frames):,} kept", flush=True)
@@ -157,7 +158,7 @@ def stage_features() -> Path:
     tf = parse_features(tonal, TONAL_WANT) if tonal else pd.DataFrame(columns=["mbid"])
     print(f"[acousticbrainz] tonal: {len(tf):,} recordings in {time.time() - t0:.0f}s", flush=True)
     df = rf.merge(tf, on="mbid", how="outer") if len(tf) else rf
-    df.to_parquet(out, index=False)
+    util.write_parquet(df, out)
     print(f"[acousticbrainz] wrote {out} ({len(df):,} recordings) in {time.time() - t0:.0f}s", flush=True)
     return out
 
@@ -188,7 +189,7 @@ def stage_highlevel(part: str) -> Path:
     p = next(iter(RAW.glob(f"acousticbrainz-highlevel-json-*-{part}.tar.zst")), None)
     if not p: sys.exit(f"no highlevel part {part} in {RAW}")
     df = parse_part(p)
-    out = part_cache(p); df.to_parquet(out, index=False)
+    out = part_cache(p); util.write_parquet(df, out)
     print(f"[acousticbrainz] wrote {out}", flush=True)
     return out
 
@@ -244,7 +245,7 @@ def main() -> None:
     df = df[[c for c in keep if c in df.columns]].drop_duplicates("id")
     for c in df.columns:
         if c.startswith("p_"): df[c] = df[c].astype("float32")
-    df.to_parquet(OUT, index=False)
+    util.write_parquet(df, OUT)
     print(f"[acousticbrainz] wrote {OUT} ({len(df):,} rows; tempo for {df['tempo'].notna().sum():,}, key for {df['key_pc'].notna().sum():,}) in {time.time() - t0:.0f}s")
 
 

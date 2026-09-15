@@ -154,7 +154,7 @@ def run():
     grid_eligible_n = sum(1 for r in rows if r["kick_grid"] is not None)
     out = schema.to_frame(rows)
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    out.to_parquet(OUT, index=False)
+    util.write_parquet(out, OUT)
     dt = time.time() - t0
     print(f"[lakh] {len(files):,} files, {failed:,} failed/empty -> {len(out):,} songs "
           f"({grid_eligible_n:,} with grid-eligible tempo) in {dt:.1f}s -> {OUT}")

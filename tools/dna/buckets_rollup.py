@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import util
 
 import bins
 import bucket_stats
@@ -192,7 +193,7 @@ def run(songs: pd.DataFrame) -> tuple[pd.DataFrame, int]:
 
     buckets_df = pd.DataFrame(all_rows)
     BUCKETS_OUT.parent.mkdir(parents=True, exist_ok=True)
-    buckets_df.to_parquet(BUCKETS_OUT, index=False)
+    util.write_parquet(buckets_df, BUCKETS_OUT)
     print(f"[buckets] {len(buckets_df):,} total bins -> {BUCKETS_OUT}")
 
     galton_bytes = write_galton(build_galton(all_rows))

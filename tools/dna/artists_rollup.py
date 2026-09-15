@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 import pandas as pd
+import util
 
 import bucket_stats
 
@@ -79,6 +80,6 @@ def run(songs: pd.DataFrame) -> pd.DataFrame:
         base[col] = base[col].round(4)
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    base.to_parquet(OUT, index=False)
+    util.write_parquet(base, OUT)
     print(f"[artists] {len(base):,} artists from {len(df):,} attributable rows -> {OUT}")
     return base

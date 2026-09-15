@@ -171,7 +171,7 @@ def run() -> pd.DataFrame | None:
 
     out = schema.to_frame(rows)
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    out.to_parquet(OUT, index=False)
+    util.write_parquet(out, OUT)
     dt = time.time() - t0
     join_rate = matched / len(rows) if rows else 0
     print(f"[chordonomicon] {n_raw:,} rows ({no_chords:,} dropped: no parseable chords) "

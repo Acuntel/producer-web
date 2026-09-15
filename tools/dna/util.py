@@ -110,3 +110,47 @@ def decade_of(year: int | None) -> int | None:
     if year is None:
         return None
     return (int(year) // 10) * 10
+
+
+# --- The condensed parquet form (masterprompt section 13) ---------------------------------------------------
+# Every writer goes through write_parquet: float64 -> float32, probability-like columns rounded to three decimals
+# (so the dictionary encoder sees ~1000 distinct values), other floats to four, MusicBrainz recording ids as
+# 16-byte binaries, zstd level 9. Readers see the same numbers to the precision anything downstream uses.
+PROB_LIKE = re.compile(r"^(p_|mood_|.*_read$|voice$|timbre_bright$|danceability$|rhythm_danceability$|energy$|valence$|acousticness$|"
+                       r"electronic_prob$|mode_share$|speechiness$|instrumentalness$|liveness$|chorus_share$|repetition$|swing$|syncopation$)")
+UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+
+def uuid_bytes(s):
+    """A MusicBrainz id as 16 bytes; anything else (None, malformed) stays None."""
+    if isinstance(s, (bytes, bytearray)): return bytes(s) if len(s) == 16 else None
+    if not isinstance(s, str) or not UUID_RE.match(s): return None
+    return bytes.fromhex(s.replace("-", ""))
+
+
+def condense_frame(df):
+    import numpy as np, pandas as pd
+    df = df.copy()
+    for c in df.columns:
+        s = df[c]
+        if pd.api.types.is_float_dtype(s.dtype):
+            digits = 3 if PROB_LIKE.match(c) else 4
+            df[c] = s.astype("float64").round(digits).astype("float32")
+        elif c == "mbid" and s.dtype == object:
+            df[c] = s.map(uuid_bytes)
+    return df
+
+
+def write_parquet(df, path, **kw):
+    """The one parquet writer for the store: condensed dtypes, zstd 9, atomic replace."""
+    import os, pyarrow as pa, pyarrow.parquet as pq
+    from pathlib import Path
+    path = Path(path); tmp = path.with_suffix(path.suffix + ".tmp")
+    out = condense_frame(df)
+    table = pa.Table.from_pandas(out, preserve_index=False)
+    if "mbid" in table.column_names and pa.types.is_binary(table.schema.field("mbid").type):
+        i = table.schema.get_field_index("mbid")
+        table = table.set_column(i, "mbid", table.column("mbid").cast(pa.binary(16)))
+    pq.write_table(table, tmp, compression="zstd", compression_level=9, use_dictionary=True, row_group_size=262_144)
+    os.replace(tmp, path)
+    return path

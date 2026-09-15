@@ -23,7 +23,6 @@ create index if not exists dna_songs_artist_norm_idx on public.dna_songs (artist
 create index if not exists dna_songs_title_norm_idx on public.dna_songs (title_norm);
 create index if not exists dna_songs_artist_norm_trgm_idx on public.dna_songs using gin (artist_norm gin_trgm_ops);
 create index if not exists dna_songs_title_norm_trgm_idx on public.dna_songs using gin (title_norm gin_trgm_ops);
-create index if not exists dna_songs_lane_decade_idx on public.dna_songs (lane, decade);
 alter table public.dna_songs enable row level security;
 drop policy if exists dna_songs_read on public.dna_songs;
 create policy dna_songs_read on public.dna_songs for select to authenticated using (true);

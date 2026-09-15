@@ -273,3 +273,25 @@ Free Supabase tier: the fingerprints do not enter Postgres. No agents unless a j
 ### 12.4 Status (2026-09-14 evening)
 
 Built and measured: 1,112,906 fingerprints (32 int8 dimensions, 88.7% of the variance, duplicate rate 0.31%); a record's ten nearest by sound share its family 38.8% of the time against a 9.6% base rate. The board's seven universal pins are known for 40% of the store (772,469 songs in 14,601 full bins, where before no bin had every pin known); the songs with three or more unknown universal pins are the 37.8% that only a chord sheet describes. Family 3.8% to 48.0% through MusicBrainz artist genres and artist propagation. Calibration on record (energy R2 0.56, valence 0.19, danceability 0.25). Discoveries 202. Tests 71 of 71. Open: the DJ-played neighbour test needs more canon records with prints (79 today); 28 more AcousticBrainz parts would lift the fingerprinted share and the canon overlap.
+
+## 13. Condense the store (2026-09-15, the fifth stretch)
+
+Brady: the music is stored and takes too much data; condense it further without losing any functionality. Measured on 09-15 morning: data/ 9.7 GB (raw dumps 5.7 GB, parse caches 1.7 GB, derived parquet 1.0 GB, fingerprints 98 MB), Postgres 608 MB (over the 500 MB tier: the buckets table alone 203 MB, which the product never reads), the deploy upload 484 MB (of which 305 MB is offline parquet the product never reads), the fingerprints 98 MB.
+
+### 13.1 What must be true at the end
+
+- Every lookup the product makes answers exactly as before: artists, records, bins, canon, heard, fingerprints, nearest by sound, addresses, the pin words. The unit tests and the live probes prove it.
+- Postgres holds only what the product reads: songs (the sixteen columns the lookups select plus the keys), artists, canon, heard. Under the tier with room to grow.
+- The deploy upload carries the app, galton.json, the fingerprints and knowledge, nothing else.
+- Every parquet file on disk is written narrow and zstd-compressed: probabilities rounded to three decimals (dictionary-encoded), floats as float32, recording ids as 16-byte binaries. Readers need no change beyond the id encoding.
+- The fingerprints keep their 32 int8 dimensions (no quality loss) and lose the redundant bytes around them: one sort order (artist key, title key) instead of two key tables, an 8-byte meta row, offsets as deltas, and brotli on disk.
+- The raw dumps (re-downloadable in ten minutes) leave the project tree for an archive folder once re-assembly from the caches is proven; the spec records the download commands.
+- The spec, the gym log and memory carry a before-and-after table.
+
+### 13.2 Mechanism
+
+1. Postgres: migration 0012 drops the unused song columns and the lane/decade index; the loader loads the song column list the app reads and skips buckets by default; buckets truncated; VACUUM FULL reclaims.
+2. Deploy: the deploy script moves data/dna and tests/fixtures aside for the archive step (the archive is built before the upload) and restores them on exit.
+3. Parquet: tools/dna/condense.py rewrites every file in place with the narrow encoding and verifies row counts and key checksums; the AcousticBrainz parser and the rollup writers produce the narrow form from now on.
+4. Fingerprints: prints.py and prints.ts share the new layout; the tests pin the key hash, the lookups and the neighbour latency.
+5. Proof: before-and-after sizes per tier; tests green; live probes for an artist, a record, a "sounds like", and a pin ask.

@@ -74,7 +74,7 @@ def run() -> pd.DataFrame | None:
 
     out = schema.to_frame(rows)
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    out.to_parquet(OUT, index=False)
+    util.write_parquet(out, OUT)
     dt = time.time() - t0
     print(f"[billboard] {n_raw:,} chart rows ({dropped} dropped for bad date) "
           f"-> {len(out):,} songs in {dt:.1f}s -> {OUT}")

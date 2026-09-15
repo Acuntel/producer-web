@@ -48,7 +48,7 @@ def main() -> None:
                 if seen % 250_000 == 0: print(f"[mb] {seen:,} artists read, {len(rows):,} with genres or tags, {with_genre:,} with a family", flush=True)
     proc.wait()
     df = pd.DataFrame(rows)
-    df.to_parquet(OUT, index=False)
+    util.write_parquet(df, OUT)
     print(f"[mb] {seen:,} artists -> {len(df):,} with genres or tags, {with_genre:,} with a family -> {OUT} in {time.time() - t0:.0f}s")
 
 

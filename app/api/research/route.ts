@@ -5,7 +5,7 @@
 import { brainClient } from "@/lib/brain/client";
 import { supabaseAdmin } from "@/lib/account/supabase";
 import { lookupArtist, lookupSongs, artistSongs, artistLine, songLine, binsFor, binLine, norm, canonLines, heardLines } from "@/lib/brain/galton";
-import { findRow, artistRows, soundLines } from "@/lib/brain/prints";
+import { findRecord, artistRows, soundLines } from "@/lib/brain/prints";
 import { laneNamed, laneInfo } from "@/lib/brain/laneNames";
 
 export const maxDuration = 30;
@@ -48,8 +48,7 @@ export async function POST(req: Request) {
   else if (artist) { kind = "artist"; lines.push(artistLine(artist, await artistSongs(artist.artist_norm, 8))); }
   else if (byTitle.length) { kind = "song"; lines.push(...byTitle.map(songLine)); }
   // The fingerprint: the record's own address and what sits beside it by sound (in-process, no database).
-  const printRows = dash ? [findRow(norm(dash[1]), norm(dash[2]))].filter((r): r is number => r !== null) : artistRows(artist?.artist_norm ?? norm(query), like ? 2 : 1);
-  if (!printRows.length && dash) printRows.push(...artistRows(norm(dash[1]), 1));
+  const printRows = dash ? [findRecord(norm(dash[1]), norm(dash[2]))].filter((r): r is number => r !== null) : artistRows(artist?.artist_norm ?? norm(query), like ? 2 : 1);
   for (const row of printRows.slice(0, like ? 2 : 1)) { if (kind === "none") kind = dash ? "song" : "artist"; lines.push(...soundLines(row, like ? 8 : 5)); }
   if (canon.length) { if (kind === "none") kind = "artist"; lines.push(...canon); }
   if (heard.length) { if (kind === "none") kind = "song"; lines.push(...heard); }
@@ -67,8 +66,10 @@ export async function POST(req: Request) {
       // One bin per mode, so a minor-leaning lane is not answered with the major bin alone.
       const picks = ["minor", "major"].flatMap((mode) => {
         const base = { family: f, mode, ...(decade ? { decade } : {}) };
-        const pinned = Object.keys(extraPins).length ? binsFor({ ...base, ...extraPins, ...(tempoBand ? { tempo_band: tempoBand } : {}) }, 1) : [];
-        if (pinned.length) return pinned;
+        if (Object.keys(extraPins).length) {
+          const pinned = binsFor({ ...base, ...extraPins, ...(tempoBand ? { tempo_band: tempoBand } : {}) }, 1);
+          return pinned.length ? pinned : binsFor({ family: f, mode, ...extraPins }, 1);
+        }
         const withTempo = tempoBand && !decade ? binsFor({ ...base, tempo_band: tempoBand }, 1) : [];
         return withTempo.length ? withTempo : binsFor(base, 1).length ? binsFor(base, 1) : binsFor({ family: f, mode }, 1);
       });

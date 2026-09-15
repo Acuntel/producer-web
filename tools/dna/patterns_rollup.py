@@ -7,6 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import util
 
 OUT = Path(__file__).resolve().parents[2] / "data" / "dna" / "patterns.parquet"
 
@@ -41,7 +42,7 @@ def run(songs: pd.DataFrame) -> pd.DataFrame:
         columns=["kind", "pattern", "family", "decade", "count", "hit_share", "tempo_p50"])
     result = result.sort_values(["kind", "count"], ascending=[True, False])
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    result.to_parquet(OUT, index=False)
+    util.write_parquet(result, OUT)
     by_kind = result.groupby("kind").size().to_dict()
     print(f"[patterns] {len(result):,} rows across {len(by_kind)} kinds: {by_kind} -> {OUT}")
     return result

@@ -190,7 +190,7 @@ def combine() -> pd.DataFrame:
     combined = apply_artist_fold(combined)
     combined = disambiguate_ids(combined)
     SONGS_OUT.parent.mkdir(parents=True, exist_ok=True)
-    combined.to_parquet(SONGS_OUT, index=False)
+    util.write_parquet(combined, SONGS_OUT)
     print(f"[rollup] songs.parquet: {len(combined):,} total rows -> {SONGS_OUT}")
     return combined
 
