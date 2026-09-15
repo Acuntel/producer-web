@@ -13,3 +13,4 @@ data/prints/*.i8
 data/prints/*.u32
 data/prints/*.gz
 data/prints/*.bin
+data/prints/*.br
