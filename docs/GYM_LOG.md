@@ -281,3 +281,22 @@ The brief and its reading: docs/MASTERPROMPT_V11.md. The store contract: docs/DN
 - NaN is not JSON: a bin with no mode information wrote NaN into galton.json and broke the import; the writer now refuses NaN.
 - Every new column needs its migration: the loader failed twice (voice on songs, the pins on buckets) before 0011 covered both.
 - A calibration fit on the folded columns alone (R2 0.42) is weaker than one on the native mood reads (0.56); the rollup reads the fragment for the fit.
+
+## 2026-09-15: condense the store (masterprompt section 13)
+- Brady: the music is stored and takes too much data; condense it without losing functionality. Measured first, then cut each tier.
+
+| Tier | Before | After | How |
+|---|---|---|---|
+| data/ on disk | 9.7 GB | 2.2 GB | raw dumps (5.5 GB, re-downloadable) archived to ~/Archives/producer-web-raw-dumps; caches and parquet condensed |
+| parquet files (19) | 2,354 MB | 821 MB | one writer: float32, probabilities to three decimals (dictionary-encoded), recording ids as 16-byte binaries, zstd 9; every file verified row by row |
+| fingerprints on disk | 98 MB | 59 MB | one sort order (artist key, title key) instead of two key tables, 9-byte meta, brotli; same 32 int8 dimensions, family agreement unchanged (38.1% vs 9.7% base) |
+| Postgres | 608 MB (over the tier) | 296 MB | buckets out (the product reads bins from galton.json), songs down to the nineteen columns the lookups read, vacuum full |
+| deploy upload | 484 MB | 56.5 MB | data/dna and tests/fixtures step aside for the archive step |
+
+- Nothing the product does changed: 71 tests green on the new layout, re-assembly of the AcousticBrainz fragment from the condensed caches alone reproduces it exactly (ids and recording ids equal, tempo within float32 rounding).
+- The parse caches are the source for re-assembly; the dumps are only needed to widen what a parser keeps, and the spec lists their URLs.
+
+### Traps
+- Migration 0012 dropped columns, and re-running the base DDL then tried to recreate an index on them; the stale index line left the base file (load_pg re-applies every migration on each load).
+- pandas 3 reads strings as `str`, not `object`: a dtype check for the id conversion silently skipped the biggest file until the verifier caught it.
+- The Vercel CLI archive still takes everything in the tree that the ignore file lists; the deploy script now moves it aside, which is the only rule that has held.
