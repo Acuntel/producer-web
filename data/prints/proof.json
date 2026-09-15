@@ -1,0 +1,12 @@
+{
+ "n": 1112906,
+ "dims": 32,
+ "explained": 0.887,
+ "duplicate_rate": 0.0027,
+ "family_same_at_10": 0.381,
+ "family_base_rate": 0.097,
+ "family_queries": 2000,
+ "canon_with_print": 79,
+ "played_neighbours_at_10": 0.0,
+ "played_base_rate": 7.1e-05
+}

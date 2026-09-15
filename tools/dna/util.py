@@ -136,8 +136,8 @@ def condense_frame(df):
         if pd.api.types.is_float_dtype(s.dtype):
             digits = 3 if PROB_LIKE.match(c) else 4
             df[c] = s.astype("float64").round(digits).astype("float32")
-        elif c == "mbid" and s.dtype == object:
-            df[c] = s.map(uuid_bytes)
+        elif c == "mbid" and (s.dtype == object or pd.api.types.is_string_dtype(s.dtype)):
+            df[c] = s.map(uuid_bytes).astype(object)
     return df
 
 

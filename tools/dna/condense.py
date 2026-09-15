@@ -14,6 +14,7 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import util  # noqa: E402
 from util import write_parquet, uuid_bytes  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]

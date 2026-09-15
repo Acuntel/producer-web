@@ -22,6 +22,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import util  # noqa: E402
 from util import norm_artist, norm_title, stable_id, fold_tempo, uuid_bytes  # noqa: E402
 from families import family_from_genres, derive_lane  # noqa: E402
 from feel import compute_feel  # noqa: E402
