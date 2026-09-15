@@ -49,7 +49,7 @@ Harmony families among number ones (n=219) vs everything: modal_mixture 45% (all
 Read: number ones carry LESS drum syncopation than the rest of the chart (0.119 vs 0.155) and their hooks MOVE more (a wave contour in 28% of number ones against 19%). The floor stays simple; the melody does the work. MOVE: for a hit, keep the kick and snare plain, put the motion in the hook's contour, not in the drums.
 Chord vocabulary by tier: charted 5 (n=292), number1 6 (n=99), top10 6 (n=211), top40 5 (n=238).
 First chorus bar by decade (chart songs): 1960s bar 13.5 (n=34), 1970s bar 13.5 (n=60), 1980s bar 22 (n=88), 1990s bar 19 (n=44), 2000s bar 17 (n=84), 2010s bar 15.5 (n=142), 2020s bar 16 (n=104).
-Which family took number one, by decade: 1960s rock 77%/rnb 9%/jazz 7%; 1970s disco 48%/folk 15%/rock 15%; 1980s disco 34%/rock 27%/pop 23%; 2010s electronic 45%/pop 20%/hiphop 16%; 2020s pop 41%/hiphop 23%/electronic 23%.
+Which family took number one, by decade: 1960s rock 78%/rnb 8%/jazz 7%; 1970s disco 43%/rock 24%/folk 13%; 1980s disco 32%/rock 29%/pop 24%; 2010s electronic 45%/pop 20%/hiphop 16%; 2020s pop 41%/hiphop 23%/electronic 23%.
 
 ## The checklist the studio scores a 'make it a hit' ask against
 - Danceability first: straight kick, medium syncopation in hats and bass, a clear downbeat every bar.

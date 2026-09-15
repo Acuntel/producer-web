@@ -111,40 +111,48 @@ def main() -> None:
     (OUT / "names.txt.gz").write_bytes(gzip.compress(bytes(blob), 6)); offs.astype("<u4").tofile(OUT / "offs.u32"); meta.tofile(OUT / "meta.bin")
     # Proof 1: how unique is a print.
     uniq = len(np.unique(vec, axis=0)); dup_rate = 1 - uniq / len(vec)
-    # Proof 2: canon neighbours. For DJ-played records with a print, do the ten nearest by sound contain a record
-    # from the same mix more often than ten random records do?
-    proof = {"n": int(len(vec)), "dims": DIMS, "explained": round(explained, 4), "duplicate_rate": round(float(dup_rate), 5), "same_mix_at_10": None, "random_at_10": None, "canon_tested": 0}
+    # Proof 2: does distance mean "sounds like"? Two tests against labels the fingerprint never saw.
+    # (a) Family agreement: for 2,000 random rows with a known family, the share of their ten nearest neighbours
+    #     (other artists) that carry the same family, against that family's base rate in the corpus.
+    # (b) The floor: for the DJ-played records with a print, the share of their ten nearest that are DJ-played too,
+    #     against the base rate of DJ-played records in the corpus.
+    proof = {"n": int(len(vec)), "dims": DIMS, "explained": round(explained, 4), "duplicate_rate": round(float(dup_rate), 5)}
+    V = vec.astype("float32"); rng2 = np.random.default_rng(3)
+    fam = meta[:, 10]; akey_by_row = akeys
+    def knn(p: int, k: int = 10) -> np.ndarray:
+        d = ((V - V[p]) ** 2).sum(axis=1); d[akey_by_row == akey_by_row[p]] = np.inf   # other artists only
+        return np.argpartition(d, k)[:k]
+    labelled = np.flatnonzero(fam > 0)
+    if len(labelled) > 5000:
+        qs = rng2.choice(labelled, 2000, replace=False); same = 0; base = 0.0; tot = 0
+        share = np.bincount(fam, minlength=len(FAMILIES)) / len(fam)
+        for p in qs:
+            nn = knn(int(p)); lab = fam[nn]; known = lab > 0
+            if not known.any(): continue
+            same += int((lab[known] == fam[p]).sum()); tot += int(known.sum()); base += float(share[fam[p]]) * int(known.sum())
+        proof["family_same_at_10"] = round(same / max(tot, 1), 3); proof["family_base_rate"] = round(base / max(tot, 1), 3); proof["family_queries"] = int(len(qs))
     dsn_p = ROOT / "data" / "dna" / "PG_DSN"
     if dsn_p.exists():
         try:
             import psycopg
             with psycopg.connect(dsn_p.read_text().strip(), connect_timeout=15) as c, c.cursor() as cur:
-                cur.execute("select artist_norm, title_norm, mix_name from public.dna_canon where artist_norm <> '' and title_norm <> ''")
+                cur.execute("select distinct artist_norm, title_norm from public.dna_canon where artist_norm <> '' and title_norm <> ''")
                 canon = cur.fetchall()
-            ck = {}
-            for a, t, m in canon: ck.setdefault(key64(f"{a}|{t}"), set()).add(m)
-            pos = np.searchsorted(keys, np.fromiter(ck.keys(), dtype="uint64"))
-            hit_rows = [(int(p), ck[k]) for p, k in zip(pos, ck.keys()) if p < len(keys) and keys[p] == k]
-            rng2 = np.random.default_rng(3); rows_by_key = {}
-            for p, mixes in hit_rows: rows_by_key[p] = mixes
-            canon_rows = np.array(sorted(rows_by_key)); tested = 0; same = 0; rand_same = 0
-            mixes_of_row = {p: rows_by_key[p] for p in canon_rows}
-            V = vec.astype("float32")
-            for p in canon_rows[:400]:
-                d = ((V - V[p]) ** 2).sum(axis=1); d[p] = np.inf
-                nn = np.argpartition(d, 10)[:10]
-                tested += 1
-                if any(mixes_of_row.get(int(q), set()) & mixes_of_row[p] for q in nn): same += 1
-                rr = rng2.choice(len(V), 10, replace=False)
-                if any(mixes_of_row.get(int(q), set()) & mixes_of_row[p] for q in rr): rand_same += 1
-            proof.update({"canon_with_print": len(hit_rows), "canon_tested": tested, "same_mix_at_10": round(same / max(tested, 1), 3), "random_at_10": round(rand_same / max(tested, 1), 3)})
+            ck = np.fromiter((key64(f"{a}|{t}") for a, t in canon), dtype="uint64", count=len(canon))
+            pos = np.searchsorted(keys, ck); hit = pos[(pos < len(keys))]; hit = hit[keys[hit] == ck[(pos < len(keys))]]
+            played = np.zeros(len(vec), dtype=bool); played[hit] = True
+            near_played = 0; tot = 0
+            for p in hit[:400]:
+                nn = knn(int(p)); near_played += int(played[nn].sum()); tot += len(nn)
+            proof.update({"canon_with_print": int(len(hit)), "played_neighbours_at_10": round(near_played / max(tot, 1), 4), "played_base_rate": round(float(played.mean()), 6)})
         except Exception as ex:
             proof["canon_error"] = str(ex)[:200]
     manifest = {"n": int(len(vec)), "dims": DIMS, "scale": scale, "explained": round(explained, 4), "features": names, "families": FAMILIES,
                 "builtAt": pd.Timestamp.utcnow().isoformat(), "files": ["keys.u64", "vec.i8", "akeys.u64", "arows.u32", "names.txt.gz", "offs.u32", "meta.bin"]}
     (OUT / "manifest.json").write_text(json.dumps(manifest, indent=1)); (OUT / "proof.json").write_text(json.dumps(proof, indent=1))
     size = sum((OUT / f).stat().st_size for f in manifest["files"]) / 1048576
-    print(f"[prints] wrote {OUT} ({size:.0f} MB); duplicate rate {dup_rate:.3%}; canon: same mix in top 10 {proof['same_mix_at_10']} vs random {proof['random_at_10']} on {proof['canon_tested']} records; {time.time() - t0:.0f}s")
+    print(f"[prints] wrote {OUT} ({size:.0f} MB); duplicate rate {dup_rate:.3%}; family agreement at 10: {proof.get('family_same_at_10')} vs base {proof.get('family_base_rate')}; "
+          f"DJ-played neighbours: {proof.get('played_neighbours_at_10')} vs base {proof.get('played_base_rate')} on {proof.get('canon_with_print')} records; {time.time() - t0:.0f}s")
 
 
 if __name__ == "__main__":

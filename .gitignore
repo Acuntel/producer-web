@@ -8,3 +8,8 @@ data/dna/raw/
 data/dna/*.parquet
 data/dna/PG_DSN
 __pycache__/
+data/prints/*.u64
+data/prints/*.i8
+data/prints/*.u32
+data/prints/*.gz
+data/prints/*.bin

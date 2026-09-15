@@ -1,16 +1,93 @@
 {
- "count": 95,
+ "count": 202,
  "top": [
+  {
+   "family": "metal",
+   "decade": "all",
+   "tier": "top40",
+   "measure": "danceability",
+   "d": 1.79,
+   "hit_p50": 0.567,
+   "never_p50": 0.461,
+   "n_hit": 43,
+   "n_never": 97571
+  },
+  {
+   "family": "metal",
+   "decade": "all",
+   "tier": "top40",
+   "measure": "valence",
+   "d": 1.46,
+   "hit_p50": 0.53,
+   "never_p50": 0.386,
+   "n_hit": 43,
+   "n_never": 97571
+  },
+  {
+   "family": "all",
+   "decade": "all",
+   "tier": "top10",
+   "measure": "valence",
+   "d": 0.71,
+   "hit_p50": 0.521,
+   "never_p50": 0.436,
+   "n_hit": 2240,
+   "n_never": 1164833
+  },
   {
    "family": "metal",
    "decade": "all",
    "tier": "charted",
    "measure": "danceability",
-   "d": 1.26,
-   "hit_p50": 0.599,
+   "d": 1.15,
+   "hit_p50": 0.52,
+   "never_p50": 0.461,
+   "n_hit": 112,
+   "n_never": 97571
+  },
+  {
+   "family": "all",
+   "decade": "all",
+   "tier": "top40",
+   "measure": "valence",
+   "d": 0.62,
+   "hit_p50": 0.516,
+   "never_p50": 0.436,
+   "n_hit": 3891,
+   "n_never": 1164833
+  },
+  {
+   "family": "all",
+   "decade": "all",
+   "tier": "number1",
+   "measure": "valence",
+   "d": 0.77,
+   "hit_p50": 0.516,
+   "never_p50": 0.436,
+   "n_hit": 670,
+   "n_never": 1164833
+  },
+  {
+   "family": "rock",
+   "decade": "all",
+   "tier": "number1",
+   "measure": "valence",
+   "d": 0.97,
+   "hit_p50": 0.576,
+   "never_p50": 0.461,
+   "n_hit": 171,
+   "n_never": 202861
+  },
+  {
+   "family": "jazz",
+   "decade": "all",
+   "tier": "top10",
+   "measure": "valence",
+   "d": 1.19,
+   "hit_p50": 0.597,
    "never_p50": 0.417,
-   "n_hit": 53,
-   "n_never": 7201
+   "n_hit": 57,
+   "n_never": 69215
   },
   {
    "family": "all",
@@ -26,6 +103,39 @@
   {
    "family": "all",
    "decade": "all",
+   "tier": "charted",
+   "measure": "valence",
+   "d": 0.55,
+   "hit_p50": 0.506,
+   "never_p50": 0.436,
+   "n_hit": 5457,
+   "n_never": 1164833
+  },
+  {
+   "family": "rock",
+   "decade": "all",
+   "tier": "top10",
+   "measure": "valence",
+   "d": 0.72,
+   "hit_p50": 0.544,
+   "never_p50": 0.461,
+   "n_hit": 583,
+   "n_never": 202861
+  },
+  {
+   "family": "all",
+   "decade": "all",
+   "tier": "number1",
+   "measure": "danceability",
+   "d": 0.69,
+   "hit_p50": 0.554,
+   "never_p50": 0.502,
+   "n_hit": 670,
+   "n_never": 1164833
+  },
+  {
+   "family": "all",
+   "decade": "all",
    "tier": "top10",
    "measure": "chord_vocab",
    "d": 0.97,
@@ -35,26 +145,70 @@
    "n_never": 475
   },
   {
+   "family": "all",
+   "decade": "all",
+   "tier": "top10",
+   "measure": "danceability",
+   "d": 0.57,
+   "hit_p50": 0.545,
+   "never_p50": 0.502,
+   "n_hit": 2240,
+   "n_never": 1164833
+  },
+  {
    "family": "country",
    "decade": "all",
    "tier": "top40",
    "measure": "loudness",
-   "d": 1.03,
+   "d": 1.02,
    "hit_p50": -5.65,
-   "never_p50": -9.699,
+   "never_p50": -9.71,
    "n_hit": 69,
-   "n_never": 2131
+   "n_never": 2163
   },
   {
-   "family": "latin",
-   "decade": "all",
+   "family": "country",
+   "decade": "2010",
    "tier": "charted",
+   "measure": "energy",
+   "d": 0.81,
+   "hit_p50": 0.712,
+   "never_p50": 0.535,
+   "n_hit": 153,
+   "n_never": 3988
+  },
+  {
+   "family": "disco",
+   "decade": "all",
+   "tier": "number1",
+   "measure": "loudness",
+   "d": -1.04,
+   "hit_p50": -9.469,
+   "never_p50": -5.842,
+   "n_hit": 48,
+   "n_never": 627
+  },
+  {
+   "family": "electronic",
+   "decade": "all",
+   "tier": "top10",
    "measure": "danceability",
-   "d": 1.15,
-   "hit_p50": 0.786,
-   "never_p50": 0.616,
-   "n_hit": 43,
-   "n_never": 8387
+   "d": 0.78,
+   "hit_p50": 0.652,
+   "never_p50": 0.544,
+   "n_hit": 165,
+   "n_never": 74905
+  },
+  {
+   "family": "country",
+   "decade": "2010",
+   "tier": "charted",
+   "measure": "valence",
+   "d": 0.79,
+   "hit_p50": 0.566,
+   "never_p50": 0.449,
+   "n_hit": 153,
+   "n_never": 3988
   },
   {
    "family": "all",
@@ -68,47 +222,69 @@
    "n_never": 475
   },
   {
-   "family": "disco",
-   "decade": "all",
-   "tier": "number1",
-   "measure": "energy",
-   "d": -1.0,
-   "hit_p50": 0.586,
-   "never_p50": 0.815,
-   "n_hit": 48,
-   "n_never": 572
-  },
-  {
-   "family": "folk",
-   "decade": "all",
-   "tier": "top40",
-   "measure": "acousticness",
-   "d": -1.02,
-   "hit_p50": 0.162,
-   "never_p50": 0.641,
-   "n_hit": 42,
-   "n_never": 2156
-  },
-  {
    "family": "country",
    "decade": "all",
    "tier": "charted",
-   "measure": "loudness",
-   "d": 0.89,
-   "hit_p50": -5.707,
-   "never_p50": -9.699,
-   "n_hit": 69,
-   "n_never": 2131
+   "measure": "energy",
+   "d": 0.63,
+   "hit_p50": 0.681,
+   "never_p50": 0.517,
+   "n_hit": 518,
+   "n_never": 19520
+  },
+  {
+   "family": "electronic",
+   "decade": "1990",
+   "tier": "charted",
+   "measure": "valence",
+   "d": 1.0,
+   "hit_p50": 0.601,
+   "never_p50": 0.44,
+   "n_hit": 50,
+   "n_never": 11196
+  },
+  {
+   "family": "rock",
+   "decade": "all",
+   "tier": "top40",
+   "measure": "valence",
+   "d": 0.56,
+   "hit_p50": 0.527,
+   "never_p50": 0.461,
+   "n_hit": 1095,
+   "n_never": 202861
+  },
+  {
+   "family": "country",
+   "decade": "2010",
+   "tier": "top40",
+   "measure": "valence",
+   "d": 0.85,
+   "hit_p50": 0.574,
+   "never_p50": 0.449,
+   "n_hit": 98,
+   "n_never": 3988
   },
   {
    "family": "all",
    "decade": "all",
-   "tier": "top10",
-   "measure": "valence",
-   "d": 0.49,
-   "hit_p50": 0.5,
-   "never_p50": 0.284,
-   "n_hit": 2240,
+   "tier": "top40",
+   "measure": "danceability",
+   "d": 0.47,
+   "hit_p50": 0.538,
+   "never_p50": 0.502,
+   "n_hit": 3891,
+   "n_never": 1164833
+  },
+  {
+   "family": "all",
+   "decade": "all",
+   "tier": "charted",
+   "measure": "danceability",
+   "d": 0.45,
+   "hit_p50": 0.535,
+   "never_p50": 0.502,
+   "n_hit": 5457,
    "n_never": 1164833
   },
   {
@@ -125,35 +301,35 @@
   {
    "family": "country",
    "decade": "all",
-   "tier": "top40",
-   "measure": "acousticness",
-   "d": -0.88,
-   "hit_p50": 0.232,
-   "never_p50": 0.63,
-   "n_hit": 69,
-   "n_never": 2131
-  },
-  {
-   "family": "disco",
-   "decade": "all",
-   "tier": "number1",
+   "tier": "charted",
    "measure": "loudness",
-   "d": -0.96,
-   "hit_p50": -9.469,
-   "never_p50": -6.169,
-   "n_hit": 48,
-   "n_never": 572
+   "d": 0.88,
+   "hit_p50": -5.707,
+   "never_p50": -9.71,
+   "n_hit": 69,
+   "n_never": 2163
   },
   {
-   "family": "all",
+   "family": "country",
    "decade": "all",
    "tier": "top40",
+   "measure": "chorus_share",
+   "d": -0.98,
+   "hit_p50": 0.444,
+   "never_p50": 0.852,
+   "n_hit": 43,
+   "n_never": 84
+  },
+  {
+   "family": "metal",
+   "decade": "all",
+   "tier": "charted",
    "measure": "valence",
-   "d": 0.44,
-   "hit_p50": 0.47,
-   "never_p50": 0.284,
-   "n_hit": 3891,
-   "n_never": 1164833
+   "d": 0.77,
+   "hit_p50": 0.474,
+   "never_p50": 0.386,
+   "n_hit": 112,
+   "n_never": 97571
   },
   {
    "family": "electronic",
@@ -162,9 +338,31 @@
    "measure": "instrumentalness",
    "d": -0.75,
    "hit_p50": 0.0,
-   "never_p50": 0.031,
-   "n_hit": 119,
-   "n_never": 7789
+   "never_p50": 0.033,
+   "n_hit": 122,
+   "n_never": 8242
+  },
+  {
+   "family": "country",
+   "decade": "2000",
+   "tier": "charted",
+   "measure": "valence",
+   "d": 0.68,
+   "hit_p50": 0.551,
+   "never_p50": 0.46,
+   "n_hit": 196,
+   "n_never": 7291
+  },
+  {
+   "family": "rock",
+   "decade": "2000",
+   "tier": "top10",
+   "measure": "valence",
+   "d": 0.79,
+   "hit_p50": 0.55,
+   "never_p50": 0.459,
+   "n_hit": 93,
+   "n_never": 88784
   },
   {
    "family": "electronic",
@@ -173,9 +371,42 @@
    "measure": "instrumentalness",
    "d": -0.79,
    "hit_p50": 0.0,
-   "never_p50": 0.031,
-   "n_hit": 92,
-   "n_never": 7789
+   "never_p50": 0.033,
+   "n_hit": 93,
+   "n_never": 8242
+  },
+  {
+   "family": "country",
+   "decade": "2000",
+   "tier": "charted",
+   "measure": "energy",
+   "d": 0.67,
+   "hit_p50": 0.68,
+   "never_p50": 0.524,
+   "n_hit": 196,
+   "n_never": 7291
+  },
+  {
+   "family": "country",
+   "decade": "2010",
+   "tier": "top40",
+   "measure": "danceability",
+   "d": 0.77,
+   "hit_p50": 0.56,
+   "never_p50": 0.51,
+   "n_hit": 98,
+   "n_never": 3988
+  },
+  {
+   "family": "jazz",
+   "decade": "all",
+   "tier": "top10",
+   "measure": "danceability",
+   "d": 0.87,
+   "hit_p50": 0.567,
+   "never_p50": 0.504,
+   "n_hit": 57,
+   "n_never": 69215
   },
   {
    "family": "electronic",
@@ -184,20 +415,53 @@
    "measure": "instrumentalness",
    "d": -0.81,
    "hit_p50": 0.0,
-   "never_p50": 0.031,
-   "n_hit": 74,
-   "n_never": 7789
+   "never_p50": 0.033,
+   "n_hit": 76,
+   "n_never": 8242
+  },
+  {
+   "family": "latin",
+   "decade": "all",
+   "tier": "charted",
+   "measure": "danceability",
+   "d": 0.79,
+   "hit_p50": 0.649,
+   "never_p50": 0.562,
+   "n_hit": 84,
+   "n_never": 14811
+  },
+  {
+   "family": "disco",
+   "decade": "all",
+   "tier": "top10",
+   "measure": "loudness",
+   "d": -0.92,
+   "hit_p50": -8.755,
+   "never_p50": -5.842,
+   "n_hit": 43,
+   "n_never": 627
+  },
+  {
+   "family": "electronic",
+   "decade": "all",
+   "tier": "number1",
+   "measure": "danceability",
+   "d": 0.84,
+   "hit_p50": 0.612,
+   "never_p50": 0.544,
+   "n_hit": 61,
+   "n_never": 74905
   },
   {
    "family": "country",
-   "decade": "all",
-   "tier": "charted",
-   "measure": "acousticness",
-   "d": -0.82,
-   "hit_p50": 0.22,
-   "never_p50": 0.63,
-   "n_hit": 69,
-   "n_never": 2131
+   "decade": "2000",
+   "tier": "top40",
+   "measure": "valence",
+   "d": 0.7,
+   "hit_p50": 0.557,
+   "never_p50": 0.46,
+   "n_hit": 140,
+   "n_never": 7291
   },
   {
    "family": "all",
@@ -211,15 +475,70 @@
    "n_never": 77589
   },
   {
-   "family": "all",
+   "family": "disco",
    "decade": "all",
    "tier": "number1",
+   "measure": "energy",
+   "d": -0.87,
+   "hit_p50": 0.607,
+   "never_p50": 0.775,
+   "n_hit": 52,
+   "n_never": 1453
+  },
+  {
+   "family": "electronic",
+   "decade": "all",
+   "tier": "charted",
+   "measure": "danceability",
+   "d": 0.6,
+   "hit_p50": 0.624,
+   "never_p50": 0.544,
+   "n_hit": 306,
+   "n_never": 74905
+  },
+  {
+   "family": "latin",
+   "decade": "all",
+   "tier": "top40",
+   "measure": "danceability",
+   "d": 0.93,
+   "hit_p50": 0.694,
+   "never_p50": 0.562,
+   "n_hit": 38,
+   "n_never": 14811
+  },
+  {
+   "family": "electronic",
+   "decade": "all",
+   "tier": "top40",
+   "measure": "danceability",
+   "d": 0.64,
+   "hit_p50": 0.62,
+   "never_p50": 0.544,
+   "n_hit": 197,
+   "n_never": 74905
+  },
+  {
+   "family": "electronic",
+   "decade": "all",
+   "tier": "top10",
    "measure": "valence",
-   "d": 0.51,
-   "hit_p50": 0.506,
-   "never_p50": 0.284,
-   "n_hit": 670,
-   "n_never": 1164833
+   "d": 0.66,
+   "hit_p50": 0.549,
+   "never_p50": 0.443,
+   "n_hit": 165,
+   "n_never": 74905
+  },
+  {
+   "family": "country",
+   "decade": "all",
+   "tier": "charted",
+   "measure": "acousticness",
+   "d": -0.53,
+   "hit_p50": 0.239,
+   "never_p50": 0.624,
+   "n_hit": 518,
+   "n_never": 19520
   },
   {
    "family": "all",
@@ -233,17 +552,6 @@
    "n_never": 77589
   },
   {
-   "family": "disco",
-   "decade": "all",
-   "tier": "top10",
-   "measure": "acousticness",
-   "d": 0.86,
-   "hit_p50": 0.22,
-   "never_p50": 0.061,
-   "n_hit": 43,
-   "n_never": 572
-  },
-  {
    "family": "all",
    "decade": "all",
    "tier": "top40",
@@ -255,37 +563,48 @@
    "n_never": 77589
   },
   {
-   "family": "metal",
-   "decade": "all",
-   "tier": "charted",
-   "measure": "valence",
-   "d": 0.79,
-   "hit_p50": 0.545,
-   "never_p50": 0.307,
-   "n_hit": 53,
-   "n_never": 7201
-  },
-  {
-   "family": "disco",
+   "family": "rock",
    "decade": "all",
    "tier": "top10",
-   "measure": "loudness",
-   "d": -0.83,
-   "hit_p50": -8.755,
-   "never_p50": -6.169,
-   "n_hit": 43,
-   "n_never": 572
+   "measure": "danceability",
+   "d": 0.5,
+   "hit_p50": 0.528,
+   "never_p50": 0.495,
+   "n_hit": 583,
+   "n_never": 202861
   },
   {
-   "family": "latin",
+   "family": "all",
    "decade": "all",
    "tier": "charted",
-   "measure": "acousticness",
-   "d": -0.82,
-   "hit_p50": 0.191,
-   "never_p50": 0.449,
-   "n_hit": 43,
-   "n_never": 8387
+   "measure": "energy",
+   "d": 0.37,
+   "hit_p50": 0.724,
+   "never_p50": 0.641,
+   "n_hit": 5457,
+   "n_never": 1164833
+  },
+  {
+   "family": "jazz",
+   "decade": "all",
+   "tier": "top40",
+   "measure": "valence",
+   "d": 0.63,
+   "hit_p50": 0.501,
+   "never_p50": 0.417,
+   "n_hit": 143,
+   "n_never": 69215
+  },
+  {
+   "family": "rock",
+   "decade": "1990",
+   "tier": "top40",
+   "measure": "valence",
+   "d": 0.55,
+   "hit_p50": 0.521,
+   "never_p50": 0.461,
+   "n_hit": 283,
+   "n_never": 43917
   },
   {
    "family": "all",
@@ -299,367 +618,48 @@
    "n_never": 77589
   },
   {
+   "family": "latin",
+   "decade": "all",
+   "tier": "top40",
+   "measure": "acousticness",
+   "d": -0.84,
+   "hit_p50": 0.096,
+   "never_p50": 0.448,
+   "n_hit": 38,
+   "n_never": 14811
+  },
+  {
+   "family": "electronic",
+   "decade": "1990",
+   "tier": "charted",
+   "measure": "danceability",
+   "d": 0.78,
+   "hit_p50": 0.632,
+   "never_p50": 0.524,
+   "n_hit": 50,
+   "n_never": 11196
+  },
+  {
    "family": "metal",
    "decade": "all",
    "tier": "charted",
    "measure": "speechiness",
    "d": 0.76,
-   "hit_p50": 0.119,
+   "hit_p50": 0.122,
    "never_p50": 0.079,
-   "n_hit": 53,
-   "n_never": 7201
+   "n_hit": 54,
+   "n_never": 7417
   },
   {
    "family": "country",
-   "decade": "all",
-   "tier": "top40",
-   "measure": "energy",
-   "d": 0.71,
-   "hit_p50": 0.643,
-   "never_p50": 0.476,
-   "n_hit": 69,
-   "n_never": 2131
-  },
-  {
-   "family": "rock",
-   "decade": "all",
-   "tier": "number1",
-   "measure": "acousticness",
-   "d": 0.64,
-   "hit_p50": 0.36,
-   "never_p50": 0.064,
-   "n_hit": 99,
-   "n_never": 7298
-  },
-  {
-   "family": "disco",
-   "decade": "all",
-   "tier": "number1",
-   "measure": "acousticness",
-   "d": 0.75,
-   "hit_p50": 0.207,
-   "never_p50": 0.061,
-   "n_hit": 48,
-   "n_never": 572
-  },
-  {
-   "family": "rock",
-   "decade": "all",
-   "tier": "number1",
-   "measure": "energy",
-   "d": -0.61,
-   "hit_p50": 0.592,
-   "never_p50": 0.735,
-   "n_hit": 99,
-   "n_never": 7298
-  },
-  {
-   "family": "electronic",
-   "decade": "all",
-   "tier": "number1",
-   "measure": "instrumentalness",
-   "d": -0.81,
-   "hit_p50": 0.0,
-   "never_p50": 0.031,
-   "n_hit": 31,
-   "n_never": 7789
-  },
-  {
-   "family": "latin",
-   "decade": "all",
-   "tier": "charted",
-   "measure": "loudness",
-   "d": 0.73,
-   "hit_p50": -4.654,
-   "never_p50": -6.699,
-   "n_hit": 43,
-   "n_never": 8387
-  },
-  {
-   "family": "country",
-   "decade": "all",
-   "tier": "charted",
-   "measure": "energy",
-   "d": 0.64,
-   "hit_p50": 0.686,
-   "never_p50": 0.476,
-   "n_hit": 69,
-   "n_never": 2131
-  },
-  {
-   "family": "all",
-   "decade": "all",
-   "tier": "top40",
-   "measure": "borrowed",
-   "d": 0.53,
-   "hit_p50": 0.0,
-   "never_p50": 0.0,
-   "n_hit": 166,
-   "n_never": 475
-  },
-  {
-   "family": "folk",
-   "decade": "all",
-   "tier": "top40",
-   "measure": "energy",
-   "d": 0.71,
-   "hit_p50": 0.598,
-   "never_p50": 0.439,
-   "n_hit": 42,
-   "n_never": 2156
-  },
-  {
-   "family": "pop",
-   "decade": "all",
-   "tier": "top10",
-   "measure": "acousticness",
-   "d": -0.62,
-   "hit_p50": 0.109,
-   "never_p50": 0.348,
-   "n_hit": 65,
-   "n_never": 4743
-  },
-  {
-   "family": "all",
-   "decade": "all",
-   "tier": "number1",
-   "measure": "tempo",
-   "d": -0.37,
-   "hit_p50": 113.955,
-   "never_p50": 123.31,
-   "n_hit": 978,
-   "n_never": 1172015
-  },
-  {
-   "family": "disco",
-   "decade": "all",
-   "tier": "top10",
-   "measure": "energy",
-   "d": -0.67,
-   "hit_p50": 0.707,
-   "never_p50": 0.815,
-   "n_hit": 43,
-   "n_never": 572
-  },
-  {
-   "family": "rnb",
-   "decade": "all",
-   "tier": "number1",
-   "measure": "speechiness",
-   "d": -0.71,
-   "hit_p50": 0.03,
-   "never_p50": 0.067,
-   "n_hit": 31,
-   "n_never": 1288
-  },
-  {
-   "family": "rock",
-   "decade": "all",
-   "tier": "number1",
-   "measure": "loudness",
-   "d": -0.53,
-   "hit_p50": -8.745,
-   "never_p50": -6.522,
-   "n_hit": 99,
-   "n_never": 7298
-  },
-  {
-   "family": "pop",
-   "decade": "all",
+   "decade": "2010",
    "tier": "charted",
    "measure": "acousticness",
    "d": -0.6,
-   "hit_p50": 0.068,
-   "never_p50": 0.348,
-   "n_hit": 56,
-   "n_never": 4743
-  },
-  {
-   "family": "folk",
-   "decade": "all",
-   "tier": "top10",
-   "measure": "acousticness",
-   "d": -0.65,
-   "hit_p50": 0.33,
-   "never_p50": 0.641,
-   "n_hit": 40,
-   "n_never": 2156
-  },
-  {
-   "family": "electronic",
-   "decade": "all",
-   "tier": "top40",
-   "measure": "loudness",
-   "d": 0.53,
-   "hit_p50": -5.613,
-   "never_p50": -7.204,
-   "n_hit": 92,
-   "n_never": 7789
-  },
-  {
-   "family": "electronic",
-   "decade": "all",
-   "tier": "number1",
-   "measure": "valence",
-   "d": 0.69,
-   "hit_p50": 0.652,
-   "never_p50": 0.401,
-   "n_hit": 31,
-   "n_never": 7789
-  },
-  {
-   "family": "electronic",
-   "decade": "all",
-   "tier": "charted",
-   "measure": "loudness",
-   "d": 0.49,
-   "hit_p50": -5.637,
-   "never_p50": -7.204,
-   "n_hit": 119,
-   "n_never": 7789
-  },
-  {
-   "family": "all",
-   "decade": "all",
-   "tier": "top10",
-   "measure": "borrowed",
-   "d": 0.51,
-   "hit_p50": 0.0,
-   "never_p50": 0.0,
-   "n_hit": 98,
-   "n_never": 475
-  },
-  {
-   "family": "all",
-   "decade": "all",
-   "tier": "number1",
-   "measure": "energy",
-   "d": 0.36,
-   "hit_p50": 0.367,
-   "never_p50": 0.104,
-   "n_hit": 670,
-   "n_never": 1164833
-  },
-  {
-   "family": "metal",
-   "decade": "all",
-   "tier": "charted",
-   "measure": "instrumentalness",
-   "d": -0.58,
-   "hit_p50": 0.0,
-   "never_p50": 0.008,
-   "n_hit": 53,
-   "n_never": 7201
-  },
-  {
-   "family": "rnb",
-   "decade": "all",
-   "tier": "charted",
-   "measure": "valence",
-   "d": -0.62,
-   "hit_p50": 0.416,
-   "never_p50": 0.603,
-   "n_hit": 40,
-   "n_never": 1288
-  },
-  {
-   "family": "electronic",
-   "decade": "all",
-   "tier": "top10",
-   "measure": "loudness",
-   "d": 0.53,
-   "hit_p50": -5.398,
-   "never_p50": -7.204,
-   "n_hit": 74,
-   "n_never": 7789
-  },
-  {
-   "family": "rnb",
-   "decade": "all",
-   "tier": "charted",
-   "measure": "danceability",
-   "d": -0.59,
-   "hit_p50": 0.583,
-   "never_p50": 0.692,
-   "n_hit": 40,
-   "n_never": 1288
-  },
-  {
-   "family": "pop",
-   "decade": "all",
-   "tier": "top10",
-   "measure": "valence",
-   "d": 0.51,
-   "hit_p50": 0.623,
-   "never_p50": 0.459,
-   "n_hit": 65,
-   "n_never": 4743
-  },
-  {
-   "family": "electronic",
-   "decade": "all",
-   "tier": "number1",
-   "measure": "danceability",
-   "d": 0.61,
-   "hit_p50": 0.726,
-   "never_p50": 0.637,
-   "n_hit": 31,
-   "n_never": 7789
-  },
-  {
-   "family": "folk",
-   "decade": "all",
-   "tier": "charted",
-   "measure": "acousticness",
-   "d": -0.57,
-   "hit_p50": 0.367,
-   "never_p50": 0.641,
-   "n_hit": 38,
-   "n_never": 2156
-  },
-  {
-   "family": "folk",
-   "decade": "all",
-   "tier": "top40",
-   "measure": "loudness",
-   "d": 0.53,
-   "hit_p50": -6.828,
-   "never_p50": -9.052,
-   "n_hit": 42,
-   "n_never": 2156
-  },
-  {
-   "family": "disco",
-   "decade": "all",
-   "tier": "number1",
-   "measure": "tempo",
-   "d": -0.51,
-   "hit_p50": 115.1,
-   "never_p50": 125.97,
-   "n_hit": 48,
-   "n_never": 572
-  },
-  {
-   "family": "folk",
-   "decade": "all",
-   "tier": "top10",
-   "measure": "energy",
-   "d": 0.53,
-   "hit_p50": 0.55,
-   "never_p50": 0.439,
-   "n_hit": 40,
-   "n_never": 2156
-  },
-  {
-   "family": "rnb",
-   "decade": "all",
-   "tier": "top10",
-   "measure": "speechiness",
-   "d": -0.53,
-   "hit_p50": 0.053,
-   "never_p50": 0.067,
-   "n_hit": 38,
-   "n_never": 1288
+   "hit_p50": 0.204,
+   "never_p50": 0.542,
+   "n_hit": 153,
+   "n_never": 3988
   }
  ]
 }

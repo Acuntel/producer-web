@@ -95,7 +95,9 @@ def build_galton_entry(row: dict) -> dict:
     # galton.json is a size-budgeted compact export (target <400 KB, section 3);
     # buckets.parquet keeps full 4-decimal precision, this just rounds tighter
     # for the version the brain reads at runtime.
-    mode_share = round(row["mode_share"], 2) if row["mode_share"] is not None else None
+    # NaN is not JSON: a bin with no mode information gets null, never NaN.
+    ms = row["mode_share"]; mode_share = round(ms, 2) if ms is not None and ms == ms else None
+    if tempo_p50 is not None and tempo_p50 != tempo_p50: tempo_p50 = None
     return {
         "count": row["count"], "tempo_p50": round(tempo_p50, 1) if tempo_p50 is not None else None,
         "mode_share": mode_share,
@@ -174,7 +176,7 @@ def build_galton(all_rows: list[dict]) -> dict:
 
 
 def write_galton(galton: dict) -> int:
-    GALTON_OUT.write_text(json.dumps(galton, separators=(",", ":")))
+    GALTON_OUT.write_text(json.dumps(galton, separators=(",", ":"), allow_nan=False))
     galton_bytes = GALTON_OUT.stat().st_size
     print(f"[buckets] galton.json: {len(galton['bins']):,} bins (count>={MIN_GALTON_COUNT}), "
           f"{len(galton['songs']):,} distinct exemplars, {len(galton['progressions']):,} distinct progressions "
