@@ -295,3 +295,7 @@ Brady: the music is stored and takes too much data; condense it further without 
 3. Parquet: tools/dna/condense.py rewrites every file in place with the narrow encoding and verifies row counts and key checksums; the AcousticBrainz parser and the rollup writers produce the narrow form from now on.
 4. Fingerprints: prints.py and prints.ts share the new layout; the tests pin the key hash, the lookups and the neighbour latency.
 5. Proof: before-and-after sizes per tier; tests green; live probes for an artist, a record, a "sounds like", and a pin ask.
+
+### 13.3 Status (2026-09-15)
+
+Done and live (producer-9fdwavyms). data/ 9.7 GB to 2.2 GB (the 5.5 GB of raw dumps archived under ~/Archives/producer-web-raw-dumps, re-downloadable; the spec lists the URLs). Parquet 2,354 MB to 821 MB through one writer, every file verified row by row. Fingerprints 98 MB to 59 MB on disk with the same 32 dimensions and the same neighbour quality. Postgres 608 MB to 296 MB (buckets out, songs down to the nineteen columns the lookups read). Deploy upload 484 MB to 56.5 MB. Tests 71 of 71; re-assembly from the caches alone reproduces the AcousticBrainz fragment; live probes for an artist, a record, a "sounds like", a feel ask and a chart name all answer as before.
