@@ -147,7 +147,8 @@ def run(dsn: str | None, dry_run: bool) -> None:
         if buckets_path.exists():
             buckets = pd.read_parquet(buckets_path)
             keep = ["level", "tempo_band", "meter_feel", "mode", "decade", "family",
-                    "structure_archetype", "harmony_class", "hit_tier", "count", "mode_share"]
+                    "structure_archetype", "harmony_class", "hit_tier", "count", "mode_share",
+                    "energy_band", "feel", "voice"]   # the universal pins of section 12
             stat_cols = [c for c in buckets.columns if c not in keep]
             buckets["stats"] = buckets[stat_cols].apply(
                 lambda r: json.dumps({c: json.loads(r[c]) if isinstance(r[c], str) else r[c] for c in stat_cols}), axis=1)
