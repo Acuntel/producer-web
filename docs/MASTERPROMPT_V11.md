@@ -269,3 +269,7 @@ Brady asked whether the machine actually understands each song and sorts each on
 ### 12.3 Constraints carried
 
 Free Supabase tier: the fingerprints do not enter Postgres. No agents unless a job is repetitive and well specified. No em dashes in copy. Deploy through `npm run deploy`.
+
+### 12.4 Status (2026-09-14 evening)
+
+Built and measured: 1,112,906 fingerprints (32 int8 dimensions, 88.7% of the variance, duplicate rate 0.31%); a record's ten nearest by sound share its family 38.8% of the time against a 9.6% base rate. The board's seven universal pins are known for 40% of the store (772,469 songs in 14,601 full bins, where before no bin had every pin known); the songs with three or more unknown universal pins are the 37.8% that only a chord sheet describes. Family 3.8% to 48.0% through MusicBrainz artist genres and artist propagation. Calibration on record (energy R2 0.56, valence 0.19, danceability 0.25). Discoveries 202. Tests 71 of 71. Open: the DJ-played neighbour test needs more canon records with prints (79 today); 28 more AcousticBrainz parts would lift the fingerprinted share and the canon overlap.
