@@ -17,7 +17,7 @@ import pandas as pd
 
 DATA = Path(__file__).resolve().parents[2] / "data" / "dna"
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "supabase" / "migrations"
-MIGRATIONS = ["0008_dna.sql", "0009_dna_performer_raw.sql"]
+MIGRATIONS = ["0008_dna.sql", "0009_dna_performer_raw.sql", "0011_dna_voice.sql"]
 
 
 def load_ddl() -> str:

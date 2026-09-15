@@ -135,14 +135,14 @@ BIN_FIELDS = ["count", "tempo_p50", "mode_share", "top_progressions", "top_kick_
 _YEAR_SUFFIX_RE = re.compile(r"\s*\(\d{4}\)$")
 
 
-def compact_entry(entry: dict, songs_i: Interner, prog_i: Interner, grid_i: Interner) -> list:
+def compact_entry(entry: dict, songs_i: Interner, prog_i: Interner, grid_i: Interner, max_exemplars: int = 12) -> list:
     """A JSON array, not object: with ~2000 bins, repeating 9 field-name strings
     per bin cost more than the actual data (measured: 562 KB of a 662 KB file
     was key-name repetition). bin_fields above documents the order once.
     Exemplar year suffixes are dropped only here (buckets.parquet keeps the
     full "Artist: Title (year)" form) - it was the next-largest lever to stay
     near the section-3 400 KB target."""
-    exemplars = [_YEAR_SUFFIX_RE.sub("", e) for e in entry["exemplars"]]
+    exemplars = [_YEAR_SUFFIX_RE.sub("", e) for e in entry["exemplars"][:max_exemplars]]
     return [
         entry["count"], entry["tempo_p50"], entry["mode_share"],
         [[prog_i.put(p), c] for p, c in entry["top_progressions"]],
@@ -157,11 +157,17 @@ def build_galton(all_rows: list[dict]) -> dict:
     songs_i, prog_i, grid_i = Interner(), Interner(), Interner()
     galton_bins = {}
     for row in all_rows:
-        if row["count"] < MIN_GALTON_COUNT:
+        level = int(row["level"])
+        # Levels 1-5 ship at 20 songs, the universal levels 6-7 at 50; deeper bins only when one of the sparse pins
+        # (meter, structure, harmony, hit tier) is actually known, else they only repeat the level-7 bin.
+        if row["count"] < (MIN_GALTON_COUNT if level <= 5 else 50):
+            continue
+        if level > 7 and all(str(row[c]) in ("unknown", "none") for c in bins.PIN_ORDER[7:level]):
             continue
         group_cols = bins.PIN_ORDER[:row["level"]]
         key = f"{row['level']}:" + "|".join(str(row[c]) for c in group_cols)
-        galton_bins[key] = compact_entry(build_galton_entry(row), songs_i, prog_i, grid_i)
+        # Deep bins are many; six exemplars each keep the shipped file near two megabytes.
+        galton_bins[key] = compact_entry(build_galton_entry(row), songs_i, prog_i, grid_i, 12 if level <= 5 else 6)
     return {"builtAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "bin_fields": BIN_FIELDS, "songs": songs_i.table, "progressions": prog_i.table,
             "grids": grid_i.table, "bins": galton_bins}
