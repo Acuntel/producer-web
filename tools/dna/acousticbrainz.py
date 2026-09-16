@@ -201,13 +201,20 @@ def main() -> None:
     if stage == "highlevel": stage_highlevel(os.environ["AB_PART"]); return
     limit = int(sys.argv[sys.argv.index("--limit") + 1]) if "--limit" in sys.argv else None
     parts = sorted(RAW.glob("acousticbrainz-highlevel-json-*.tar.zst"))
-    if not parts: sys.exit(f"no highlevel parts in {RAW}")
+    caches = sorted(RAW.glob("highlevel-*.parquet"))
+    if not parts and not caches: sys.exit(f"no highlevel parts or caches in {RAW}")
     t0 = time.time(); frames = []
+    seen_caches: set[Path] = set()
     for p in parts:
         c = part_cache(p)
-        if c.exists() and not limit: frames.append(pd.read_parquet(c)); print(f"[acousticbrainz] {p.name}: cached {len(frames[-1]):,} rows", flush=True)
+        if c.exists() and not limit: frames.append(pd.read_parquet(c)); seen_caches.add(c); print(f"[acousticbrainz] {p.name}: cached {len(frames[-1]):,} rows", flush=True)
         else: frames.append(parse_part(p, limit))
         if limit and sum(len(f) for f in frames) >= limit: break
+    # Caches whose dumps have been archived still count: the cache is the source once the parse is done.
+    if not limit:
+        for c in caches:
+            if c in seen_caches: continue
+            frames.append(pd.read_parquet(c)); print(f"[acousticbrainz] {c.name}: cached {len(frames[-1]):,} rows (dump archived)", flush=True)
     df = pd.concat(frames, ignore_index=True)
     print(f"[acousticbrainz] highlevel: {len(df):,} named recordings in {time.time() - t0:.0f}s", flush=True)
     # Tempo and key from the feature dumps: the cache when the features stage ran, else streamed now.
