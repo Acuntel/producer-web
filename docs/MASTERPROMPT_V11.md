@@ -341,3 +341,7 @@ Brady: be the master of music, dissect pieces of music, grab specific pieces or 
 ### 15.3 Constraints carried
 
 The worker cannot be deployed from this machine until `railway login` runs; everything worker-side is built and proven locally and ships the moment it can. No model calls in any isolation step. Nothing downloaded is kept; stems and slices live under the user's account as before.
+
+### 15.4 Status (2026-09-16)
+
+Web side live: grab as a Voice control answered by the studio (onset slice, root detected in the browser, tuned to the song's root, or the worker's tuned one-shot for a drum word), every heard record's DNA on `dna_heard` and quoted by the research lane, the ritual harness with a grab step passing, 78 tests. Worker side built and measured locally (six stems in 148 s for eight minutes of audio on a laptop, drum parts in 11 s, notes with Basic Pitch, `POST /grab` by sound); deploy waits for `railway login` on this Mac, then `railway up` from `worker/` with `DEMUCS_MODEL=htdemucs_6s`. The promptable-separation bet is deferred with the reason written down: AudioSep is not packaged; a clone plus a gigabyte checkpoint is the next step if grab by sound over nine parts is not enough.

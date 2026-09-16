@@ -312,3 +312,15 @@ The brief and its reading: docs/MASTERPROMPT_V11.md. The store contract: docs/DN
 ### Traps
 - The first ritual run after a build failed on the 40 s verdict wait while the machine was still busy; the rerun passed. Do not read a harness result taken during a build.
 - `tests/e2e.mjs` needs the real brain; on a mock server it reports the credit line, which is not a regression.
+
+## 2026-09-16: the surgeon (masterprompt section 15)
+- Grab, no model: "grab the synth at 1:32" is a Voice control the studio answers itself. A drum word with no time takes the worker's one-shot (already tuned to the root); anything else is an onset-aligned slice from the matching stem clip of the record the studio heard, its root detected in the browser (a YIN over the loudest 200 ms, tested on 55 to 440 Hz tones), the clip transposed so the song's root plays it at pitch, one note on the root, active in the drops. The mock knows the words; the ritual harness has a ninth step and passes.
+- Every heard record carries its DNA: the heard route now writes progression in roman numerals with its harmony class, kick, snare and hat grids, bass root and rhythm, structure codes from the energy blocks, energy, family from the CLAP genres and the top descriptors (migration 0014, a TypeScript port of the harmony rules with tests), and the research lane quotes them as "How it is built".
+- The worker grew (built and proven locally; deploy waits for `railway login` on this Mac): `DEMUCS_MODEL=htdemucs_6s` for guitar and piano stems, a band-and-transient drum split into kick, snare, hat and percussion stems (`DRUM_PARTS=1`), a text embedding for prompts, notes from the harmonic stems with Basic Pitch when installed, and `POST /grab` that ranks a prompt against a record's stem and one-shot embeddings.
+- Tests 78 of 78.
+- The worker upgrade measured locally on a public eight-minute record (Mac, 10 cores): six stems (drums, bass, vocals, other, guitar, piano) in 148 s with `htdemucs_6s`, the drum split into kick, snare, hat and percussion stems in 11.2 s, one-shots with their fundamentals (a 62.6 Hz kick). On the worker's 48 CPUs that is well under a minute.
+- The bet, measured: AudioSep (text-prompted separation) is not installable from PyPI (unsatisfiable requirements); it needs a repository clone and a checkpoint of about a gigabyte. Deferred, written down. What ships instead is grab by sound over nine parts: the prompt's CLAP embedding against the record's stem and one-shot embeddings (`POST /grab`), which covers "the synth", "that metallic perc", "the vocal chop".
+
+### Traps
+- Local demucs on a fresh torch needs torchcodec, and torchcodec needs FFmpeg's shared libraries on the loader path (`DYLD_LIBRARY_PATH=/opt/homebrew/lib`); the Railway image pins torch 2.5.1 and does not.
+- A Vercel deploy answered "Not authorized" once with the account still signed in; the retry went through.
