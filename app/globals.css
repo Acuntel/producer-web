@@ -101,6 +101,15 @@
     background: conic-gradient(from var(--glow-angle), rgb(var(--c-cool)), rgb(var(--c-accent)), rgb(var(--c-cool)), rgb(var(--c-live)), rgb(var(--c-cool)));
   }
 
+
+  /* The mark: a record, pink to green, the one shape the product owns. */
+  .mark { position: relative; border-radius: 999px; background: conic-gradient(from 210deg, rgb(var(--c-accent)), rgb(var(--c-cool)) 45%, rgb(var(--c-live)) 75%, rgb(var(--c-accent))); }
+  .mark::after { content: ""; position: absolute; inset: 30%; border-radius: 999px; background: rgb(var(--c-base)); }
+  /* A scroll region whose top fades instead of clipping a line in half. */
+  .fade-top { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 40px); mask-image: linear-gradient(to bottom, transparent 0, #000 40px); }
+  .pill { display: inline-flex; align-items: center; gap: 0.375rem; border-radius: 999px; padding: 0.25rem 0.625rem; font-size: 0.75rem; line-height: 1rem; font-weight: 500; background: rgb(var(--c-s2)); color: rgb(var(--c-ink-2)); }
+  .dot { display: inline-block; width: 6px; height: 6px; border-radius: 999px; }
+
   /* A move landing on a lane: a short wash of color, then gone. */
   .lane-land { animation: lane-land 1.4s ease-out both; }
 }

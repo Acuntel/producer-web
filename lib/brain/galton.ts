@@ -203,3 +203,24 @@ export async function heardLines(name: string): Promise<string[]> {
     });
   } catch { return []; }
 }
+
+// The fine genres (dna_genres, from MusicBrainz's tags): a word the family map has never seen still lands.
+export type GenreRow = { genre: string; artists: number; songs: number | null; chart_songs: number | null; tempo_p50: number | null; energy_p50: number | null; family: string | null; exemplars: string[] | null };
+export async function lookupGenre(text: string): Promise<GenreRow | null> {
+  const sb = supabaseAdmin(); if (!sb) return null;
+  const t = norm(text); if (!t) return null;
+  try {
+    const exact = await sb.from("dna_genres").select("*").eq("genre", t).limit(1);
+    if (exact.data?.[0]) return exact.data[0] as GenreRow;
+    // The longest genre name contained in the ask wins ("forest psytrance" over "psytrance" over "trance").
+    const words = t.split(" ");
+    const cands = new Set<string>();
+    for (let i = 0; i < words.length; i++) for (let j = i + 1; j <= Math.min(words.length, i + 4); j++) cands.add(words.slice(i, j).join(" "));
+    const r = await sb.from("dna_genres").select("*").in("genre", [...cands]).order("artists", { ascending: false });
+    const rows = (r.data ?? []) as GenreRow[];
+    if (!rows.length) return null;
+    return rows.sort((a, b) => b.genre.length - a.genre.length)[0];
+  } catch { return null; }
+}
+export const genreLine = (g: GenreRow) =>
+  `${g.genre[0].toUpperCase()}${g.genre.slice(1)} in the store: ${g.artists} artists, ${g.songs ?? 0} songs${g.chart_songs ? `, ${g.chart_songs} charted` : ""}${g.tempo_p50 ? `, tempo p50 ${Math.round(g.tempo_p50)}` : ""}${g.energy_p50 ? `, energy ${g.energy_p50.toFixed(2)}` : ""}${g.family ? `, family ${g.family}` : ""}${g.exemplars?.length ? `; artists: ${g.exemplars.slice(0, 5).join(", ")}` : ""}.`;

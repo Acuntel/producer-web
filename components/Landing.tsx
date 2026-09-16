@@ -15,17 +15,17 @@ function when(ts: number | string) {
   return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function Landing({ projects, device, signedIn, loading, onNew, onOpen, onOpenLocal, onSignIn }: {
+export function Landing({ projects, device, signedIn, loading, onNew, onLibrary, onOpen, onOpenLocal, onSignIn }: {
   projects: ProjectCard[]; device: SavedSong[]; signedIn: boolean; loading: boolean;
-  onNew: () => void; onOpen: (id: string) => void; onOpenLocal: (s: SavedSong) => void; onSignIn?: () => void;
+  onNew: () => void; onLibrary: () => void; onOpen: (id: string) => void; onOpenLocal: (s: SavedSong) => void; onSignIn?: () => void;
 }) {
   const has = projects.length > 0 || device.length > 0;
   return (
     <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-10">
       <div className="mb-10 flex flex-col items-center gap-3 text-center">
-        <span className="grid h-14 w-14 place-items-center rounded-2xl bg-ink text-stage shadow-[0_0_60px_-10px_rgb(255_45_146/0.8)]"><Icon name="logo" size={26} /></span>
-        <h1 className="text-3xl font-semibold tracking-tight text-ink">The Producer</h1>
-        <p className="max-w-[34ch] text-base text-ink-2">Talk. It builds the record in front of you. Nothing to click but this.</p>
+        <span className="mark h-16 w-16 shadow-[0_0_70px_-8px_rgb(255_45_146/0.7)]" />
+        <h1 className="text-4xl font-semibold tracking-[-0.02em] text-ink">The Producer</h1>
+        <p className="max-w-[34ch] text-base text-ink-2">Talk. It builds the record in front of you.</p>
       </div>
 
       <div className="grid w-full max-w-2xl gap-3 sm:grid-cols-2">
@@ -37,17 +37,18 @@ export function Landing({ projects, device, signedIn, loading, onNew, onOpen, on
           </span>
         </button>
         <div className="rounded-3xl border border-line/60 bg-s1/70 p-5">
-          <div className="flex items-center gap-4">
-            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-s3 text-live"><Icon name="folder" size={22} /></span>
-            <span className="min-w-0">
-              <span className="block text-lg font-semibold text-ink">Existing project</span>
-              <span className="block text-sm text-ink-2">{signedIn ? "Pick up where you left off." : has ? "Saved on this device." : "Nothing saved yet."}</span>
+          <button onClick={onLibrary} data-role="open-library" className="flex w-full items-center gap-4 text-left">
+            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-s3 text-live"><Icon name="library" size={22} /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-lg font-semibold text-ink">Your records</span>
+              <span className="block text-sm text-ink-2">{has ? `${projects.length + device.length} saved. Open the library.` : signedIn ? "Nothing saved yet. Your records will land here." : "Nothing saved yet."}</span>
             </span>
-          </div>
+            <Icon name="chevron" size={16} className="shrink-0 text-ink-3" />
+          </button>
           {loading && projects.length === 0 && <div className="mt-4 space-y-2">{[0, 1, 2].map((i) => <div key={i} className="skeleton h-10 rounded-xl" />)}</div>}
           {(projects.length > 0 || device.length > 0) && (
-            <ul className="scroll-y mt-4 max-h-[32dvh] space-y-1.5" data-role="project-list">
-              {projects.map((p) => (
+            <ul className="scroll-y mt-4 max-h-[28dvh] space-y-1.5" data-role="project-list">
+              {projects.slice(0, 4).map((p) => (
                 <li key={p.id}>
                   <button onClick={() => onOpen(p.id)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-s2">
                     <span className="min-w-0 flex-1">
@@ -58,7 +59,7 @@ export function Landing({ projects, device, signedIn, loading, onNew, onOpen, on
                   </button>
                 </li>
               ))}
-              {device.map((s, i) => (
+              {device.slice(0, Math.max(0, 4 - projects.length)).map((s, i) => (
                 <li key={`d${i}`}>
                   <button onClick={() => onOpenLocal(s)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-s2">
                     <span className="min-w-0 flex-1">

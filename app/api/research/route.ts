@@ -4,7 +4,7 @@
 // the answer is cached for everyone.
 import { brainClient } from "@/lib/brain/client";
 import { supabaseAdmin } from "@/lib/account/supabase";
-import { lookupArtist, lookupSongs, artistSongs, artistLine, songLine, binsFor, binLine, norm, canonLines, heardLines } from "@/lib/brain/galton";
+import { lookupArtist, lookupSongs, artistSongs, artistLine, songLine, binsFor, binLine, norm, canonLines, heardLines, lookupGenre, genreLine } from "@/lib/brain/galton";
 import { findRecord, artistRows, soundLines } from "@/lib/brain/prints";
 import { laneNamed, laneInfo } from "@/lib/brain/laneNames";
 
@@ -56,8 +56,16 @@ export async function POST(req: Request) {
   const decadeWord = query.toLowerCase().match(/\b(19|20)?(\d0)s\b/) ?? null;
   const DECADE_NAMES: Record<string, string> = { fifties: "1950", sixties: "1960", seventies: "1970", eighties: "1980", nineties: "1990", noughties: "2000", "two thousands": "2000" };
   const decade = decadeWord ? `${decadeWord[1] ?? (Number(decadeWord[2]) >= 30 ? "19" : "20")}${decadeWord[2]}` : Object.entries(DECADE_NAMES).find(([w]) => query.toLowerCase().includes(w))?.[1] ?? null;
-  const fams = familiesIn(query);
+  let fams = familiesIn(query);
   const lane = laneNamed(query);
+  // A fine genre the family map has never heard of (amapiano, footwork, forest psytrance): the genre table answers,
+  // and its family points the bins.
+  const genre = kind === "none" || fams.length === 0 ? await lookupGenre(query) : null;
+  if (genre && !(kind === "artist" && genre.genre.length < 6)) {
+    if (kind === "none") kind = "genre";
+    lines.push(genreLine(genre));
+    if (!fams.length && genre.family) fams = [genre.family];
+  }
   if (fams.length || lane) {
     const info = lane ? laneInfo(lane) : null;
     const tempoBand = info ? bandFor(info.home) : body?.song?.bpm ? bandFor(body.song.bpm) : null;

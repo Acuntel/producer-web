@@ -487,7 +487,9 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
           : resumeRef.current ? `We are back. Last time: ${resumeRef.current} Where do we pick up?`
           : messagesRef.current.length > 0 ? "We are back. Tell me what you are hearing." : "We are live. That is our groove. Name a vibe, or just say surprise me.";
         resumeRef.current = null;
-        setMessages((m) => [...m, { role: "assistant", content: greeting }]);
+        // One greeting per session on screen: earlier boot greetings (a reload, a second start) are replaced, never stacked.
+        const isGreeting = (t: string) => /^(New record\. Who are we chasing|We are back\.|We are live\. That is our groove)/.test(t);
+        setMessages((m) => { const kept = [...m]; while (kept.length && kept[kept.length - 1].role === "assistant" && isGreeting(kept[kept.length - 1].content)) kept.pop(); return [...kept, { role: "assistant", content: greeting }]; });
         say(greeting);
         refreshEars(songRef.current);
       } finally { setStarting(false); }

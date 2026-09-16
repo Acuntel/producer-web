@@ -15,6 +15,7 @@ import { useStopWords } from "@/hooks/useStopWords";
 import { useConversation } from "@/hooks/useConversation";
 import { Glow, type GlowState } from "@/components/Glow";
 import { Landing } from "@/components/Landing";
+import { Library } from "@/components/Library";
 import { SpeakButton, type SpeakState } from "@/components/SpeakButton";
 import { Ribbon } from "@/components/Ribbon";
 import { Field } from "@/components/Field";
@@ -30,9 +31,9 @@ type Actions = { analyze: (i: { url?: string; query?: string; from?: "local" | "
 
 export default function App() {
   // Server and client must render the same first frame: the harness flag is read after mount.
-  const [view, setView] = useState<"landing" | "stage">("landing");
+  const [view, setView] = useState<"landing" | "library" | "stage">("landing");
   const [typed, setTyped] = useState(false);
-  useEffect(() => { if (harnessMode()) { setTyped(true); if (!/[?&]landing=1/.test(window.location.search)) setView("stage"); } }, []);
+  useEffect(() => { if (harnessMode()) { setTyped(true); if (/[?&]library=1/.test(window.location.search)) setView("library"); else if (!/[?&]landing=1/.test(window.location.search)) setView("stage"); } }, []);
   // No paid voice configured: the free voice starts downloading now, so it is ready by the first reply.
   useEffect(() => { fetch("/api/health").then((r) => r.json()).then((h: { voice?: boolean }) => { if (h && h.voice === false) void import("@/lib/voice/kokoro").then((m) => m.loadKokoro()); }).catch(() => {}); }, []);
   const [showAccount, setShowAccount] = useState(false);
@@ -40,7 +41,7 @@ export default function App() {
   const snapshotRef = useRef<(s: Song, m: SnapshotMeta) => void>(() => {});
   const actionsRef = useRef<Actions>({ analyze: async () => {}, vocal: async () => {}, findSound: async () => {}, hear: async () => null, identify: async () => null, tracklist: async () => {} });
   const duckRef = useRef<(on: boolean) => void>(() => {});
-  const landingRef = useRef<(c: { open?: string; new?: boolean }) => void>(() => {});
+  const landingRef = useRef<(c: { open?: string; new?: boolean; library?: boolean }) => void>(() => {});
 
   const voiceOut = useVoiceOut({ duck: (on) => duckRef.current(on) });
   const hum = useHum();
@@ -64,7 +65,7 @@ export default function App() {
   useCritic({ song: studio.song, facts: studio.facts, reference: studio.reference, paused: !!studio.rollout, send: studio.send, started: studio.started });
 
   const titles = useMemo(() => [...projects.projects.map((p) => p.title), ...studio.library.map((s) => s.song.title)], [projects.projects, studio.library]);
-  const convo = useConversation({ studio, voice: voiceOut, screen: view, projects: titles, onLanding: (c) => landingRef.current(c), grab: stems.grab });
+  const convo = useConversation({ studio, voice: voiceOut, screen: view === "stage" ? "stage" : view, projects: titles, onLanding: (c) => landingRef.current(c), grab: stems.grab });
   const speak = useSpeak({ onFinal: (t, ms) => void convo.hear(t, ms), onPress: () => convo.interrupt() });
   useStopWords(convo.auditioning, () => convo.interrupt(true));
 
@@ -84,7 +85,8 @@ export default function App() {
     if (!started) await studio.boot();
     else if (paused) await studio.play();
   }
-  landingRef.current = ({ open, new: fresh }) => {
+  landingRef.current = ({ open, new: fresh, library }) => {
+    if (library) { if (playing) void studio.pause(); setView("library"); return; }
     if (fresh) { void enter(async () => { projects.startFresh(); await studio.newSession(); }); return; }
     if (!open) return;
     const q = open.toLowerCase();
@@ -107,24 +109,32 @@ export default function App() {
       {view === "landing" ? (
         <div className="relative z-10 flex min-h-0 flex-1 flex-col">
           <Landing projects={projects.projects} device={device} signedIn={!!account.user} loading={projects.loading}
-            onNew={() => landingRef.current({ new: true })} onOpen={(id) => void enter(() => projects.open(id))} onOpenLocal={(s) => void enter(() => studio.loadSaved(s))}
+            onNew={() => landingRef.current({ new: true })} onLibrary={() => setView("library")} onOpen={(id) => void enter(() => projects.open(id))} onOpenLocal={(s) => void enter(() => studio.loadSaved(s))}
             onSignIn={account.enabled ? () => setShowAccount(true) : undefined} />
+        </div>
+      ) : view === "library" ? (
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+          <Library projects={projects.projects} device={device} signedIn={!!account.user} loading={projects.loading}
+            onOpen={(id) => void enter(() => projects.open(id))} onOpenLocal={(s) => void enter(() => studio.loadSaved(s))} onNew={() => landingRef.current({ new: true })}
+            onBack={() => setView(started ? "stage" : "landing")} onRename={projects.rename} onDelete={projects.remove} onDuplicate={async (id) => { await projects.duplicate(id); }}
+            versionsOf={projects.versions} onOpenVersion={(v) => void enter(() => projects.openVersion(v))} onSignIn={account.enabled ? () => setShowAccount(true) : undefined} />
         </div>
       ) : (
         <div className="relative z-10 flex min-h-0 flex-1 flex-col px-4 pb-3 pt-4 sm:px-8 sm:pt-5">
           <header className="flex shrink-0 items-center justify-between gap-3">
-            <button onClick={() => { if (playing) void studio.pause(); setView("landing"); }} className="flex items-center gap-2 text-sm font-semibold text-ink-2 transition-colors hover:text-ink" aria-label="Back to projects">
-              <span className="grid h-7 w-7 place-items-center rounded-lg bg-ink text-stage"><Icon name="logo" size={15} /></span>
+            <button onClick={() => { if (playing) void studio.pause(); setView("landing"); }} className="flex items-center gap-2.5 text-sm font-semibold text-ink-2 transition-colors hover:text-ink" aria-label="Back to the start">
+              <span className="mark h-7 w-7" />
               <span className="hidden sm:inline">The Producer</span>
             </button>
             <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-3">
               <StatusLine song={song} cost={studio.cost} measured={measured} paused={paused} started={started} />
+              <button onClick={() => { if (playing) void studio.pause(); setView("library"); }} aria-label="Library" title="Library" data-role="library-button" className="grid h-8 w-8 place-items-center rounded-full bg-s2 text-ink-3 transition-colors hover:text-ink"><Icon name="library" size={15} /></button>
               {account.enabled && <button onClick={() => setShowAccount(true)} aria-label={account.user ? "Your account" : "Sign in"} className="grid h-8 w-8 place-items-center rounded-full bg-s2 text-ink-3 transition-colors hover:text-ink"><Icon name="user" size={15} /></button>}
             </div>
           </header>
 
           <section className="mt-4 grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,40%)] lg:grid-rows-1">
-            <div className="scroll-y flex max-h-[44dvh] min-h-0 flex-col gap-3 lg:max-h-none">
+            <div className="scroll-y flex max-h-[40dvh] min-h-0 flex-col gap-3 lg:max-h-none">
               <Field song={song} beat={playing ? studio.beat : null} sectionIdx={studio.nowSection} playing={playing} getLevels={studio.getLevels} moves={studio.moves} />
               {song.tracks.length === 0 && !convo.work.length && (
                 <div className="rounded-3xl border border-line/50 bg-s1/50 px-5 py-6 text-center">
@@ -150,9 +160,10 @@ export default function App() {
       )}
 
       {view === "stage" && (convo.brainDown ?? studio.brainDown) && (
-        <div className="relative z-10 mx-4 shrink-0 rounded-2xl border border-warn/40 bg-warn/10 px-4 py-2.5 sm:mx-8" data-role="brain-down">
+        <div className="relative z-10 mx-4 flex shrink-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-xl bg-s1/90 px-4 py-2 ring-1 ring-inset ring-warn/30 sm:mx-8" data-role="brain-down">
+          <span className="dot bg-warn shadow-[0_0_8px_rgb(255_176_32/0.8)]" aria-hidden />
           <p className="text-sm font-semibold text-warn">{(convo.brainDown ?? studio.brainDown) === "cap" ? "Today's house allowance is used up." : (convo.brainDown ?? studio.brainDown) === "credits" ? "The producer's brain is out of credits." : "The producer's API key is not working."}</p>
-          <p className="mt-0.5 text-xs text-ink-2 sm:text-sm">{(convo.brainDown ?? studio.brainDown) === "cap" ? "The music keeps playing and every move is saved. Add your own key in Settings, or come back tomorrow." : (convo.brainDown ?? studio.brainDown) === "credits" ? "The music keeps playing and every move is saved. Add credits at console.anthropic.com, or use your own key from your account." : "Check the key in your account."}{account.enabled && <button onClick={() => setShowAccount(true)} className="ml-2 font-medium text-live hover:underline">Use my own API key</button>}</p>
+          <p className="text-xs text-ink-2 sm:text-sm">{(convo.brainDown ?? studio.brainDown) === "cap" ? "The music keeps playing and every move is saved. Add your own key in Settings, or come back tomorrow." : (convo.brainDown ?? studio.brainDown) === "credits" ? "The music keeps playing and every move is saved. Add credits at console.anthropic.com, or use your own key from your account." : "Check the key in your account."}{account.enabled && <button onClick={() => setShowAccount(true)} className="ml-2 font-medium text-live hover:underline">Use my own API key</button>}</p>
         </div>
       )}
       <footer className="relative z-10 flex shrink-0 flex-col items-center gap-2 px-4 pb-6 pt-2">

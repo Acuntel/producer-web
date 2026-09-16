@@ -2,7 +2,7 @@
 // The music, visible and untouchable. Sections along the top with the playhead; below,
 // every track a lane whose hits light up as they fire. No mute, no solo, no faders:
 // the producer moves things here, you watch them move.
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Song, Track } from "@/lib/song/types";
 import { isMelodic } from "@/lib/song/types";
 import type { Levels } from "@/lib/engine";
@@ -22,6 +22,14 @@ export function Field({ song, beat, sectionIdx, playing, getLevels, moves = [] }
   const cur = sectionIdx >= 0 && sectionIdx < starts.length ? starts[sectionIdx] : null;
   const audible = useMemo(() => audibleTracks(song), [song]);
   const head = useRef<HTMLDivElement>(null);
+  // The strip's width decides which sections can carry their name; a label never truncates, it steps aside.
+  const strip = useRef<HTMLDivElement>(null);
+  const [stripW, setStripW] = useState(0);
+  useEffect(() => {
+    const el = strip.current; if (!el) return;
+    const ro = new ResizeObserver(([e]) => setStripW(e.contentRect.width)); ro.observe(el); setStripW(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
   const meters = useRef(new Map<string, HTMLSpanElement>());
   const smooth = useRef(new Map<string, number>());
 
@@ -47,25 +55,38 @@ export function Field({ song, beat, sectionIdx, playing, getLevels, moves = [] }
   }, [getLevels, playing]);
 
   if (song.tracks.length === 0) return null;
+  const barNowInSection = beat !== null && cur ? Math.max(0, Math.floor((beat - cur.startBeat) / 4)) + 1 : null;
+  const next = cur && sectionIdx + 1 < starts.length ? starts[sectionIdx + 1] : null;
+  const caption = cur?.sec
+    ? `${cur.sec.name}${barNowInSection ? ` · bar ${Math.min(barNowInSection, cur.sec.bars)} of ${cur.sec.bars}` : ""}${next?.sec ? ` · then ${next.sec.name}` : ""}`
+    : `${starts.length} sections · ${Math.round(total / 4)} bars`;
 
   return (
     <div className="select-none" data-role="field">
+      {/* The arrangement: a strip of sections sized by length and shaded by energy, the playhead over it, and a caption
+          that always reads in full. Labels live in the strip only where a section is wide enough to carry one. */}
+      <div className="mb-1.5 flex items-baseline justify-between gap-3">
+        <span className="min-w-0 truncate text-xs font-medium text-ink-2" data-role="arrangement-caption">{caption}</span>
+        <span className="tnum shrink-0 text-xs text-ink-3">{song.bpm} BPM</span>
+      </div>
       <div className="relative">
-        <div className="flex h-9 gap-px overflow-hidden rounded-xl bg-s2/60 p-px" aria-label="Arrangement">
+        <div ref={strip} className="flex h-8 gap-[3px] overflow-hidden rounded-lg" aria-label="Arrangement">
           {starts.map((s, i) => {
             if (!s.sec) return null;
             const isNow = i === sectionIdx && playing;
             const energy = s.sec.energy ?? 0.6;
+            const px = stripW ? (s.beats / total) * stripW : 0;
+            const fits = px >= s.sec.name.length * 7.6 + 18;   // 12px caps at 0.08em tracking, plus the padding
             return (
-              <div key={`${s.id}-${i}`} style={{ flexGrow: s.beats, flexBasis: 0 }} aria-current={isNow ? "true" : undefined}
-                className={`relative min-w-0 overflow-hidden first:rounded-l-[11px] last:rounded-r-[11px] ${isNow ? "bg-live/90 text-accent-ink" : "bg-s3/70 text-ink-2"}`}>
-                <span aria-hidden className={`absolute inset-x-0 bottom-0 ${isNow ? "bg-accent-ink/15" : "bg-ink/[0.06]"}`} style={{ height: `${Math.round(energy * 100)}%` }} />
-                <span className="relative block truncate px-2 text-xs font-semibold uppercase leading-9 tracking-wide">{s.sec.name}</span>
+              <div key={`${s.id}-${i}`} style={{ flexGrow: s.beats, flexBasis: 0 }} aria-current={isNow ? "true" : undefined} title={`${s.sec.name} · ${s.sec.bars} bars`}
+                className={`relative min-w-[6px] overflow-hidden rounded-md transition-colors duration-300 ${isNow ? "bg-live text-accent-ink" : "bg-s2 text-ink-3"}`}>
+                <span aria-hidden className={`absolute inset-x-0 bottom-0 ${isNow ? "bg-accent-ink/20" : "bg-ink/[0.07]"}`} style={{ height: `${Math.round(energy * 100)}%` }} />
+                {fits && <span className="relative block whitespace-nowrap px-2 text-xs font-semibold uppercase leading-8 tracking-[0.08em]">{s.sec.name}</span>}
               </div>
             );
           })}
         </div>
-        <div ref={head} aria-hidden className="pointer-events-none absolute -top-1 bottom-[-2px] w-px bg-ink shadow-[0_0_10px_rgba(255,255,255,0.9)] transition-opacity" style={{ left: 0, opacity: 0 }} />
+        <div ref={head} aria-hidden className="pointer-events-none absolute -top-1 bottom-[-3px] w-px bg-ink shadow-[0_0_10px_rgba(255,255,255,0.9)] transition-opacity" style={{ left: 0, opacity: 0 }} />
       </div>
 
       <div className="mt-2 space-y-1">
@@ -82,14 +103,14 @@ export function Field({ song, beat, sectionIdx, playing, getLevels, moves = [] }
           const local = beat !== null && cur && activeNow ? ((beat - cur.startBeat) % loop + loop) % loop : null;
           const move = moves.find((m) => m.trackId === tr.id && Date.now() - m.at < 4000);
           return (
-            <div key={tr.id} className="flex items-center gap-2 transition-opacity duration-300" style={{ opacity: activeNow ? 1 : 0.3 }}>
-              <div className="flex w-[92px] shrink-0 items-center gap-1.5 sm:w-[120px]">
-                <span ref={(el) => { if (el) meters.current.set(tr.id, el); else meters.current.delete(tr.id); }} className="h-5 w-[3px] shrink-0 rounded-full" style={{ background: color, opacity: 0.25 }} />
-                <span className="truncate text-xs font-semibold uppercase tracking-[0.04em] text-ink-2" title={tr.name}>{tr.name}</span>
+            <div key={tr.id} className="flex items-center gap-2.5 transition-opacity duration-300" style={{ opacity: activeNow ? 1 : 0.32 }}>
+              <div className="flex w-[96px] shrink-0 items-center gap-2 sm:w-[124px]">
+                <span ref={(el) => { if (el) meters.current.set(tr.id, el); else meters.current.delete(tr.id); }} className="h-2 w-2 shrink-0 rounded-full" style={{ background: color, opacity: 0.25, boxShadow: `0 0 8px ${color}` }} />
+                <span className="truncate text-xs font-medium text-ink-2 sm:text-[13px]" title={tr.name}>{tr.name}</span>
               </div>
-              <div key={move ? move.at : "lane"} className={`relative h-7 flex-1 overflow-hidden rounded-lg bg-s1/80 ${move ? "lane-land" : ""}`}>
+              <div key={move ? move.at : "lane"} className={`relative h-7 flex-1 overflow-hidden rounded-md bg-s1/70 ring-1 ring-inset ring-line/30 ${move ? "lane-land" : ""}`}>
                 {Array.from({ length: Math.min(32, Math.ceil(loop)) }, (_, b) => (
-                  <div key={b} className={`absolute top-0 h-full w-px ${b % 4 === 0 ? "bg-line/60" : "bg-line/25"}`} style={{ left: `${(b / loop) * 100}%` }} />
+                  b % 4 === 0 && b > 0 ? <div key={b} className="absolute top-0 h-full w-px bg-line/40" style={{ left: `${(b / loop) * 100}%` }} /> : null
                 ))}
                 {tr.role === "audio" && !tr.clip?.oneShot && (
                   <div className="absolute inset-y-1 left-0 right-0 rounded" style={{ background: `${color}44` }}><span className="pl-1.5 text-xs leading-5 text-ink">{tr.clip?.name ?? "audio"}</span></div>

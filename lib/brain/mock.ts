@@ -12,7 +12,8 @@ const CHANGE = /\b(make|add|drop|build|darker|louder|quieter|deeper|harder|faste
 
 export function mockVoice(state: VoiceState, utterance: string): { say: string; control: VoiceControl } {
   const t = utterance.trim();
-  if (state.screen === "landing") {
+  if (/\b(library|my records|what have we made|show (me )?(my )?(records|projects|songs))\b/i.test(t)) return { say: "Here is everything you have made.", control: { library: true } };
+  if (state.screen === "landing" || state.screen === "library") {
     if (/new (project|record|song)/i.test(t)) return { say: "New record. Who are we chasing tonight?", control: { new: true } };
     const m = t.match(/open (.+)/i);
     if (m) return { say: `Opening ${m[1]}.`, control: { open: m[1].trim() } };

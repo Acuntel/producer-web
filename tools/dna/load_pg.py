@@ -17,7 +17,7 @@ import pandas as pd
 
 DATA = Path(__file__).resolve().parents[2] / "data" / "dna"
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "supabase" / "migrations"
-MIGRATIONS = ["0008_dna.sql", "0009_dna_performer_raw.sql", "0011_dna_voice.sql", "0012_dna_songs_lean.sql"]
+MIGRATIONS = ["0008_dna.sql", "0009_dna_performer_raw.sql", "0011_dna_voice.sql", "0012_dna_songs_lean.sql", "0015_genres.sql"]
 
 
 def load_ddl() -> str:
@@ -142,6 +142,13 @@ def run(dsn: str | None, dry_run: bool) -> None:
             # inference) - the DDL declares them jsonb, so load as JSON, not text[].
             with conn.cursor() as cur:
                 copy_dataframe(cur, "public.dna_artists", artists, json_cols={"top_keys", "top_progressions"}, conn=conn)
+            conn.commit()
+
+        genres_path = DATA / "genres.parquet"
+        if genres_path.exists():
+            genres = pd.read_parquet(genres_path)
+            with conn.cursor() as cur:
+                copy_dataframe(cur, "public.dna_genres", genres, json_cols={"exemplars"}, conn=conn)
             conn.commit()
 
         buckets_path = DATA / "buckets.parquet"

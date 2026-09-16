@@ -43,4 +43,6 @@ await evalJs(`(() => { const i = document.querySelector('input[aria-label="Messa
 await sleep(Number(process.env.SHOT_WAIT ?? 12000));
 await shot("stage-live"); await audit("stage-live");
 console.log("voice:", await evalJs(`JSON.stringify((window.__voice ?? []).slice(-1))`));
+await send("Page.navigate", { url: `${BASE}/?e2e=1&library=1&guest=1` }, sessionId); await sleep(3000);
+await shot("library"); await audit("library");
 process.exit(0);

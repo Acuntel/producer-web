@@ -1,5 +1,6 @@
 // Ops: small, deterministic edits the brain can return instead of a whole song.
 // applyOps never throws on bad input; unknown ops are reported and skipped.
+import { euclid } from "./patterns";
 import type { Song, Track, Section, Note, Automation, LoopRegion, Role } from "./types";
 import { isNote, cleanNote, cleanClip } from "./migrate";
 import { applyDawOp, findTrack, findSection, setChance, type DawOp } from "./ops-daw";
@@ -28,6 +29,7 @@ export type Op =
   | { op: "sectionNotes"; section: string; track: string; notes: Note[]; loopBeats?: number }   // notes for ONE section only (auto pattern variant)
   | { op: "grid"; track: string; steps: string; midi?: number; stepBeats?: number; dur?: number; vel?: Record<string, number>; chance?: Record<string, number>; pattern?: string; section?: string; role?: Role; name?: string; volume?: number; duck?: boolean }
   | { op: "note"; note: string }
+  | { op: "euclid"; track: string; hits: number; steps?: number; rotate?: number; midi?: number; role?: string; name?: string; vel?: number; stepBeats?: number }   // E(k, n) as a grid
   | DawOp;
 
 export type ApplyResult = { song: Song; applied: number; skipped: string[] };
@@ -223,6 +225,12 @@ function applyOne(s: Song, o: Op): boolean {
       return true;
     }
     case "note": { if (typeof o.note !== "string") return false; s.notes = o.note.slice(0, 600); return true; }
+    case "euclid": {
+      if (typeof o.track !== "string" || typeof o.hits !== "number") return false;
+      const steps = Math.max(2, Math.min(64, Math.round(o.steps ?? 16)));
+      const grid = euclid(o.hits, steps, o.rotate ?? 0);
+      return applyOne(s, { op: "grid", track: o.track, steps: grid, midi: o.midi, role: o.role, name: o.name, stepBeats: o.stepBeats ?? 4 / steps, vel: o.vel !== undefined ? { X: o.vel } : undefined } as never);
+    }
     case "groove": case "variant": case "fill": case "chance": case "velDev": return applyDawOp(s, o);
     case "humanize": {
       const h = s.humanize;
