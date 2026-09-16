@@ -316,3 +316,28 @@ Proof lines: unit tests (retry, taste merge) green; the ritual harness on the mo
 ### 14.1 Status (2026-09-15 evening)
 
 Live (producer-pn5b93ncb): the retry on every model route, the usage ledger and the house allowance (`/api/usage` answers; a local run with the caps at zero refused the Voice without touching the model), taste mirrored to the account at sign-in, the fast model on the corrective pass, tasks waiting for research, the decision battery in the repo. 76 unit tests green; the ritual harness on the mock all passed. Waiting on model credit: the battery's agreement number and the retry path under a real overload.
+
+## 15. The surgeon: dissect, grab, and play it in key (2026-09-16, the seventh stretch)
+
+Brady: be the master of music, dissect pieces of music, grab specific pieces or tones, the best isolation software on the planet, a full song under five dollars. Floor on 09-16: the worker separates four stems with htdemucs on 48 CPUs, identifies records by sound, hears them (drum grids, a bass line, chords per block, lyrics, CLAP descriptors), slices drum one-shots that already land tuned to the song's root; the engine plays warped loops and pitched one-shots. Model spend is only the brain; the ledger caps the house key at five dollars a day per user.
+
+### 15.1 What must be true at the end
+
+- "Grab the synth at 1:32" (or the bass, the vocal, the kick, the pad) lands as its own track in the current record, cut at the onset, tuned so the song's root plays the tone at pitch, and the producer says what it did. No model call.
+- Every record the studio hears becomes a DNA row the board and the Hands can quote: tempo, key, mode, chord progression in roman numerals, harmony class, kick/snare/hat grids, bass rhythm and root, structure codes, energy, family. "How is this built" answers from it.
+- Finer cuts are ready on the worker: six stems (guitar and piano out of "other") and the drum stem split into kick, snare, hats and percussion, behind an environment switch, proven on a record locally.
+- Promptable separation is measured, not assumed: an open-weight text-prompted separator is installed and timed on a thirty-second span on CPU, and the result is written down (seconds, and whether the isolate is usable).
+- The Voice knows the new moves ("grab", "how is this built") and the harness proves them on the mock.
+- Cost: a full record's model spend stays under five dollars on the house key; the ledger enforces it and the meter shows it.
+
+### 15.2 Mechanism
+
+1. Grab, web-side against the deployed worker: the Voice emits `{"grab": {"what": "<synth|bass|vocal|kick|snare|hat|pad|keys>", "at": <seconds or null>}}`; the studio maps the word to the heard record's stem clip (or a drum one-shot), cuts an onset-aligned slice, detects the root pitch in the browser (a YIN on the slice), sets the clip's transpose so MIDI 60 plays the root, and adds a track with one note on the song's root, active in the drops. Reported as a landed move.
+2. Dissect, web-side: the heard route builds the DNA fields from the hearing (a TypeScript port of the harmony rules: roman numerals, run collapse, harmony class; structure codes from the energy blocks; grids normalised to 16 steps; family from the CLAP genres) and stores them on `dna_heard` (migration 0014); the heard lines quote them.
+3. Worker (local build, deploy waits for `railway login` on this Mac): `DEMUCS_MODEL=htdemucs_6s`, a drum-part splitter (band and transient classification of the drum stem into kick, snare, hat, percussion stems), transcription of the harmonic stems to notes with Basic Pitch when installed, and a `grab` endpoint that scores a text prompt against the stems' CLAP embeddings so the pick is by sound, not by word.
+4. The bet: AudioSep (text-prompted separation, open weights) installed in the local worker environment and timed; the number decides whether it goes behind the same switch.
+5. Proof: unit tests for pitch, harmony port, grab mapping; ritual harness on the mock with a grab step; live probes; the worker's local run on a public record with the six-stem and drum-part outputs listed.
+
+### 15.3 Constraints carried
+
+The worker cannot be deployed from this machine until `railway login` runs; everything worker-side is built and proven locally and ships the moment it can. No model calls in any isolation step. Nothing downloaded is kept; stems and slices live under the user's account as before.
