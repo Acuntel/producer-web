@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabaseBrowser, accountsEnabled } from "@/lib/account/supabase";
+import { hydrateTaste, releaseTaste } from "@/lib/tasteSync";
 
 export type KeyHints = { anthropic: string | null; elevenlabs: string | null; houseKey?: boolean };
 const GUEST_KEY = "producer.guest.v1";
@@ -23,8 +24,8 @@ export function useAccount() {
     try { const r = localStorage.getItem(REMEMBER_KEY); if (r) setRememberedEmail(r); } catch {}
     const sb = supabaseBrowser();
     if (!sb) { setReady(true); return; }
-    sb.auth.getSession().then(({ data }) => { setUser(data.session?.user ?? null); if (data.session?.user?.email) remember(data.session.user.email); setReady(true); });
-    const { data: sub } = sb.auth.onAuthStateChange((_e, session) => { setUser(session?.user ?? null); if (session?.user?.email) remember(session.user.email); });
+    sb.auth.getSession().then(({ data }) => { setUser(data.session?.user ?? null); if (data.session?.user) void hydrateTaste(data.session.user.id); else releaseTaste(); if (data.session?.user?.email) remember(data.session.user.email); setReady(true); });
+    const { data: sub } = sb.auth.onAuthStateChange((_e, session) => { setUser(session?.user ?? null); if (session?.user) void hydrateTaste(session.user.id); else releaseTaste(); if (session?.user?.email) remember(session.user.email); });
     return () => sub.subscription.unsubscribe();
   }, []);
 

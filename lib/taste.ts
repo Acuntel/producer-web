@@ -8,6 +8,26 @@ export type LedgerEntry = {
 
 const KEY = "producer.taste.v1";
 
+// The account sink (lib/tasteSync.ts registers it after sign-in): every move, verdict and pair is mirrored to
+// the user's rows in Supabase, and the local ledger is hydrated from them, so taste follows the account.
+export type Pair = { at: number; title: string; label: string; chosen: "a" | "b"; aDiff: string; bDiff: string };
+type Sink = { move?: (e: LedgerEntry) => void; pair?: (p: Pair) => void };
+let sink: Sink = {};
+export function setTasteSink(s: Sink) { sink = s; }
+
+/** Merge rows from the account into the local ledger: union by id; a verdict on record wins over none. */
+export function mergeLedger(rows: LedgerEntry[]): number {
+  const local = loadLedger(); const byId = new Map(local.map((e) => [e.id, e]));
+  let added = 0;
+  for (const r of rows) {
+    const have = byId.get(r.id);
+    if (!have) { byId.set(r.id, r); added++; }
+    else if (have.verdict === null && r.verdict !== null) byId.set(r.id, { ...have, verdict: r.verdict });
+  }
+  save([...byId.values()].sort((a, b) => a.at - b.at));
+  return added;
+}
+
 export function loadLedger(): LedgerEntry[] {
   try { return JSON.parse(localStorage.getItem(KEY) ?? "[]"); } catch { return []; }
 }
@@ -18,6 +38,7 @@ function save(entries: LedgerEntry[]) {
 export function logMove(e: Omit<LedgerEntry, "id" | "at" | "verdict">): LedgerEntry {
   const entry: LedgerEntry = { ...e, id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, at: Date.now(), verdict: null };
   save([...loadLedger(), entry]);
+  sink.move?.(entry);
   return entry;
 }
 
@@ -27,6 +48,7 @@ export function setVerdict(id: string, verdict: Verdict) {
   if (i < 0) return;
   all[i] = { ...all[i], verdict };
   save(all);
+  sink.move?.(all[i]);
 }
 
 // Infer verdicts from the conversation: a move that was followed by another
@@ -47,7 +69,7 @@ export function tasteSummary(title?: string, max = 14): string {
 }
 
 // Pairwise preferences from A/B auditions: the training set for a preference model later.
-export type Pair = { at: number; title: string; label: string; chosen: "a" | "b"; aDiff: string; bDiff: string };
+
 const PAIRS = "producer.pairs.v1";
 export function loadPairs(): Pair[] { try { return JSON.parse(localStorage.getItem(PAIRS) ?? "[]"); } catch { return []; } }
-export function logPair(p: Omit<Pair, "at">) { try { localStorage.setItem(PAIRS, JSON.stringify([...loadPairs(), { ...p, at: Date.now() }].slice(-300))); } catch {} }
+export function logPair(p: Omit<Pair, "at">) { const full = { ...p, at: Date.now() }; try { localStorage.setItem(PAIRS, JSON.stringify([...loadPairs(), full].slice(-300))); } catch {} sink.pair?.(full); }

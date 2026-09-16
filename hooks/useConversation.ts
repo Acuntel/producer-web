@@ -9,6 +9,7 @@ import type { VoiceControl, VoiceState } from "@/lib/brain/voice";
 import type { Song } from "@/lib/song/types";
 import { economyQuery } from "@/lib/brain/stream";
 import { feelFromFacts } from "@/lib/brain/feel";
+import { tasteSummary } from "@/lib/taste";
 import type { useStudio } from "./useStudio";
 
 type Studio = ReturnType<typeof useStudio>;
@@ -33,7 +34,7 @@ export function useConversation(d: Deps) {
   const [thinking, setThinking] = useState(false);
   const [auditioning, setAuditioning] = useState(false);
   const [timing, setTiming] = useState<Timing | null>(null);
-  const [brainDown, setBrainDown] = useState<"credits" | "key" | null>(null);
+  const [brainDown, setBrainDown] = useState<"credits" | "key" | "cap" | null>(null);
   const dRef = useRef(d); dRef.current = d;
   const turnRef = useRef(0);
   const researchRef = useRef<string[]>([]);
@@ -86,8 +87,11 @@ export function useConversation(d: Deps) {
     await dRef.current.voice.speak("In or out?");
   }, [addWork, doneWork, progressWork]);
 
+  const researchWaitRef = useRef<Promise<void> | null>(null);
   const doResearch = useCallback(async (q: string) => {
     if ([...inflightRef.current.values()].includes(`research: ${q}`)) return;
+    let release: () => void = () => {};
+    researchWaitRef.current = new Promise<void>((r) => { release = r; });
     const id = addWork({ kind: "research", title: `Pulling up ${q}`, detail: "the store first, then the web" });
     inflightRef.current.set(id, `research: ${q}`);
     try {
@@ -98,13 +102,15 @@ export function useConversation(d: Deps) {
       researchRef.current = [...researchRef.current, ...lines].slice(-10); setResearch(researchRef.current);
       doneWork(id, r.found ? `${r.kind} found in ${r.ms} ms from the ${r.source}` : "nothing found, working from the lane");
     } catch { doneWork(id, "research failed"); }
-    finally { inflightRef.current.delete(id); }
+    finally { inflightRef.current.delete(id); release(); researchWaitRef.current = null; }
   }, [addWork, doneWork]);
 
   const runTask = useCallback(async (task: string) => {
     const id = addWork({ kind: "hands", title: task.length > 88 ? task.slice(0, 85) + "..." : task, detail: "the hands are on it" });
     inflightRef.current.set(id, `hands: ${task.slice(0, 70)}`);
     try {
+      // Research the Voice started a moment ago usually lands within a second; the task waits for it (two seconds at most).
+      if (researchWaitRef.current) await Promise.race([researchWaitRef.current, new Promise<void>((r) => setTimeout(r, 2000))]);
       const research = researchRef.current.length ? `RESEARCH (from the store, use it):\n${researchRef.current.join("\n")}\n\nTHE ASK: ` : "";
       await dRef.current.studio.send(`${research}${task}`, { hidden: true, task: true });
       doneWork(id, "landed");
@@ -116,7 +122,7 @@ export function useConversation(d: Deps) {
     const s = dRef.current.studio;
     const pos = s.getPosition();
     return {
-      screen: dRef.current.screen, song: s.getSong(), paused: s.paused,
+      screen: dRef.current.screen, song: s.getSong(), paused: s.paused, taste: tasteSummary(s.getSong().title, 6),
       nowPlaying: pos ? `${pos.section} bar ${pos.barInSection}` : null,
       inflight: [...inflightRef.current.values()], research: researchRef.current, localMoves: [], reports: [],
       feel: feelFromFacts(s.facts)?.line ?? null,
@@ -155,7 +161,7 @@ export function useConversation(d: Deps) {
         let i: number;
         while ((i = buf.indexOf("\n")) >= 0) {
           const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (!line) continue;
-          let o: { type?: string; text?: string; say?: string; control?: VoiceControl; usage?: unknown; model?: string; ms?: number; down?: "credits" | "key" | null }; try { o = JSON.parse(line); } catch { continue; }
+          let o: { type?: string; text?: string; say?: string; control?: VoiceControl; usage?: unknown; model?: string; ms?: number; down?: "credits" | "key" | "cap" | null }; try { o = JSON.parse(line); } catch { continue; }
           if (o.type === "say" && o.text && turn === turnRef.current) { if (!firstWord) firstWord = Math.round(performance.now() - t0); void dRef.current.voice.speak(o.text); }
           else if (o.type === "final") {
             finalSay = o.say ?? ""; control = o.control ?? {}; if (o.usage) s.spend(o.model, o.usage);

@@ -151,8 +151,8 @@ export default function App() {
 
       {view === "stage" && (convo.brainDown ?? studio.brainDown) && (
         <div className="relative z-10 mx-4 shrink-0 rounded-2xl border border-warn/40 bg-warn/10 px-4 py-2.5 sm:mx-8" data-role="brain-down">
-          <p className="text-sm font-semibold text-warn">{(convo.brainDown ?? studio.brainDown) === "credits" ? "The producer's brain is out of credits." : "The producer's API key is not working."}</p>
-          <p className="mt-0.5 text-xs text-ink-2 sm:text-sm">{(convo.brainDown ?? studio.brainDown) === "credits" ? "The music keeps playing and every move is saved. Add credits at console.anthropic.com, or use your own key from your account." : "Check the key in your account."}{account.enabled && <button onClick={() => setShowAccount(true)} className="ml-2 font-medium text-live hover:underline">Use my own API key</button>}</p>
+          <p className="text-sm font-semibold text-warn">{(convo.brainDown ?? studio.brainDown) === "cap" ? "Today's house allowance is used up." : (convo.brainDown ?? studio.brainDown) === "credits" ? "The producer's brain is out of credits." : "The producer's API key is not working."}</p>
+          <p className="mt-0.5 text-xs text-ink-2 sm:text-sm">{(convo.brainDown ?? studio.brainDown) === "cap" ? "The music keeps playing and every move is saved. Add your own key in Settings, or come back tomorrow." : (convo.brainDown ?? studio.brainDown) === "credits" ? "The music keeps playing and every move is saved. Add credits at console.anthropic.com, or use your own key from your account." : "Check the key in your account."}{account.enabled && <button onClick={() => setShowAccount(true)} className="ml-2 font-medium text-live hover:underline">Use my own API key</button>}</p>
         </div>
       )}
       <footer className="relative z-10 flex shrink-0 flex-col items-center gap-2 px-4 pb-6 pt-2">

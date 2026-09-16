@@ -49,6 +49,7 @@ export type VoiceState = {
   localMoves: string[];
   reports: string[];        // what the Hands just finished, to be spoken
   feel?: string | null;     // the feel read of the current render
+  taste?: string | null;    // what they kept and killed before (the taste ledger, compact)
   projects?: string[];
   messages: { role: "user" | "assistant"; content: string }[];
 };
@@ -60,6 +61,7 @@ export function voiceUser(x: VoiceState, utterance: string): string {
   lines.push(`RECORD: "${s.title}" ${s.bpm} BPM ${s.key} lane ${s.lane}; tracks: ${s.tracks.length ? s.tracks.map((t) => `${t.id}(${t.role})`).join(", ") : "none yet"}; sections: ${s.sections.map((c) => `${c.id}:${c.name} ${c.bars}b`).join(", ")}`);
   lines.push(`TRANSPORT: ${x.paused ? "paused" : "playing"}${x.nowPlaying ? ` at ${x.nowPlaying}` : ""}`);
   if (x.feel) lines.push(`FEEL of the record right now: ${x.feel}`);
+  if (x.taste && !/^no verdicts/.test(x.taste)) lines.push(`TASTE (what they kept and killed before; lean that way without saying so):\n${x.taste}`);
   if (x.inflight.length) lines.push(`IN FLIGHT (do not restart these): ${x.inflight.join("; ")}`);
   if (x.reports.length) lines.push(`JUST LANDED (say it briefly if it fits): ${x.reports.join("; ")}`);
   if (x.research.length) lines.push(`RESEARCH:\n${x.research.join("\n")}`);

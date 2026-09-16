@@ -6,15 +6,15 @@ export type StreamReply = { say: string; ops?: unknown[] | null; song?: unknown;
 // The governor can force economy mode (every Hands call on the fast model) once a record passes its spend target.
 let forcedEconomy = false;
 export const forceEconomy = (on: boolean) => { forcedEconomy = on; };
-export const economyQuery = () => {
+export const economyQuery = (economy = false) => {
   const q: string[] = [];
-  if (forcedEconomy || (typeof window !== "undefined" && /[?&]economy=1/.test(window.location.search))) q.push("economy=1");
+  if (economy || forcedEconomy || (typeof window !== "undefined" && /[?&]economy=1/.test(window.location.search))) q.push("economy=1");
   if (typeof window !== "undefined" && /[?&]mock=1/.test(window.location.search)) q.push("mock=1");   // harness only; the server also needs PRODUCER_MOCK=1
   return q.length ? `?${q.join("&")}` : "";
 };
 
-export async function exchange(body: unknown, onSay: (say: string) => void, url = "/api/chat"): Promise<StreamReply> {
-  const r = await fetch(url + economyQuery(), { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" }, body: JSON.stringify(body) });
+export async function exchange(body: unknown, onSay: (say: string) => void, url = "/api/chat", economy = false): Promise<StreamReply> {
+  const r = await fetch(url + economyQuery(economy), { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" }, body: JSON.stringify(body) });
   const ct = r.headers.get("content-type") ?? "";
   if (!ct.includes("ndjson") || !r.body) return (await r.json()) as StreamReply;
   const reader = r.body.getReader();

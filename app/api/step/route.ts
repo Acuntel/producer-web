@@ -1,6 +1,8 @@
 // One rollout step = one inference with only its context. Fast steps route to
 // Sonnet, deep steps to Opus. Same persona, same contract, same cached Mind.
 import { brainClient } from "@/lib/brain/client";
+import { withRetry } from "@/lib/brain/retry";
+import { guardSpend, recordUsage } from "@/lib/brain/usage";
 import { MIND } from "@/lib/mind";
 import { PERSONA } from "@/lib/brain/persona";
 import { CONTRACT } from "@/lib/brain/contract";
@@ -25,8 +27,10 @@ type StepInput = {
 
 export async function POST(req: Request) {
   const x = (await req.json()) as StepInput;
-  const { client } = await brainClient(req);
+  const { client, source } = await brainClient(req);
   if (!client) return Response.json({ say: "Brain not connected.", ops: null, song: null });
+  const capped = await guardSpend(req, source);
+  if (capped) return Response.json({ say: capped, detail: "cap: daily house allowance", down: "cap", keySource: source }, { status: 200 });
   const lane = x.askedLane || x.lane;
   const dna = dnaForBrain(dnaLaneFor(lane));
   const recipe = laneRecipe(lane);
@@ -50,7 +54,7 @@ export async function POST(req: Request) {
     `Respond with the usual JSON. "say" must be ONE short sentence of progress for this step (it may be spoken); keep it natural.`,
   ].filter(Boolean).join("\n\n");
   try {
-    const ask = (content: string) => client.messages.create({
+    const ask = (content: string) => withRetry(() => client.messages.create({
       model: x.step.tier === "deep" && !economy(req) ? DEEP : FAST,
       max_tokens: x.step.fullSong ? 12000 : 14000,
       output_config: { effort: "low" },
@@ -61,7 +65,7 @@ export async function POST(req: Request) {
         { type: "text", text: `YOUR MIND (compiled producer knowledge):\n\n${MIND}`, cache_control: { type: "ephemeral" } },
       ],
       messages: [{ role: "user", content }],
-    } as never);
+    } as never));
     const textOf = (resp: unknown) => (resp as { content: { type: string; text?: string }[] }).content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("");
     let resp = await ask(parts);
     let text = textOf(resp);
@@ -76,6 +80,7 @@ export async function POST(req: Request) {
     const reply = parseBrain(text);
     if (stop === "max_tokens" || (!reply.ops && !reply.song && !reply.say)) console.warn("step reply problem", x.step.id, stop, text.length, text.slice(0, 200));
     const usage = (resp as { usage?: { output_tokens?: number; output_tokens_details?: { thinking_tokens?: number } } }).usage;
+    await recordUsage(req, { route: "step", model: x.step.tier === "deep" && !economy(req) ? DEEP : FAST, usage: usage as never, source });
     return Response.json({ say: reply.say, ops: reply.ops, song: reply.song, listen: reply.listen, model: x.step.tier === "deep" && !economy(req) ? DEEP : FAST, usage, thinking: usage?.output_tokens_details?.thinking_tokens, stop, textLength: text.length, head: reply.ops || reply.song ? undefined : text.slice(0, 300) });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "unknown error";

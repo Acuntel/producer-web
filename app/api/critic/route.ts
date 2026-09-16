@@ -1,5 +1,7 @@
 // Background critic: fast model, low effort, recommendations only. Never touches the song.
 import { brainClient } from "@/lib/brain/client";
+import { withRetry } from "@/lib/brain/retry";
+import { guardSpend, recordUsage } from "@/lib/brain/usage";
 import { PROCESS } from "@/lib/brain/process";
 import { CONTRACT } from "@/lib/brain/contract";
 import { extractJson } from "@/lib/brain/parse";
@@ -16,8 +18,10 @@ const ROLE = `You are the studio's CRITIC: a second producer listening in the ba
 
 export async function POST(req: Request) {
   const x = (await req.json()) as { song: { lane?: string; title?: string; sections?: unknown[]; tracks?: unknown[] }; facts?: unknown; reference?: { name: string; facts: unknown } | null; deltas?: unknown; recent?: string[]; dismissed?: string[]; taste?: string };
-  const { client } = await brainClient(req);
+  const { client, source } = await brainClient(req);
   if (!client) return Response.json({ headline: "", notes: [] });
+  const capped = await guardSpend(req, source);
+  if (capped) return Response.json({ say: capped, detail: "cap: daily house allowance", down: "cap", keySource: source }, { status: 200 });
   const song = x.song as never;
   const parts = [
     `SONG "${x.song.title}" lane ${x.song.lane}: sections ${JSON.stringify((x.song.sections as { id: string; name: string; bars: number; active: string[]; fill?: string; automation?: unknown[] }[] | undefined)?.map((s) => [s.id, s.bars, s.active.length, s.fill, (s.automation ?? []).length]))}`,
@@ -32,11 +36,12 @@ export async function POST(req: Request) {
     x.taste ? `TASTE LEDGER:\n${x.taste}` : "",
   ].filter(Boolean).join("\n\n");
   try {
-    const resp = await client.messages.create({
+    const resp = await withRetry(() => client.messages.create({
       model: MODEL, max_tokens: 2500, output_config: { effort: "low" },
       system: [{ type: "text", text: ROLE }, { type: "text", text: CONTRACT }, { type: "text", text: PROCESS, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: parts }],
-    } as never);
+    } as never));
+    await recordUsage(req, { route: "critic", model: MODEL, usage: resp.usage as never, source });
     const text = (resp as { content: { type: string; text?: string }[] }).content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("");
     return Response.json(parseCritic(extractJson(text)));
   } catch (e: unknown) {

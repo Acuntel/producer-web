@@ -4,6 +4,8 @@
 import { brainClient } from "@/lib/brain/client";
 import { VOICE_SYSTEM, parseVoice, voiceUser, type VoiceState } from "@/lib/brain/voice";
 import { mockVoice, mockRequested } from "@/lib/brain/mock";
+import { withRetry, transient, pause } from "@/lib/brain/retry";
+import { guardSpend, recordUsage } from "@/lib/brain/usage";
 
 export const maxDuration = 30;
 const MODEL = process.env.PRODUCER_VOICE_MODEL || "claude-haiku-4-5";
@@ -32,6 +34,8 @@ export async function POST(req: Request) {
   }
   const { client, source } = await brainClient(req);
   if (!client) return Response.json({ say: "The studio brain is not connected yet. Add your Anthropic API key in Settings.", control: {}, detail: "no key" });
+  const capped = await guardSpend(req, source);
+  if (capped) return Response.json({ say: capped, control: {}, detail: "cap: daily house allowance", down: "cap", keySource: source });
   const params = {
     model: MODEL,
     max_tokens: 400,
@@ -41,9 +45,10 @@ export async function POST(req: Request) {
   const t0 = Date.now();
   if (!wantsStream) {
     try {
-      const resp = await client.messages.create(params as never);
+      const resp = await withRetry(() => client.messages.create(params as never));
       const text = (resp as { content: { type: string; text?: string }[] }).content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("");
       const { say, control } = parseVoice(text);
+      await recordUsage(req, { route: "voice", model: MODEL, usage: resp.usage as never, source });
       return Response.json({ say, control, usage: (resp as { usage: unknown }).usage, model: MODEL, ms: Date.now() - t0, keySource: source });
     } catch (e) { return Response.json(friendly(e)); }
   }
@@ -74,18 +79,26 @@ export async function POST(req: Request) {
         if (final) { const rest = region.slice(spoken).trim(); if (rest) { push({ type: "say", text: rest }); spoken = region.length; } }
         if (cut >= 0) stopped = true;
       };
-      try {
-        const s = client.messages.stream(params as never);
-        s.on("text", (delta: string) => { buf += delta; flushSentences(false); });
-        const resp = await s.finalMessage();
-        flushSentences(true);
-        const { say, control } = parseVoice(buf);
-        push({ type: "final", say, control, usage: resp.usage, model: MODEL, ms: Date.now() - t0, firstSentenceMs: firstAt, keySource: source });
-      } catch (e) {
-        const f = friendly(e);
-        push({ type: "say", text: f.say });
-        push({ type: "final", ...f });
-      } finally { controller.close(); }
+      // One retry on a transient failure, but only while nothing has been spoken yet.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const s = client.messages.stream(params as never);
+          s.on("text", (delta: string) => { buf += delta; flushSentences(false); });
+          const resp = await s.finalMessage();
+          flushSentences(true);
+          const { say, control } = parseVoice(buf);
+          await recordUsage(req, { route: "voice", model: MODEL, usage: resp.usage as never, source });
+          push({ type: "final", say, control, usage: resp.usage, model: MODEL, ms: Date.now() - t0, firstSentenceMs: firstAt, keySource: source, retried: attempt });
+          break;
+        } catch (e) {
+          if (attempt === 0 && spoken === 0 && transient(e)) { buf = ""; await pause(700 + Math.random() * 400); continue; }
+          const f = friendly(e);
+          push({ type: "say", text: f.say });
+          push({ type: "final", ...f });
+          break;
+        }
+      }
+      controller.close();
     },
   });
   return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });

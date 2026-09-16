@@ -69,9 +69,9 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const [ab, setAb] = useState<AB>(null); const [score, setScore] = useState("");
   const [canUndo, setCanUndo] = useState(false); const [canRedo, setCanRedo] = useState(false);
   const [ignored, setIgnored] = useState<{ text: string; at: number } | null>(null);
-  const [brainDown, setBrainDownState] = useState<"credits" | "key" | null>(null);
-  const brainDownRef = useRef<"credits" | "key" | null>(null);
-  const setBrainDown = (v: "credits" | "key" | null) => { brainDownRef.current = v; setBrainDownState(v); };
+  const [brainDown, setBrainDownState] = useState<"credits" | "key" | "cap" | null>(null);
+  const brainDownRef = useRef<"credits" | "key" | "cap" | null>(null);
+  const setBrainDown = (v: "credits" | "key" | "cap" | null) => { brainDownRef.current = v; setBrainDownState(v); };
   const [moves, setMoves] = useState<LaneMove[]>([]);
   const [cost, setCost] = useState(0);
   const [ignoredCount, setIgnoredCount] = useState(0);
@@ -374,10 +374,11 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       const data = await exchange({ messages: next, song: cur, facts: factsCompact, reference: referenceRef.current ? { name: referenceRef.current.name, facts: refFacts } : null, deltas, nowPlaying, taste: tasteSummary(cur.title), clips, localMoves, verify: opts?.verify ?? null, score: scoreLine(), critic: notesForBrain(), feel: feelFromFacts(factsRef.current)?.line ?? null, referenceFeel: referenceRef.current ? feelFromFacts(referenceRef.current.facts)?.line ?? null : null }, (s) => {
         early = s;
         setMessages((m) => [...m, { role: "assistant", content: s }]);
-      }) as Reply;
+      }, "/api/chat", !!opts?.verify) as Reply;
       if (isE2E()) { const w = window as unknown as { __brain?: unknown[] }; (w.__brain ??= []).push(data); }
       spend(data.model, data.usage);
-      if (data.detail && /credit|billing/i.test(data.detail)) setBrainDown("credits");
+      if (data.detail && /^cap:/i.test(data.detail)) setBrainDown("cap");
+      else if (data.detail && /credit|billing/i.test(data.detail)) setBrainDown("credits");
       else if (data.detail && /invalid.*api.?key|authentication|401/i.test(data.detail)) setBrainDown("key");
       else if (brainDownRef.current) setBrainDown(null);
       if (early === null) setMessages((m) => [...m, { role: "assistant", content: data.say }]);

@@ -17,6 +17,8 @@ import { dnaLaneFor, laneNamed } from "@/lib/brain/laneNames";
 import { brainClient } from "@/lib/brain/client";
 import { skillsFor, skillsBlock } from "@/lib/brain/skills";
 import { mockHands, mockRequested } from "@/lib/brain/mock";
+import { withRetry, transient, pause } from "@/lib/brain/retry";
+import { guardSpend, recordUsage } from "@/lib/brain/usage";
 
 export const maxDuration = 60;
 
@@ -94,10 +96,16 @@ export async function POST(req: Request) {
     return resp;
   };
 
+  const capped = await guardSpend(req, source);
+  if (capped) return Response.json({ ...friendly(new Error("cap")), say: capped, detail: "cap: daily house allowance", down: "cap", keySource: source }, { status: 200 });
+  // A transient failure gets one more try; the second try runs on the fast model so an overloaded flagship never stalls the room.
+  const modelFor = (attempt: number) => (attempt > 0 ? FAST : params.model);
   if (!wantsStream) {
     try {
-      const resp = await finish(await client.messages.create({ ...params, messages: msgs } as never) as Anthropic.Message);
-      return Response.json({ ...pack(parseBrain(textOf(resp)), resp.usage, params.model), keySource: source });
+      let used = params.model;
+      const resp = await withRetry(async (attempt) => { used = modelFor(attempt); return finish(await client.messages.create({ ...params, model: used, messages: msgs } as never) as Anthropic.Message); });
+      await recordUsage(req, { route: "chat", model: used, usage: resp.usage as never, source });
+      return Response.json({ ...pack(parseBrain(textOf(resp)), resp.usage, used), keySource: source });
     } catch (e) { return Response.json(friendly(e), { status: 200 }); }
   }
 
@@ -105,24 +113,32 @@ export async function POST(req: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       const push = (o: unknown) => controller.enqueue(enc.encode(JSON.stringify(o) + "\n"));
-      try {
-        let buf = "", saidEarly = false;
-        const s = client.messages.stream({ ...params, messages: msgs } as never);
-        s.on("text", (delta: string) => {
-          buf += delta;
-          if (saidEarly) return;
-          const m = SAY_RE.exec(buf);
-          if (!m) return;
-          saidEarly = true;
-          let say = m[1];
-          try { say = JSON.parse(`"${m[1]}"`); } catch { /* keep the raw text */ }
-          push({ type: "say", say });
-        });
-        const resp = await finish(await s.finalMessage());
-        push({ type: "final", ...pack(parseBrain(textOf(resp)), resp.usage, params.model), saidEarly, keySource: source });
-      } catch (e) {
-        push({ type: "final", ...friendly(e) });
-      } finally { controller.close(); }
+      let buf = "", saidEarly = false;
+      for (let attempt = 0; ; attempt++) {
+        const used = modelFor(attempt);
+        try {
+          const s = client.messages.stream({ ...params, model: used, messages: msgs } as never);
+          s.on("text", (delta: string) => {
+            buf += delta;
+            if (saidEarly) return;
+            const m = SAY_RE.exec(buf);
+            if (!m) return;
+            saidEarly = true;
+            let say = m[1];
+            try { say = JSON.parse(`"${m[1]}"`); } catch { /* keep the raw text */ }
+            push({ type: "say", say });
+          });
+          const resp = await finish(await s.finalMessage());
+          await recordUsage(req, { route: "chat", model: used, usage: resp.usage as never, source });
+          push({ type: "final", ...pack(parseBrain(textOf(resp)), resp.usage, used), saidEarly, keySource: source, retried: attempt });
+          break;
+        } catch (e) {
+          if (attempt === 0 && !saidEarly && transient(e)) { buf = ""; await pause(700 + Math.random() * 400); continue; }
+          push({ type: "final", ...friendly(e) });
+          break;
+        }
+      }
+      controller.close();
     },
   });
   return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });

@@ -299,3 +299,16 @@ Brady: the music is stored and takes too much data; condense it further without 
 ### 13.3 Status (2026-09-15)
 
 Done and live (producer-9fdwavyms). data/ 9.7 GB to 2.2 GB (the 5.5 GB of raw dumps archived under ~/Archives/producer-web-raw-dumps, re-downloadable; the spec lists the URLs). Parquet 2,354 MB to 821 MB through one writer, every file verified row by row. Fingerprints 98 MB to 59 MB on disk with the same 32 dimensions and the same neighbour quality. Postgres 608 MB to 296 MB (buckets out, songs down to the nineteen columns the lookups read). Deploy upload 484 MB to 56.5 MB. Tests 71 of 71; re-assembly from the caches alone reproduces the AcousticBrainz fragment; live probes for an artist, a record, a "sounds like", a feel ask and a chart name all answer as before.
+
+## 14. The agent loop, hardened (2026-09-15, the sixth stretch)
+
+Brady asked where the agentic side could still improve and said execute. Two of the six were already there: the verify loop fires a hidden corrective pass when the ears contradict the Hands, and the research lines ride into every task. Built now:
+
+1. One retry before an apology. Every model route (voice, chat, critic, step) retries once on a transient failure (rate limit, overload, a dropped socket) after a jittered pause; the Hands' second try runs on the fast model. A streamed reply retries only while nothing has been spoken yet.
+2. The server-side ledger and the house allowance. `usage_events` (migration 0013) gets one row per exchange from every model route with the list-price cost; `usage_today()` sums the house key's day. `guardSpend` refuses an exchange once a signed-in user passes `HOUSE_USER_DAILY_USD` (default 5) or everyone passes `HOUSE_GLOBAL_DAILY_USD` (default 40) on the house key, with a spoken line and a banner ("Today's house allowance is used up"). Own keys are never capped. `/api/usage` reports today's number for the meter.
+3. Taste that follows the account. `taste_moves` and `taste_pairs` (migration 0013, RLS own rows) mirror the local ledger; `hydrateTaste` at sign-in pulls the account's rows into the browser and pushes what the browser knew. The Voice now sees the taste line as well as the Hands.
+4. The corrective pass after a failed verify runs on the fast model (economy flag on that exchange only).
+5. A task waits up to two seconds for research the Voice started a moment earlier, so the first blueprint carries the target's numbers.
+6. The Voice decision battery: forty utterances with the control kind the room expects (`npm run battery`); skips itself with exit 0 when the brain is down, fails under 95% agreement otherwise.
+
+Proof lines: unit tests (retry, taste merge) green; the ritual harness on the mock still passes; the allowance refuses a call locally with the caps set to zero and never touches the model; live: `/api/usage` answers, health answers. The battery and the retry paths under real overload wait for model credit.
