@@ -312,3 +312,7 @@ Brady asked where the agentic side could still improve and said execute. Two of 
 6. The Voice decision battery: forty utterances with the control kind the room expects (`npm run battery`); skips itself with exit 0 when the brain is down, fails under 95% agreement otherwise.
 
 Proof lines: unit tests (retry, taste merge) green; the ritual harness on the mock still passes; the allowance refuses a call locally with the caps set to zero and never touches the model; live: `/api/usage` answers, health answers. The battery and the retry paths under real overload wait for model credit.
+
+### 14.1 Status (2026-09-15 evening)
+
+Live (producer-pn5b93ncb): the retry on every model route, the usage ledger and the house allowance (`/api/usage` answers; a local run with the caps at zero refused the Voice without touching the model), taste mirrored to the account at sign-in, the fast model on the corrective pass, tasks waiting for research, the decision battery in the repo. 76 unit tests green; the ritual harness on the mock all passed. Waiting on model credit: the battery's agreement number and the retry path under a real overload.
