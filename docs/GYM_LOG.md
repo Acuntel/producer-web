@@ -300,3 +300,15 @@ The brief and its reading: docs/MASTERPROMPT_V11.md. The store contract: docs/DN
 - Migration 0012 dropped columns, and re-running the base DDL then tried to recreate an index on them; the stale index line left the base file (load_pg re-applies every migration on each load).
 - pandas 3 reads strings as `str`, not `object`: a dtype check for the id conversion silently skipped the biggest file until the verifier caught it.
 - The Vercel CLI archive still takes everything in the tree that the ignore file lists; the deploy script now moves it aside, which is the only rule that has held.
+
+## 2026-09-15 evening: the agent loop, hardened (masterprompt section 14)
+- Brady asked where the agentic side could still improve, then said execute. Honest correction first: two of the six I listed were already built (the verify loop's hidden corrective pass, research riding into every task). The other four are in, plus two strengthenings.
+- One retry before an apology: every model route retries once on a transient failure after a jittered pause; the Hands' second try runs on the fast model; a streamed reply retries only while nothing has been spoken. Unit-tested (a hard failure such as no credit is never retried).
+- The server-side ledger and the house allowance: `usage_events` gets a row per exchange from every model route with the list-price cost; `usage_today()` sums the house key's UTC day; a signed-in user is refused past five dollars a day on the house key and everyone past forty, with a spoken line, a banner, and `down: "cap"` on the wire. Own keys are never capped. Proven locally with the caps at zero: the Voice answers the allowance line and the model is never called; `/api/usage` reports the day.
+- Taste that follows the account: `taste_moves` and `taste_pairs` under RLS mirror the local ledger; sign-in pulls the account's rows into the browser and pushes what the browser knew; the Voice sees the taste line as well as the Hands. Merge tested (a local verdict is kept, account rows dedupe by id).
+- The corrective pass after a failed verify runs on the fast model; a task waits up to two seconds for research the Voice started; the Voice decision battery (`npm run battery`, forty utterances) skips itself when the brain is down and fails under 95% agreement otherwise.
+- Ritual harness on the mock: all passed, zero exceptions. 76 unit tests green. The battery and the real-overload retry path wait for model credit.
+
+### Traps
+- The first ritual run after a build failed on the 40 s verdict wait while the machine was still busy; the rerun passed. Do not read a harness result taken during a build.
+- `tests/e2e.mjs` needs the real brain; on a mock server it reports the credit line, which is not a regression.
