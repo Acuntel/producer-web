@@ -7,6 +7,7 @@ import json, math, os
 from dataclasses import dataclass
 import numpy as np
 import librosa
+import soundfile as sf
 
 SR = 22050
 BANDS = [("sub", 20, 60), ("low", 60, 250), ("lowMid", 250, 500), ("mid", 500, 2000), ("highMid", 2000, 6000), ("air", 6000, 11025)]
@@ -138,6 +139,41 @@ def clap_embed(y: np.ndarray, sr: int) -> np.ndarray:
     return e[0].cpu().numpy()
 
 
+def clap_text_embed(text: str) -> np.ndarray:
+    """A prompt ("a warm analog synth pad") in the same space as the stems' embeddings, for grab by sound."""
+    import torch
+    model, proc = clap_model()
+    with torch.no_grad():
+        ti = proc(text=[text], return_tensors="pt", padding=True)
+        te = model.get_text_features(**ti); te = te / te.norm(dim=-1, keepdim=True)
+    return te[0].cpu().numpy()
+
+
+def transcribe_notes(path: str, start_sec: float, seconds: float) -> dict:
+    """Notes from a harmonic stem with Basic Pitch (Spotify, Apache 2.0) when it is installed: count, range, density
+    and the top pitch classes over the best bars. Absent the package, an empty dict, never an error."""
+    try:
+        from basic_pitch.inference import predict
+        from basic_pitch import ICASSP_2022_MODEL_PATH
+    except Exception:
+        return {}
+    try:
+        y, sr = librosa.load(path, sr=22050, mono=True, offset=max(0.0, start_sec), duration=seconds)
+        if len(y) < sr: return {}
+        tmp = path + ".seg.wav"; sf.write(tmp, y, sr)
+        _, _, events = predict(tmp, ICASSP_2022_MODEL_PATH)
+        try: os.remove(tmp)
+        except OSError: pass
+        notes = [{"start": round(float(a), 3), "end": round(float(b), 3), "midi": int(m), "vel": round(float(v), 2)} for a, b, m, v, _ in events if b > a]
+        if not notes: return {"count": 0}
+        pcs: dict[str, int] = {}
+        for n in notes: k = NOTE_NAMES[n["midi"] % 12]; pcs[k] = pcs.get(k, 0) + 1
+        return {"count": len(notes), "lowest": midi_name(min(n["midi"] for n in notes)), "highest": midi_name(max(n["midi"] for n in notes)),
+                "perBar": round(len(notes) / max(1.0, seconds / 2.0), 1), "topPitchClasses": sorted(pcs, key=pcs.get, reverse=True)[:4], "events": notes[:96]}
+    except Exception as e:
+        return {"error": str(e)[:120]}
+
+
 def clap_scores(emb: np.ndarray, labels: list[str], template: str) -> list[tuple[str, float]]:
     """Labels ranked by cosine similarity to the audio. Raw similarity, not a softmax: a
     peaky softmax over thirty labels reads as false certainty."""
@@ -200,6 +236,12 @@ def hear(mix_path: str, stems: dict[str, str], facts: dict) -> dict:
     drums = drum_grids(loaded["drums"], SR, bar_sec, best_bar) if "drums" in loaded else {}
     bass = bass_line(loaded["bass"], SR, bar_sec, best_bar) if "bass" in loaded else {}
     chords = condense(chords_per_block(loaded.get("other", mix), SR, bar_sec, n_bars))
+    # Notes from the harmonic stems over the best eight bars (Basic Pitch, when installed).
+    notes = {}
+    for name in ("other", "guitar", "piano", "vocals"):
+        if name in stems:
+            t = transcribe_notes(stems[name], best_bar * bar_sec, 8 * bar_sec)
+            if t: notes[name] = t
     vocals_share = per_stem.get("vocals", {}).get("share", 0.0)
     lyrics = whisper_lyrics(stems["vocals"]) if "vocals" in stems and vocals_share > 0.04 else {"lines": []}
     # CLAP on the best bars of the mix and on each stem: descriptors, genres, embeddings for sound search.
@@ -216,7 +258,7 @@ def hear(mix_path: str, stems: dict[str, str], facts: dict) -> dict:
     except Exception as e:
         clap["error"] = str(e)[:160]
     report = write_report(facts, per_stem, blocks, drums, bass, chords, lyrics, clap)
-    return {"perStem": per_stem, "blocks": blocks, "drumGrids": drums, "bass": bass, "chords": chords, "lyrics": lyrics, "clap": {k: v for k, v in clap.items() if k != "embeddings"}, "embeddings": clap.get("embeddings", {}), "report": report}
+    return {"perStem": per_stem, "blocks": blocks, "drumGrids": drums, "bass": bass, "chords": chords, "notes": notes, "lyrics": lyrics, "clap": {k: v for k, v in clap.items() if k != "embeddings"}, "embeddings": clap.get("embeddings", {}), "report": report}
 
 
 HUMAN = {"drums": "drums", "bass": "bass", "vocals": "vocals", "other": "chords and keys"}

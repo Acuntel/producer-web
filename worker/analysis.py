@@ -96,8 +96,13 @@ def analyze(path: str) -> dict:
     }
 
 
-def separate(wav_path: str, out_dir: str, model: str = "htdemucs") -> dict[str, str]:
-    """Run demucs in a subprocess (its own process keeps torch memory out of the server)."""
+STEM_NAMES = ("drums", "bass", "vocals", "other", "guitar", "piano")   # htdemucs makes four, htdemucs_6s six
+
+
+def separate(wav_path: str, out_dir: str, model: str | None = None) -> dict[str, str]:
+    """Run demucs in a subprocess (its own process keeps torch memory out of the server).
+    DEMUCS_MODEL=htdemucs_6s adds guitar and piano stems (section 15 of the masterprompt)."""
+    model = model or os.environ.get("DEMUCS_MODEL", "htdemucs")
     # Measured on the demo record: shifts=1 79 s, shifts=0 56 s, shifts=0 + overlap 0.1 48 s, same stems for our use
     # (one-shots, loops, listening). SEPARATE_FAST=0 restores demucs' defaults.
     fast = os.environ.get("SEPARATE_FAST", "1") == "1"
@@ -105,11 +110,49 @@ def separate(wav_path: str, out_dir: str, model: str = "htdemucs") -> dict[str, 
     subprocess.run([sys.executable, "-m", "demucs.separate", "-n", model, "-o", out_dir, "--filename", "{stem}.{ext}", *extra, wav_path], check=True)
     base = os.path.join(out_dir, model)
     stems = {}
-    for name in ("drums", "bass", "vocals", "other"):
+    for name in STEM_NAMES:
         p = os.path.join(base, f"{name}.wav")
         if os.path.exists(p): stems[name] = p
     if not stems: raise RuntimeError("demucs produced no stems")
     return stems
+
+
+def drum_parts(drums_path: str, out_dir: str) -> dict[str, str]:
+    """The drum stem as kick, snare, hat and percussion stems (DRUM_PARTS=1): a band-and-transient split, no model.
+    Kick is what sits under 160 Hz around low, dull onsets; hats what sits above 5 kHz around bright, short onsets;
+    snare the mid band around mid onsets; percussion the rest. Explainable and instant; a learned drum separator is
+    the upgrade behind the same switch."""
+    from scipy.signal import butter, sosfiltfilt
+    os.makedirs(out_dir, exist_ok=True)
+    y, sr = librosa.load(drums_path, sr=44100, mono=True)
+    if len(y) < sr: return {}
+    lo = sosfiltfilt(butter(4, 160, "low", fs=sr, output="sos"), y)
+    hi = sosfiltfilt(butter(4, 5000, "high", fs=sr, output="sos"), y)
+    mid = sosfiltfilt(butter(4, [160, 5000], "band", fs=sr, output="sos"), y)
+    onsets = librosa.onset.onset_detect(y=y, sr=sr, units="samples", backtrack=True, delta=0.1)
+    hop = 512; frames = int(np.ceil(len(y) / hop)) + 1
+    gates = {"kick": np.zeros(frames), "snare": np.zeros(frames), "hat": np.zeros(frames)}
+    for o in onsets:
+        n = min(len(y), o + int(0.12 * sr)); piece = y[o:n]
+        if len(piece) < 256: continue
+        spec = np.abs(np.fft.rfft(piece * np.hanning(len(piece)))); freqs = np.fft.rfftfreq(len(piece), 1 / sr)
+        tot = spec.sum() + 1e-9; low = spec[freqs < 150].sum() / tot; cen = float((freqs * spec).sum() / tot)
+        role = "kick" if (low > 0.4 and cen < 700) else "hat" if cen > 4000 else "snare"
+        length = int(0.35 * sr) if role == "kick" else int(0.25 * sr) if role == "snare" else int(0.15 * sr)
+        f0, f1 = o // hop, min(frames, (o + length) // hop + 1)
+        gates[role][f0:f1] = 1.0
+    def apply(sig: np.ndarray, gate: np.ndarray) -> np.ndarray:
+        env = np.repeat(gate, hop)[: len(sig)]
+        env = np.convolve(env, np.ones(int(0.01 * sr)) / int(0.01 * sr), mode="same")   # 10 ms edges
+        return (sig * env).astype(np.float32)
+    parts = {"kick": apply(lo, gates["kick"]), "snare": apply(mid, gates["snare"]), "hat": apply(hi, gates["hat"])}
+    perc = (y - parts["kick"] - parts["snare"] - parts["hat"]).astype(np.float32)
+    parts["perc"] = perc
+    out = {}
+    for name, sig in parts.items():
+        if float(np.max(np.abs(sig)) if len(sig) else 0) < 0.01: continue
+        p = os.path.join(out_dir, f"{name}.wav"); sf.write(p, sig, sr); out[name] = p
+    return out
 
 
 @dataclass
@@ -202,8 +245,11 @@ if __name__ == "__main__":
     facts = analyze(wav)
     print("FACTS", json.dumps(facts)[:700], flush=True)
     if len(sys.argv) > 2 and sys.argv[2] == "--stems":
-        stems = separate(wav, os.path.join(tmp, "sep"))
-        print("STEMS", stems, flush=True)
+        t1 = time.time(); stems = separate(wav, os.path.join(tmp, "sep"))
+        print("STEMS", {k: os.path.basename(v) for k, v in stems.items()}, f"in {time.time() - t1:.0f}s", flush=True)
+        if os.environ.get("DRUM_PARTS", "1") == "1" and "drums" in stems:
+            t2 = time.time(); parts = drum_parts(stems["drums"], os.path.join(tmp, "parts"))
+            print("DRUM_PARTS", {k: os.path.basename(v) for k, v in parts.items()}, f"in {time.time() - t2:.1f}s", flush=True)
         shots = slice_oneshots(stems["drums"], os.path.join(tmp, "shots"))
         print("ONESHOTS", json.dumps([asdict(s) for s in shots]), flush=True)
         print("TMP", tmp, flush=True)

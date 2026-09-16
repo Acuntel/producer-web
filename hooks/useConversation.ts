@@ -19,6 +19,7 @@ type Deps = {
   screen: "landing" | "stage";
   projects: string[];
   onLanding: (c: { open?: string; new?: boolean }) => void;
+  grab?: (what: string, at?: number | null) => Promise<string | null>;   // a part of the heard record, into this one (hooks/useStems)
 };
 export type Timing = { stt: number; firstWord: number; voiceMs: number };
 
@@ -130,16 +131,29 @@ export function useConversation(d: Deps) {
     };
   }, []);
 
+  const doGrab = useCallback(async (g: { what: string; at?: number | null }) => {
+    const s = dRef.current.studio;
+    const where = g.at != null ? ` at ${Math.floor(g.at / 60)}:${String(Math.floor(g.at % 60)).padStart(2, "0")}` : "";
+    const id = addWork({ kind: "hands", title: `Grabbing the ${g.what}${where}`, detail: "cut at the onset, tuned to the root, no model" });
+    try {
+      const landed = dRef.current.grab ? await dRef.current.grab(g.what, g.at ?? null) : null;
+      const line = landed ? `Grabbed the ${g.what}${where}. It is on its own track, tuned to the root.` : "I have no heard record to grab from yet. Pull one in first and I will cut it.";
+      doneWork(id, landed ? "landed" : "nothing to grab from");
+      s.append("assistant", line); await dRef.current.voice.speak(line);
+    } catch { doneWork(id, "did not land"); }
+  }, [addWork, doneWork]);
+
   const act = useCallback(async (c: VoiceControl) => {
     const s = dRef.current.studio;
     if (c.stop) { interrupt(true); return; }
+    if (c.grab?.what) { void doGrab(c.grab); }
     if (c.research) void doResearch(c.research);
     if (dRef.current.screen === "landing") { if (c.open || c.new) dRef.current.onLanding({ open: c.open, new: c.new }); return; }
     if (c.task) void runTask(c.task);
     else if (c.audition) void audition(c.audition.section, c.audition.bars);
     else if (c.open || c.new) dRef.current.onLanding({ open: c.open, new: c.new });
     void s;
-  }, [audition, doResearch, interrupt, runTask]);
+  }, [audition, doResearch, doGrab, interrupt, runTask]);
 
   // The entry point: what you said, and how long the engine took to commit it.
   const hear = useCallback(async (text: string, sttMs: number) => {

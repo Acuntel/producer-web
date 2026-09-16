@@ -180,16 +180,26 @@ export async function canonLines(name: string): Promise<string[]> {
 const mmss = (sec: number) => { const s = Math.max(0, Math.round(sec)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
 /** Records the studio has heard itself (any user), matched by artist or title. */
+const dnaTail = (x: { progression?: string | null; harmony_class?: string | null; structure?: string | null; kick_grid?: string | null; snare_grid?: string | null; hat_grid?: string | null; bass_rhythm?: string | null; bass_root?: string | null; family?: string | null; descriptors?: string | null }) => {
+  const parts: string[] = [];
+  if (x.progression) parts.push(`progression ${x.progression}${x.harmony_class ? ` (${x.harmony_class.replace(/_/g, " ")})` : ""}`);
+  if (x.kick_grid) parts.push(`kick ${x.kick_grid}${x.snare_grid ? `, snare ${x.snare_grid}` : ""}${x.hat_grid ? `, hats ${x.hat_grid}` : ""}`);
+  if (x.bass_rhythm || x.bass_root) parts.push(`bass${x.bass_root ? ` root ${x.bass_root}` : ""}${x.bass_rhythm ? ` rhythm ${x.bass_rhythm}` : ""}`);
+  if (x.structure) parts.push(`structure ${x.structure}`);
+  if (x.family) parts.push(`family ${x.family}`);
+  if (x.descriptors) parts.push(`sounds ${x.descriptors}`);
+  return parts.length ? ` How it is built: ${parts.join("; ")}.` : "";
+};
 export async function heardLines(name: string): Promise<string[]> {
   const sb = supabaseAdmin(); if (!sb) return [];
   const n = norm(name); if (!n) return [];
   try {
-    const r = await sb.from("dna_heard").select("title,artist,year,tempo,key_name,bars,energy_contour,heard_count").or(`artist_norm.ilike.*${n}*,title_norm.ilike.*${n}*`).order("heard_count", { ascending: false }).limit(4);
-    const rows = (r.data ?? []) as { title: string | null; artist: string | null; year: number | null; tempo: number | null; key_name: string | null; bars: number | null; energy_contour: number[] | null; heard_count: number }[];
+    const r = await sb.from("dna_heard").select("title,artist,year,tempo,key_name,bars,energy_contour,heard_count,progression,harmony_class,structure,kick_grid,snare_grid,hat_grid,bass_rhythm,bass_root,family,descriptors").or(`artist_norm.ilike.*${n}*,title_norm.ilike.*${n}*`).order("heard_count", { ascending: false }).limit(4);
+    const rows = (r.data ?? []) as { title: string | null; artist: string | null; year: number | null; tempo: number | null; key_name: string | null; bars: number | null; energy_contour: number[] | null; heard_count: number; progression?: string | null; harmony_class?: string | null; structure?: string | null; kick_grid?: string | null; snare_grid?: string | null; hat_grid?: string | null; bass_rhythm?: string | null; bass_root?: string | null; family?: string | null; descriptors?: string | null }[];
     return rows.filter((x) => x.title).map((x) => {
       const e = x.energy_contour ?? [];
       const peak = e.length ? e.indexOf(Math.max(...e)) * 8 : null;
-      return `Heard by the studio: ${x.artist ?? "?"}: ${x.title}${x.year ? ` (${x.year})` : ""}${x.tempo ? `, ${Math.round(x.tempo)} BPM` : ""}${x.key_name ? `, ${x.key_name}` : ""}${x.bars ? `, ${x.bars} bars` : ""}${peak !== null ? `, peak energy around bar ${peak}` : ""}${x.heard_count > 1 ? `, heard ${x.heard_count} times` : ""}.`;
+      return `Heard by the studio: ${x.artist ?? "?"}: ${x.title}${x.year ? ` (${x.year})` : ""}${x.tempo ? `, ${Math.round(x.tempo)} BPM` : ""}${x.key_name ? `, ${x.key_name}` : ""}${x.bars ? `, ${x.bars} bars` : ""}${peak !== null ? `, peak energy around bar ${peak}` : ""}${x.heard_count > 1 ? `, heard ${x.heard_count} times` : ""}.` + dnaTail(x);
     });
   } catch { return []; }
 }

@@ -64,7 +64,7 @@ export default function App() {
   useCritic({ song: studio.song, facts: studio.facts, reference: studio.reference, paused: !!studio.rollout, send: studio.send, started: studio.started });
 
   const titles = useMemo(() => [...projects.projects.map((p) => p.title), ...studio.library.map((s) => s.song.title)], [projects.projects, studio.library]);
-  const convo = useConversation({ studio, voice: voiceOut, screen: view, projects: titles, onLanding: (c) => landingRef.current(c) });
+  const convo = useConversation({ studio, voice: voiceOut, screen: view, projects: titles, onLanding: (c) => landingRef.current(c), grab: stems.grab });
   const speak = useSpeak({ onFinal: (t, ms) => void convo.hear(t, ms), onPress: () => convo.interrupt() });
   useStopWords(convo.auditioning, () => convo.interrupt(true));
 

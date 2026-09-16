@@ -88,6 +88,28 @@ def find(f: FindIn, x_worker_secret: str = Header(default="")):
     return {"query": f.query, "candidates": finder.to_json(res[:16]), "sources": list(finder.SOURCES)}
 
 
+class GrabIn(BaseModel):
+    prompt: str                       # "a warm analog synth pad", "the vocal chop", "that metallic perc"
+    candidates: list[dict] = []       # [{id, name, embedding}] the caller already holds for the record's stems and one-shots
+
+
+@app.post("/grab")
+def grab(g: GrabIn, x_worker_secret: str = Header(default="")):
+    """Grab by sound: the prompt's CLAP embedding against the record's stem and one-shot embeddings, ranked."""
+    if not SECRET or x_worker_secret != SECRET: raise HTTPException(401, "bad secret")
+    import numpy as np
+    t0 = time.time()
+    emb = hearing.clap_text_embed(g.prompt.strip()[:160])
+    scored = []
+    for c in g.candidates:
+        e = c.get("embedding")
+        if not e or len(e) != len(emb): continue
+        v = np.array(e, dtype=np.float32); sim = float(np.dot(emb, v) / (np.linalg.norm(emb) * np.linalg.norm(v) + 1e-9))
+        scored.append({"id": c.get("id"), "name": c.get("name"), "score": round(sim, 3)})
+    scored.sort(key=lambda x: -x["score"])
+    return {"prompt": g.prompt, "ranked": scored[:12], "ms": int((time.time() - t0) * 1000)}
+
+
 class MatchIn(BaseModel):
     owner: str
     storage_path: str          # a short recording the user made ("ding ding dong")
@@ -344,6 +366,12 @@ def process(job: Job) -> None:
         stamp("previewReady")
         supa.update_job(job.job_id, progress=45, result={"facts": facts, "stage": "separating the whole record", "preview": {"stems": preview_out, "oneshots": pshot_out}, "timing": timing})
         stems = analysis.separate(wav, os.path.join(tmp, "sep")); stamp("separated")
+        # The drum stem as kick, snare, hat and percussion (DRUM_PARTS=1): more to grab, nothing to download.
+        if os.environ.get("DRUM_PARTS", "1") == "1" and "drums" in stems:
+            try:
+                for part, path in analysis.drum_parts(stems["drums"], os.path.join(tmp, "parts")).items(): stems[f"drum-{part}"] = path
+                stamp("drumParts")
+            except Exception as e: print("drum parts failed", e, flush=True)
         supa.update_job(job.job_id, progress=75, result={"facts": facts, "stage": "slicing", "preview": {"stems": preview_out, "oneshots": pshot_out}})
         shots = analysis.slice_oneshots(stems["drums"], os.path.join(tmp, "shots")) if "drums" in stems else []
         # Publish first, listen after: the stems and one-shots are usable the moment they exist; the listening

@@ -21,11 +21,12 @@ RESPONSE FORMAT. First the spoken reply (one or two sentences). Then, on its own
 @@ {"research": "<artist, record or genre to look up now>"}
 @@ {"audition": {"section": "<section id or name, or 'current'>", "bars": 8|16|32}}
 @@ {"stop": true}
+@@ {"grab": {"what": "<synth|bass|vocal|kick|snare|hat|pad|keys|guitar|piano>", "at": <seconds into the heard record, or null for its best bars>}}   (a part of the record the studio pulled in becomes a track here, cut at the onset and tuned to the song's root; no Hands needed; "1:32" is 92 seconds)
 @@ {"open": "<project title to open>"} | {"new": true}   (only on the landing screen)
 @@ {}   (nothing to do)
-Combine "research" with a spoken question in the same turn. Never combine "task" and "audition" in one turn. Never invent facts: if RESEARCH is empty for a name, say you are pulling it up and ask your next question.`;
+"How is this built", "break it down", "what is the progression" about a record the studio heard is research on that record's name; the store answers with its DNA. Combine "research" with a spoken question in the same turn. Never combine "task" and "audition" in one turn. Never invent facts: if RESEARCH is empty for a name, say you are pulling it up and ask your next question.`;
 
-export type VoiceControl = { task?: string; research?: string; audition?: { section?: string; bars?: number }; stop?: boolean; open?: string; new?: boolean };
+export type VoiceControl = { task?: string; research?: string; audition?: { section?: string; bars?: number }; stop?: boolean; open?: string; new?: boolean; grab?: { what: string; at?: number | null } };
 
 export function parseVoice(text: string): { say: string; control: VoiceControl } {
   const i = text.indexOf("@@");

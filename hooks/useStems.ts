@@ -200,6 +200,42 @@ export function useStems(d: Deps) {
     const ok = await dRef.current.edit(ops, mode === "hook" ? `placed the rendered vocal ${recordName} in the drops` : `looped the best 8 bars of the ${stem.stem} stem from ${recordName}`);
     if (ok) dRef.current.flash(mode === "hook" ? "Vocal is in the drops" : `${stem.stem} loop is in the drops`);
   }, []);
+  // Grab: a part of the heard record ("the synth at 1:32", "the bass", "the kick") into this record, no model.
+  // Drums by word with no time take the worker's one-shot (already tuned); anything else is an onset-aligned slice
+  // from the matching stem, its root detected in the browser and the clip transposed so the song's root plays it at pitch.
+  const grab = useCallback(async (what: string, atSec?: number | null): Promise<string | null> => {
+    const res = job?.result; if (!job || job.status !== "done" || !res?.stems?.length) return null;
+    const w = what.toLowerCase();
+    const drumRole = /kick/.test(w) ? "kick" : /snare|clap/.test(w) ? "snare" : /\bhi-?hats?\b|\bhats?\b|cymbal/.test(w) ? "hat" : /perc/.test(w) ? "perc" : null;
+    const stem = drumRole ? "drums" : /bass|sub|808/.test(w) ? "bass" : /vocal|voice|vox|sing|acapella/.test(w) ? "vocals" : (res.stems.find((x) => x.stem === (/guitar/.test(w) ? "guitar" : /piano|keys/.test(w) ? "piano" : ""))?.stem ?? "other");
+    if (drumRole && atSec == null) { const shot = (res.oneshots ?? []).find((o) => o.role === drumRole); if (shot) { await useOneShot(shot); return `${drumRole} one-shot from ${res.name ?? "the record"}`; } }
+    const song = dRef.current.getSong();
+    const from = `stem_${job.id}_${stem}`;
+    const at = atSec != null && atSec >= 0 ? atSec : (res.facts?.bestBars?.startSec ?? 0);
+    const id = `grab_${Date.now().toString(36)}`;
+    const name = `${what} from ${res.name ?? "the record"} at ${mmss(at)}`;
+    const { resolveSliceOps } = await import("@/lib/engine/slice");
+    const r = await resolveSliceOps([{ op: "slice", from, at, length: drumRole ? 0.7 : 2.0, role: drumRole ?? "audio", name, id, track: drumRole ?? id }], song, dRef.current.registerClip);
+    if (!r.ops.length || r.failed.length) return null;
+    let ops = r.ops; let tuned = "";
+    if (!drumRole) {
+      const { loadClipsFor } = await import("@/lib/engine"); const buf = (await loadClipsFor([id])).get(id);
+      if (buf) {
+        const { detectRootPitch, transposeForRoot } = await import("@/lib/engine/pitch");
+        const pitch = detectRootPitch(buf.getChannelData(0), buf.sampleRate);
+        if (pitch.midi !== null) {
+          const semitones = transposeForRoot(pitch.midi);
+          const rootPc = NOTE.indexOf(song.key.split(" ")[0].replace("Db", "C#").replace("Gb", "F#"));
+          const note = rootPc >= 0 ? 48 + rootPc : 60;
+          ops = ops.map((o) => { const t = (o as { op?: string; track?: { clip?: { semitones?: number }; notes?: unknown } }); if (t.op === "addTrack" && t.track?.clip) { t.track.clip.semitones = semitones; t.track.notes = [[note, 0, 1, 110]]; } return o; });
+          tuned = `, root ${pitch.hz} Hz, tuned ${semitones >= 0 ? "+" : ""}${semitones}`;
+        }
+      }
+    }
+    const ok = await dRef.current.edit(ops, `grab: ${name}`);
+    return ok ? `${name}${tuned}` : null;
+  }, [job, useOneShot]);
+
   const addStemLoop = useCallback(async (stem: StemOut) => { if (!job?.result?.facts) return; await placeStem(job, stem, job.result.facts, job.result.name ?? "record", "best8"); }, [job, placeStem]);
 
   /** Real sung vocals: compose with the music engine, separate the vocal, place it. */
@@ -389,7 +425,7 @@ export function useStems(d: Deps) {
   const reset = useCallback(() => { stopPolling(); setJob(null); setError(null); setCandidates([]); setLocalHits([]); }, []);
   const askBreakdown = useCallback(() => { const n = job?.result?.name ?? "that record"; void dRef.current.send(`Break down "${n}" for me: structure, the engine, the hook, the drum language, the mix picture, and the one trick. Then say which piece we should take.`); }, [job]);
 
-  return { job, error, starting, start, useOneShot, addStemLoop, renderVocal, findSound, hearOurRender, previewUrl, reset, askBreakdown, find, prefetch, candidates, localHits, finding, connectLocal, analyzeLocal, findAndAnalyze, folder: folderInfo(), canPickFolder: canPickFolder(), identifyClip, identifyPlaying, startCaptured, startTracklist, keepGoing, identified, identifying };
+  return { job, error, starting, start, useOneShot, addStemLoop, grab, renderVocal, findSound, hearOurRender, previewUrl, reset, askBreakdown, find, prefetch, candidates, localHits, finding, connectLocal, analyzeLocal, findAndAnalyze, folder: folderInfo(), canPickFolder: canPickFolder(), identifyClip, identifyPlaying, startCaptured, startTracklist, keepGoing, identified, identifying };
 }
 
 function friendly(msg: string): string {

@@ -77,6 +77,11 @@ async function main() {
   const bass = await js(`(() => { const s = JSON.parse(localStorage.getItem('producer.song.v4')); const b = s.tracks.find((t) => t.role === 'bass'); return b ? (b.transpose ?? 0) + ' / ' + (b.synth?.cutoff ?? 'default') : 'no bass'; })()`);
   console.log(`[ritual] 8. darker bass: transpose / cutoff = ${bass}; cards: ${(await cards()).slice(0, 200)}`);
   assert.equal(bass, "-2 / 240", "the mock hands' ops should have applied");
+  // 9. Grab: the Voice hands a cut to the studio, no Hands; with nothing pulled in yet the producer says so.
+  await type("grab the synth at 1:32");
+  const grabLine = await waitFor(`(() => { const els = [...document.querySelectorAll('[data-role="producer-line"] p')]; const l = els.map((e) => e.textContent).find((t) => /Grabbed the synth|no heard record to grab/.test(t)); return l ?? ''; })()`, 20000, "the grab answer");
+  console.log(`[ritual] 9. grab: ${grabLine.slice(0, 90)}`);
+  assert.ok(/no heard record to grab|Grabbed the synth/.test(grabLine), "the grab control reaches the studio and is answered");
   console.log(`[ritual] cost: ${await js(`document.querySelector('[data-role="cost"]')?.innerText ?? ''`)}; exceptions: ${errors.length ? errors.join(" || ") : "none"}`);
   assert.equal(errors.length, 0, "no uncaught exceptions during the ritual");
   console.log("[ritual] ALL PASSED");

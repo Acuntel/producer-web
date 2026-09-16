@@ -19,6 +19,8 @@ export function mockVoice(state: VoiceState, utterance: string): { say: string; 
     return { say: "Say new project, or name one to open.", control: {} };
   }
   if (STOP.test(t)) return { say: "Stopped.", control: { stop: true } };
+  const g = t.match(/\b(?:grab|pull|take|steal)\b.*?\b(synth|bass|vocal|vocals|kick|snare|hat|hats|pad|keys|guitar|piano)\b(?:.*?\bat\s+(\d+):(\d\d)|.*?\bat\s+(\d+(?:\.\d+)?)\s*s)?/i);
+  if (g) { const at = g[2] ? Number(g[2]) * 60 + Number(g[3]) : g[4] ? Number(g[4]) : null; return { say: `Grabbing the ${g[1]}.`, control: { grab: { what: g[1], at } } }; }
   if (CMD.test(t)) return { say: "Playing eight bars. Say stop any time.", control: { audition: { section: "current", bars: 8 } } };
   if (CHANGE.test(t)) return { say: "On it. One second.", control: { task: t } };
   // Anything else on a blank record is the name of who we are chasing: research it, keep asking.
