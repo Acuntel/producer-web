@@ -367,3 +367,7 @@ Brady: the design is buggy and does not look like a million dollar product; ther
 3. Clean slate: an export of the account's projects and versions to ~/Archives, then deletion.
 4. Store: four more AcousticBrainz parts through the staged pipeline into the fingerprints; MusicBrainz fine genres from the artist dump into a `dna_genres` rollup (genre, artists, songs, tempo p50, exemplars, family) loaded to Postgres and used by the research lane for unknown genre words.
 5. Math: `lib/song/patterns.ts` (Euclid, rotate, density, polymeter, tuplets, contour, golden section) with ops the Hands can emit; `tools/dna/markov.py` trains per-family chord transition tables from the store into a compact JSON the Hands read; a `math` skill that explains what it made.
+
+### 16.3 Status (2026-09-16 evening)
+
+Live (producer-acytwyuh2): the surface as described in 16.1 at both widths with clean audits; the library by tap and by voice; the account's records exported and cleared; 1,412 fine genres answering in the research lane (forest psytrance, footwork, rawstyle, amapiano) and pointing the bins by family; the pattern engine with an `euclid` op and the math skill learned from 680,784 progressions. Tests 80 of 80; ritual harness all passed. Four more AcousticBrainz parts are being fingerprinted (the rollup at four million rows is left for a machine with more memory; the fingerprints and the genre table grow now). The ui review's verdict is folded in as it lands.

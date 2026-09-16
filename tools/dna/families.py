@@ -16,16 +16,17 @@ FAMILIES = ["pop", "rock", "hiphop", "rnb", "country", "electronic", "latin",
 # "punk" -> rock before metal). The dance families come first so "deep-house"
 # is house, not the electronic umbrella.
 KEYWORDS: list[tuple[str, list[str]]] = [
-    ("house", ["house"]),
+    ("electronic", ["witch house"]),   # before "house": a phrase that only looks like house
+    ("house", ["house", "amapiano", "gqom", "kwaito", "afro tech"]),
     ("techno", ["techno"]),
     ("trance", ["trance"]),
     ("garage", ["garage", "2-step", "2step", "speed garage"]),
     ("dnb", ["dnb", "drum-and-bass", "drum and bass", "jungle"]),
     ("dubstep", ["dubstep"]),
-    ("hardstyle", ["hardstyle", "hardcore techno", "gabber"]),
+    ("hardstyle", ["hardstyle", "hardcore techno", "gabber", "rawstyle", "frenchcore", "uptempo hardcore"]),
     ("disco", ["disco"]),
-    ("electronic", ["edm", "electro", "idm", "breakbeat", "club", "j-dance", "dance", "electronic", "ambient", "trip-hop"]),
-    ("hiphop", ["hip-hop", "hiphop", "hip hop", "rap", "trap", "grime"]),
+    ("electronic", ["edm", "electro", "idm", "breakbeat", "club", "j-dance", "dance", "electronic", "ambient", "trip-hop", "footwork", "juke", "witch house", "vaporwave", "synthwave", "chillwave", "dreamwave", "glitch"]),
+    ("hiphop", ["hip-hop", "hiphop", "hip hop", "rap", "trap", "grime", "drill", "phonk", "crunk"]),
     ("rnb", ["r-n-b", "rnb", "r&b", "soul", "funk", "motown"]),
     ("country", ["country", "honky-tonk", "honky tonk", "bluegrass", "americana"]),
     ("latin", ["latin", "latino", "reggaeton", "salsa", "samba", "sertanejo",

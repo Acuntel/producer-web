@@ -60,8 +60,10 @@ export async function POST(req: Request) {
   const lane = laneNamed(query);
   // A fine genre the family map has never heard of (amapiano, footwork, forest psytrance): the genre table answers,
   // and its family points the bins.
-  const genre = kind === "none" || fams.length === 0 ? await lookupGenre(query) : null;
-  if (genre && !(kind === "artist" && genre.genre.length < 6)) {
+  const genre = fams.length === 0 ? await lookupGenre(query) : null;
+  // A genre line rides when nothing else matched, or when the ask is exactly the genre's name (a record titled
+  // "Amapiano Mix" must not hide the genre itself).
+  if (genre && (kind === "none" || genre.genre === norm(query)) && !(kind === "artist" && genre.genre.length < 6)) {
     if (kind === "none") kind = "genre";
     lines.push(genreLine(genre));
     if (!fams.length && genre.family) fams = [genre.family];
