@@ -324,3 +324,15 @@ The brief and its reading: docs/MASTERPROMPT_V11.md. The store contract: docs/DN
 ### Traps
 - Local demucs on a fresh torch needs torchcodec, and torchcodec needs FFmpeg's shared libraries on the loader path (`DYLD_LIBRARY_PATH=/opt/homebrew/lib`); the Railway image pins torch 2.5.1 and does not.
 - A Vercel deploy answered "Not authorized" once with the account still signed in; the retry went through.
+
+## 2026-09-16 evening: the surface, the library, the math (masterprompt section 16)
+- Seen first, at 1440 and 390: the track field read as a developer view, section chips truncated to single letters on the phone, the "YOU" label clipped under the field, the boot greeting stacked on every load, the status line was a cramped run of numbers. Fixed and looked at again: a mark (a record, pink to green) instead of a stock icon, a caption over the arrangement that always reads in full ("Groove · bar 4 of 8 · then Build"), chips whose labels fit or step aside (measured by a ResizeObserver, never truncated), lanes in normal case with a colour dot, a transcript that fades at the top instead of cutting a line, status as three groups with pills, a slim one-line brain banner, the phone transcript given more room. The greeting no longer stacks. Audits at both widths: nothing tiny, nothing clipped.
+- The library: every record the account made with tempo, key, lane, versions and when it moved; open, rename, duplicate, delete (inline, no dialog) and versions; reached from the landing, the stage header, or by voice ("open the library"). The account's earlier records (one, GLOW, three versions) were exported to ~/Archives/producer-web-records-2026-09-16.json and deleted, so it starts clean.
+- Genres past the family map: 1,412 MusicBrainz genres with three or more artists in the store (forest psytrance, rawstyle, amapiano, footwork, witch house, lăutărească) as `dna_genres` with artists, songs, tempo median, family and exemplars; the research lane answers any of them and points the bins by their family. Four more AcousticBrainz parts are downloading for the fingerprints.
+- The math of music: a pattern engine (Bjorklund's Euclidean rhythms, rotation, density, polymeter, named claves, contours, the golden section, degrees to MIDI) with tests and an `euclid` op the Hands can emit; chord transition tables learned from 680,784 progressions per family (what follows I in house: V 25%, v 12%, ii 11%); a math skill that explains a beat in one sentence ("E(7,16) rotated by 2").
+- Tests 80 of 80; ritual harness all passed on the rebuilt mock.
+
+### Traps
+- A relative output path inside a script that changes directory wrote a 1.9 GB download into its own temp folder, which the script then removed; absolute paths only in the segmented downloader.
+- The Bresenham form of Euclid gives a rotation of the canonical pattern (gaps 3,2,3 for E(3,8)); Bjorklund's pairing form gives the tresillo people expect. The test caught it.
+- The safety hook blocks any command whose text contains the recursive-delete-from-root pattern, even as a glob under a temp folder; clean temp folders another way.
