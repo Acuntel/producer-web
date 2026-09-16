@@ -345,3 +345,25 @@ The worker cannot be deployed from this machine until `railway login` runs; ever
 ### 15.4 Status (2026-09-16)
 
 Web side live: grab as a Voice control answered by the studio (onset slice, root detected in the browser, tuned to the song's root, or the worker's tuned one-shot for a drum word), every heard record's DNA on `dna_heard` and quoted by the research lane, the ritual harness with a grab step passing, 78 tests. Worker side built and measured locally (six stems in 148 s for eight minutes of audio on a laptop, drum parts in 11 s, notes with Basic Pitch, `POST /grab` by sound); deploy waits for `railway login` on this Mac, then `railway up` from `worker/` with `DEMUCS_MODEL=htdemucs_6s`. The promptable-separation bet is deferred with the reason written down: AudioSep is not packaged; a clone plus a gigabyte checkpoint is the next step if grab by sound over nine parts is not enough.
+
+## 16. The million dollar surface, the library, and the math of music (2026-09-16, the eighth stretch)
+
+Brady: the design is buggy and does not look like a million dollar product; there must be a better way to reach what has already been made; delete the songs made so far; go past two million songs into genres he has not listened to; give it the ability to make patterns and math out of music. Seen on 09-16 at 1440 and 390: the track field reads as a developer view, section chips truncate to single letters on the phone, the "YOU" label clips under the field, the boot greeting repeats on every load, the status line is a cramped run of numbers, the mic button and the brand mark are generic.
+
+### 16.1 What must be true at the end
+
+- The stage looks finished at 1440 and at 390: one typographic system, one spacing scale, a section bar that never truncates a name, a field that reads as music (bars, sections, energy) rather than a debugger, a transcript that never clips, a status line that reads in one glance, a mic control and a mark that belong to this product. Every screen screenshotted and looked at before it is called done.
+- No greeting repeats; no known visual bug from the screenshots survives; the ui review's findings are closed or explained.
+- A library: every record the account has made, with its versions, one screen away from the stage and by voice ("open the library", "open GLOW"), with play, open, rename and delete. The landing's "Existing project" leads there.
+- The account's existing records are exported to an archive file and deleted, so the library starts clean.
+- The store grows past two million: more AcousticBrainz parts fingerprinted, and MusicBrainz's fine genres (thousands of them, amapiano to zeuhl) become a first-class field: a genre table with counts, tempo medians, exemplar artists, joined to the bins and the fingerprints, so any genre word the research lane has never seen still lands.
+- Patterns and math: a pattern engine the Hands and the user can call by name. Euclidean rhythms, rotations and densities; polyrhythms and tuplets; Markov chord progressions learned from the store per family; melody contours and intervals from the store; the golden section for structure; explained in one plain sentence when asked ("that kick is E(4,16); the hats are E(7,16) rotated by 2").
+- Proof lines: screenshots at both widths, ritual harness green, unit tests for the pattern engine and the library, live probes for a genre the store did not know before, and the archive file of the deleted records.
+
+### 16.2 Mechanism
+
+1. Surface: a design pass on tokens (type scale, spacing, radii, one accent per role), the field redrawn as a section strip with energy and the playing bar, chips that shrink by hiding the label under a dot, the transcript as its own scroll region, the status line as three short groups, the mic control with a state ring, a mark. Screenshots drive it.
+2. Library: a `library` view (landing and stage), the projects and versions the account holds, actions by tap and by voice (`open`, `library` controls).
+3. Clean slate: an export of the account's projects and versions to ~/Archives, then deletion.
+4. Store: four more AcousticBrainz parts through the staged pipeline into the fingerprints; MusicBrainz fine genres from the artist dump into a `dna_genres` rollup (genre, artists, songs, tempo p50, exemplars, family) loaded to Postgres and used by the research lane for unknown genre words.
+5. Math: `lib/song/patterns.ts` (Euclid, rotate, density, polymeter, tuplets, contour, golden section) with ops the Hands can emit; `tools/dna/markov.py` trains per-family chord transition tables from the store into a compact JSON the Hands read; a `math` skill that explains what it made.
