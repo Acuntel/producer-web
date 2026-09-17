@@ -16,6 +16,7 @@ import { laneRecipe } from "@/lib/brain/lanes";
 import { dnaLaneFor, laneNamed } from "@/lib/brain/laneNames";
 import { brainClient } from "@/lib/brain/client";
 import { skillsFor, skillsBlock } from "@/lib/brain/skills";
+import { flowNotes } from "@/lib/brain/flow";
 import { mockHands, mockRequested } from "@/lib/brain/mock";
 import { withRetry, transient, pause } from "@/lib/brain/retry";
 import { guardSpend, recordUsage } from "@/lib/brain/usage";
@@ -66,6 +67,7 @@ export async function POST(req: Request) {
   input.namedRefs = findReference(last?.content ?? "");
   input.artist = artistDna(last?.content ?? "");
   input.skills = skillsBlock(skillsFor(last?.content ?? "", input.reference ? ["song-breakdown"] : []));
+  input.flow = flowNotes(input.song, { family: dnaLaneFor(lane) });
   const finalUser = buildUserBlock(input, last?.content ?? "");
 
   const params = {

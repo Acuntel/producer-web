@@ -6,6 +6,7 @@ import { brainClient } from "@/lib/brain/client";
 import { supabaseAdmin } from "@/lib/account/supabase";
 import { lookupArtist, lookupSongs, artistSongs, artistLine, songLine, binsFor, binLine, norm, canonLines, heardLines, lookupGenre, genreLine } from "@/lib/brain/galton";
 import { findRecord, artistRows, soundLines } from "@/lib/brain/prints";
+import flowJson from "@/data/dna/flow.json";
 import { laneNamed, laneInfo } from "@/lib/brain/laneNames";
 
 export const maxDuration = 30;
@@ -91,6 +92,16 @@ export async function POST(req: Request) {
       }
     }
     if (fams.length >= 2) lines.push(`Two families named (${fams.join(" and ")}): build the floor from the first family's bin and borrow the second family's hook contour, vocal placement and one signature timbre; say which choice you made.`);
+  }
+  // "How does a house record flow": the measured form for the family named, or the store as a whole.
+  if (/\b(flow|arrangement|structure|how (does|should) .* (go|move|flow)|build ?up|transition)\b/i.test(asked)) {
+    type Q = { p25: number; p50: number; p75: number } | null;
+    const fl = flowJson as unknown as { grammar: Record<string, { songs: number; opens: [string, number][]; next: Record<string, [string, number][]>; sections_p50: number | null; first_chorus_bar: Q; two_peaks_share: number | null }>; energy: { break_depth: Q; second_peak_over_first: Q; first_peak_bar: Q; boundary_jump: Q } };
+    const famName = fams[0] && fl.grammar[fams[0]] ? fams[0] : "all";
+    const g = fl.grammar[famName]; const e = fl.energy; const nm: Record<string, string> = { I: "intro", V: "verse", C: "chorus", B: "bridge", O: "outro", D: "drop", K: "break", U: "build", X: "other", S: "solo", P: "pre-chorus" };
+    const after = (c: string) => (g.next[c] ? `after the ${nm[c] ?? c}: ${g.next[c].map(([x, pr]) => `${nm[x] ?? x} ${Math.round(pr * 100)}%`).join(", ")}` : null);
+    lines.push(`Flow ${famName === "all" ? "across the store" : `in ${famName}`} (${g.songs.toLocaleString()} structures): opens on the ${g.opens.map(([c, pr]) => `${nm[c] ?? c} ${Math.round(pr * 100)}%`).join(" or ")}; ${[after("I"), after("V"), after("C")].filter(Boolean).join("; ")}; ${g.sections_p50 ?? "?"} sections in the middle record; first peak at bar ${g.first_chorus_bar ? `${g.first_chorus_bar.p50} (middle half ${g.first_chorus_bar.p25} to ${g.first_chorus_bar.p75})` : "?"}; ${g.two_peaks_share !== null ? Math.round(g.two_peaks_share * 100) : "?"}% carry two peaks. Energy: the break falls ${e.break_depth?.p50 ?? "?"} of the peak, the second peak returns to ${e.second_peak_over_first?.p50 ?? "?"} of the first, a boundary moves ${e.boundary_jump?.p50 ?? "?"} (a cut above ${e.boundary_jump?.p75 ?? "?"}).`);
+    if (kind === "none") kind = "genre";
   }
   if (!lines.length && Object.keys(extraPins).length) {
     for (const b of binsFor({ ...extraPins, ...(decade ? { decade } : {}) }, 2)) { kind = "genre"; lines.push(binLine(b)); }

@@ -30,6 +30,7 @@ export type Op =
   | { op: "grid"; track: string; steps: string; midi?: number; stepBeats?: number; dur?: number; vel?: Record<string, number>; chance?: Record<string, number>; pattern?: string; section?: string; role?: Role; name?: string; volume?: number; duck?: boolean }
   | { op: "note"; note: string }
   | { op: "euclid"; track: string; hits: number; steps?: number; rotate?: number; midi?: number; role?: string; name?: string; vel?: number; stepBeats?: number }   // E(k, n) as a grid
+  | { op: "transition"; from: string; bars?: number; gap?: boolean; lift?: number }   // the last bars of a section lean into the next: a filter move, an optional gap, an energy nudge
   | DawOp;
 
 export type ApplyResult = { song: Song; applied: number; skipped: string[] };
@@ -225,6 +226,28 @@ function applyOne(s: Song, o: Op): boolean {
       return true;
     }
     case "note": { if (typeof o.note !== "string") return false; s.notes = o.note.slice(0, 600); return true; }
+    case "transition": {
+      // The measured flow (data/dna/flow.json): a build leans into a drop with a filter rise and a gap; a drop falls
+      // into a break with a filter dip; any boundary gets a small energy nudge so the ears agree with the form.
+      const from = section(s, o.from); if (!from) return false;
+      const idx = s.arrangement.indexOf(from.id); const toId = idx >= 0 ? s.arrangement[idx + 1] : undefined;
+      const to = toId ? section(s, toId) : null;
+      const bars = Math.max(1, Math.min(from.bars, Math.round(o.bars ?? 4)));
+      const rising = !to || (to.energy ?? 0.6) >= (from.energy ?? 0.6);
+      from.automation ??= [];
+      from.automation = from.automation.filter((x) => !(x.track === "master" && x.param === "filter.cutoff"));
+      from.automation.push({ track: "master", param: "filter.cutoff", from: rising ? 900 : 18000, to: rising ? 18000 : 1400, curve: "exp", startBeat: (from.bars - bars) * 4, endBeat: from.bars * 4 });
+      if (o.gap) {
+        // The final bar: everything but the kick fades out, so the drop lands on silence and one kick.
+        for (const id of from.active) {
+          const tr = s.tracks.find((t) => t.id === id); if (!tr || tr.role === "kick") continue;
+          from.automation = from.automation.filter((x) => !(x.track === id && x.param === "volume"));
+          from.automation.push({ track: id, param: "volume", from: 0, to: -60, curve: "linear", startBeat: (from.bars - 1) * 4, endBeat: from.bars * 4 - 0.5 });
+        }
+      }
+      if (to && typeof o.lift === "number" && o.lift !== 0) to.energy = Math.max(0, Math.min(1, (to.energy ?? 0.6) + o.lift));
+      return true;
+    }
     case "euclid": {
       if (typeof o.track !== "string" || typeof o.hits !== "number") return false;
       const steps = Math.max(2, Math.min(64, Math.round(o.steps ?? 16)));

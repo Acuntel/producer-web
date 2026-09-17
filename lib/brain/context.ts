@@ -21,6 +21,7 @@ export type ExchangeInput = {
   critic?: string | null;   // open critic notes (recommendations; the user decides)
   skills?: string | null;   // focused knowledge the server loads for this ask (server adds)
   feel?: string | null;     // the feel read of the current render (valence, arousal, tension, warmth, words)
+  flow?: string[] | null;   // the FLOW CHECK: the record's form against the store's measured patterns (server adds)
   referenceFeel?: string | null;
 };
 
@@ -68,6 +69,7 @@ export function buildUserBlock(x: ExchangeInput, lastUser: string): string {
   if (x.score) parts.push(`SESSION SCORECARD: ${x.score}`);
   if (x.skills) parts.push(x.skills);
   if (x.critic) parts.push(`CRITIC NOTES (recommendations from the background listener; the USER decides, never apply one unasked; you may mention at most ONE as a question when it fits):\n${x.critic}`);
+  if (x.flow?.length) parts.push(`FLOW CHECK (the record's form against the store's measured patterns; fix what matters for the ask, say what you fixed):\n${x.flow.map((l) => `- ${l}`).join("\n")}`);
   if (x.taste) parts.push(`TASTE LEDGER:\n${x.taste}`);
   parts.push(`USER SAYS: ${lastUser}`);
   return parts.join("\n\n");
