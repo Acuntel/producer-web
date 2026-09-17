@@ -371,3 +371,19 @@ Brady: the design is buggy and does not look like a million dollar product; ther
 ### 16.3 Status (2026-09-16 evening)
 
 Live (producer-acytwyuh2): the surface as described in 16.1 at both widths with clean audits; the library by tap and by voice; the account's records exported and cleared; 1,412 fine genres answering in the research lane (forest psytrance, footwork, rawstyle, amapiano) and pointing the bins by family; the pattern engine with an `euclid` op and the math skill learned from 680,784 progressions. Tests 80 of 80; ritual harness all passed. Four more AcousticBrainz parts are being fingerprinted (the rollup at four million rows is left for a machine with more memory; the fingerprints and the genre table grow now). The ui review's verdict is folded in as it lands.
+
+## 17. Flow: the patterns of form, joining and feel (2026-09-16 night, the ninth stretch)
+
+Brady: what other patterns can we learn about merging, smooth music, and the flow. The store already holds the evidence: 694,107 section structures (Chordonomicon, Lakh, McGill, the library, the heard records), 334,015 chorus progressions, 500 library records with per-bar energy and section boundaries, and 1,299 DJ-played records across 48 mixes with positions and pitch adjustments.
+
+### 17.1 What must be true at the end
+
+- Measured, per family where the rows allow: the section grammar (what follows what, how long, where the first chorus or drop lands, how many sections, two-drop share); the energy arc (build slope, break depth, the drop's return, silence before the drop); the turnaround chords (what opens and closes a chorus); the DJ transition rules (play length per record, pitch bend, tempo and key relationships between consecutive records); a smoothness figure (the energy jump at a section boundary in real records).
+- The Hands read those numbers as a `flow` skill and receive a FLOW CHECK on every exchange: the current record's sections, lengths, energy per section and boundary jumps against the measured ranges, in plain sentences.
+- A `transition` op the Hands can emit: the last N bars of a section get a filter rise, a gap (everything but the kick out for the final bar), and the next section's energy lift; it compiles to the existing automation and active ops.
+- The research lane answers "how does a house record flow" with the numbers, no model.
+- Tests for the op and the flow check; the live probe; the gym log.
+
+### 17.2 Mechanism
+
+`tools/dna/flow.py` measures everything into `data/dna/flow.json`; `tools/compile-flow.mjs` renders the skill; `lib/brain/flow.ts` builds the FLOW CHECK from the song and the ears' facts; `lib/song/ops.ts` gains `transition`; the research route gains the flow line. Known caveat carried: the mix finder resolved three named mixes to one file (Conducta, Overmono, Kaytranada share a tracklist); the canon measurements dedupe by tracklist. The mash move (two heard records joined under the DJ rules) is written down for the next stretch; it needs two stems jobs in one session.
