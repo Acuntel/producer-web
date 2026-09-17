@@ -387,3 +387,7 @@ Brady: what other patterns can we learn about merging, smooth music, and the flo
 ### 17.2 Mechanism
 
 `tools/dna/flow.py` measures everything into `data/dna/flow.json`; `tools/compile-flow.mjs` renders the skill; `lib/brain/flow.ts` builds the FLOW CHECK from the song and the ears' facts; `lib/song/ops.ts` gains `transition`; the research route gains the flow line. Known caveat carried: the mix finder resolved three named mixes to one file (Conducta, Overmono, Kaytranada share a tracklist); the canon measurements dedupe by tracklist. The mash move (two heard records joined under the DJ rules) is written down for the next stretch; it needs two stems jobs in one session.
+
+### 17.3 Status (2026-09-16 night)
+
+Measured and shipped: the grammar, the turnarounds, the energy arcs and the DJ transitions as `data/dna/flow.json`; the flow skill; the FLOW CHECK in the Hands' context; the `transition` op; the flow answer in the research lane. Tests 83 of 83. Left for the next stretch: the mash move (two heard records joined under the DJ rules), a re-crawl of the three mixes the finder merged, and the key-relationship figure once more canon records have keys in the store.
