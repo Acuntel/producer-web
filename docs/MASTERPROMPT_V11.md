@@ -391,3 +391,18 @@ Brady: what other patterns can we learn about merging, smooth music, and the flo
 ### 17.3 Status (2026-09-16 night)
 
 Measured and shipped: the grammar, the turnarounds, the energy arcs and the DJ transitions as `data/dna/flow.json`; the flow skill; the FLOW CHECK in the Hands' context; the `transition` op; the flow answer in the research lane. Tests 83 of 83. Left for the next stretch: the mash move (two heard records joined under the DJ rules), a re-crawl of the three mixes the finder merged, and the key-relationship figure once more canon records have keys in the store.
+
+## 18. Fame: learn the famous and the viral, and weight them (2026-09-16 night, the tenth stretch)
+
+Brady: learn more from famous and viral music, find their patterns and weight them more; find the best charts for every genre and every year, then execute and patternize. Probed and chosen on 09-16: Wikipedia's chart pages (CC BY-SA; aggregates only ship), 591 of them across the Billboard year-end Hot 100 (1946 to 2025), the Hot 100 number ones, Dance Club Songs (1976 on), R&B/Hip-Hop, Rap, Country, Alternative, Mainstream Rock, Latin, the UK number ones, the UK Dance chart (1987 on), the best-selling singles of the UK and Ireland, and the Global 200. ListenBrainz's popularity endpoint (CC0) answers listen counts for a thousand MusicBrainz ids a call, and 91% of our fingerprinted recordings have one; that joins fame straight onto the fingerprints. Shazam's charts give the viral now per genre. What is not done: downloading or keeping famous recordings; the studio hears public copies transiently and keeps only the DNA.
+
+### 18.1 What must be true at the end
+
+- A charts table: every row of every page above (chart, year, position, artist, title), folded by the store's names, with the year-end and number-one distinction kept; a fame score per song from chart presence (position, weeks, how many charts, which years) and from listens; a viral table from Shazam's genre charts.
+- Fame rides everywhere: exemplars in the bins ranked by fame; the discovery engine and the hits skill computed with fame weights and per genre chart and year ("the biggest dance records of 2019 sat at 124, minor, energy 0.78"); the fingerprints carry a fame byte so "sounds like" can prefer the famous neighbour when asked; the research lane answers "the biggest house records of 2022" from the table, no model.
+- The listening queue: the famous records the store has not heard with its own ears go through the local analysis one by one (public copies only, nothing kept but the DNA), so the hits' grids, chords, structure and energy arcs come from our ears rather than only from tags.
+- Proof: row counts per chart family, the join rate to the store, the listens coverage, three live probes, the gym log.
+
+### 18.2 Mechanism
+
+`tools/dna/charts_wiki.py` harvests the pages through the MediaWiki API and parses the tables; `tools/dna/listens.py` fetches ListenBrainz; `tools/dna/shazam_charts.py` reads the genre charts; `tools/dna/fame.py` folds them into `data/dna/fame.parquet` and the `fame` column of the store, then the rollups, the hits and discoveries skills and the prints rebuild read it; `tools/dna/listen_queue.py` runs the local hearing over the famous records that lack a heard row. Attribution for Wikipedia and ListenBrainz goes in the spec.
