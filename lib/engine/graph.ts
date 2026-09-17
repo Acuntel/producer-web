@@ -9,7 +9,10 @@ import type { Kit } from "./kits";
 
 export type Clips = Map<string, AudioBuffer>;
 export type Analysis = { fft: Tone.FFT; meter: Tone.Meter; tracks: Map<string, Tone.Meter> };
-export type Graph = { parts: Tone.Part[]; voices: Voice[]; nodes: { dispose: () => void }[]; schedule: Schedule; analysis: Analysis; voiceById: Map<string, Voice> };
+// The graph's own health: how many note events fired, how many fired late (their time already past when the
+// callback ran, which the ear hears as a flam or a dropout), and the thinnest margin seen in milliseconds.
+export type Health = { events: number; late: number; minMarginMs: number };
+export type Graph = { parts: Tone.Part[]; voices: Voice[]; nodes: { dispose: () => void }[]; schedule: Schedule; analysis: Analysis; voiceById: Map<string, Voice>; health: Health };
 
 type Transport = ReturnType<typeof Tone.getTransport>;
 
@@ -43,6 +46,8 @@ export function buildGraph(song: Song, transport: Transport, clips: Clips = new 
   const parts: Tone.Part[] = [];
   const voices: Voice[] = [];
   const voiceByTrack = new Map<string, Voice>();
+  const health: Health = { events: 0, late: 0, minMarginMs: Infinity };
+  const ctx = transport.context;
 
   for (const tr of song.tracks) {
     const evs = perTrack.get(tr.id);
@@ -55,7 +60,11 @@ export function buildGraph(song: Song, transport: Transport, clips: Clips = new 
     if (evs && evs.length) {
       // Tone sources demand strictly increasing start times per voice: nudge exact collisions by 1 ms.
       let lastTime = -1;
-      const part = new Tone.Part((time, ev: Ev) => { const t = time <= lastTime ? lastTime + 0.001 : time; lastTime = t; voice.trigger(ev.note, t, song.bpm); }, evs.map((e) => [tick(e.beat), e] as [string, Ev]));
+      const part = new Tone.Part((time, ev: Ev) => {
+        const margin = (time - ctx.currentTime) * 1000;
+        health.events++; if (margin < health.minMarginMs) health.minMarginMs = margin; if (margin < 0) health.late++;
+        const t = time <= lastTime ? lastTime + 0.001 : time; lastTime = t; voice.trigger(ev.note, t, song.bpm);
+      }, evs.map((e) => [tick(e.beat), e] as [string, Ev]));
       part.start(0); parts.push(part);
     }
     // Warped audio loops: a GrainPlayer per active span, stretched to the song tempo.
@@ -138,5 +147,5 @@ export function buildGraph(song: Song, transport: Transport, clips: Clips = new 
 
   transport.bpm.value = song.bpm;
   const nodes: { dispose: () => void }[] = [masterVol, masterEq, masterFilter, comp, makeup, limiter, clipper, duck, reverb, riserSynth, riserHp, riserGain, fft, meter, ...trackMeters.values()];
-  return { parts, voices, nodes, schedule, analysis: { fft, meter, tracks: trackMeters }, voiceById: voiceByTrack };
+  return { parts, voices, nodes, schedule, analysis: { fft, meter, tracks: trackMeters }, voiceById: voiceByTrack, health };
 }

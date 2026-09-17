@@ -2,16 +2,25 @@
 // regions, jump to a section, the visible playhead.
 import * as Tone from "tone";
 import type { Song } from "../song/types";
-import { buildGraph, type Clips, type Graph } from "./graph";
+import { buildGraph, type Clips, type Graph, type Health } from "./graph";
 import { locate, loopBounds, type SectionSpan } from "./schedule";
 import { loadClipsFor, clipKeysFor } from "./clips";
 import { getKit, type Kit } from "./kits";
 
 export type Levels = { master: [number, number]; spectrum: Float32Array | null; tracks: Record<string, number> };
 export type Position = { section: string; sectionId: string; index: number; barInSection: number; beatInBar: number; absBar: number; beat: number };
+// What a DAW shows in its corner: dropouts, and how many graphs are actually alive on the transport (one is right;
+// more than one means an older build of the record is still playing underneath the current one).
+export type EngineHealth = { graphsAlive: number; events: number; late: number; minMarginMs: number; rebuilds: number; lastRebuildMs: number };
+
+// Every graph built on the live transport, so a leak (a build that was never torn down) is countable.
+const liveGraphs = new Set<Graph>();
 
 export class Engine {
   private graph: Graph | null = null;
+  private rebuilds = 0;
+  private lastRebuildMs = 0;
+  private folded: Health = { events: 0, late: 0, minMarginMs: Infinity };   // counts from graphs already torn down, so deltas across rebuilds are honest
   private watch: number | null = null;
   private sectionStarts: SectionSpan[] = [];
   private builtBeats = 0;
@@ -91,6 +100,13 @@ export class Engine {
     return true;
   }
 
+  /** Dropouts and leaks, summed over every graph alive on the transport. */
+  health(): EngineHealth {
+    let { events, late, minMarginMs } = this.folded;
+    for (const g of liveGraphs) { events += g.health.events; late += g.health.late; if (g.health.minMarginMs < minMarginMs) minMarginMs = g.health.minMarginMs; }
+    return { graphsAlive: liveGraphs.size, events, late, minMarginMs, rebuilds: this.rebuilds, lastRebuildMs: this.lastRebuildMs };
+  }
+
   /** The music steps back while the producer speaks, and comes back after. */
   duck(on: boolean) { try { Tone.getDestination().volume.rampTo(on ? -7 : 0, on ? 0.12 : 0.35); } catch { /* no context yet */ } }
 
@@ -110,7 +126,10 @@ export class Engine {
   }
 
   private buildLive(song: Song) {
+    const t0 = performance.now();
     const g = buildGraph(song, this.transport, this.clips, this.kit ?? undefined);
+    this.rebuilds++; this.lastRebuildMs = Math.round(performance.now() - t0);
+    liveGraphs.add(g);
     this.graph = g;
     this.sectionStarts = g.schedule.sectionStarts;
     this.builtBeats = g.schedule.totalBeats;
@@ -136,6 +155,8 @@ export class Engine {
     g.parts.forEach((p) => { p.stop(); p.dispose(); });
     g.voices.forEach((v) => v.dispose());
     g.nodes.forEach((n) => n.dispose());
+    this.folded.events += g.health.events; this.folded.late += g.health.late; if (g.health.minMarginMs < this.folded.minMarginMs) this.folded.minMarginMs = g.health.minMarginMs;
+    liveGraphs.delete(g);
     this.graph = null;
   }
 }

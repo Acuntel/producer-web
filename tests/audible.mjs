@@ -6,9 +6,10 @@ import { setTimeout as sleep } from "node:timers/promises";
 const BASE = process.argv[2] ?? "http://localhost:3111";
 const ASK = process.argv[3] ?? "build me a rolling tech house groove, sixteen bars";
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const chrome = spawn(CHROME, ["--headless=new", "--no-first-run", "--remote-debugging-port=9333", "--autoplay-policy=no-user-gesture-required", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--mute-audio=false", "about:blank"], { stdio: "ignore" });
+// Its own profile: without one, a Chrome already open on this Mac takes the launch and no debug port ever appears.
+const chrome = spawn(CHROME, ["--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--remote-debugging-port=9333", "--autoplay-policy=no-user-gesture-required", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--mute-audio=false", `--user-data-dir=/tmp/producer-audible-profile-${process.pid}`, "about:blank"], { stdio: "ignore" });
 process.on("exit", () => chrome.kill());
-await sleep(2500);
+for (let i = 0; i < 40; i++) { try { await fetch("http://127.0.0.1:9333/json/version"); break; } catch { await sleep(250); } }
 const { webSocketDebuggerUrl } = await fetch("http://127.0.0.1:9333/json/version").then((r) => r.json());
 const ws = new WebSocket(webSocketDebuggerUrl);
 await new Promise((r) => (ws.onopen = r));

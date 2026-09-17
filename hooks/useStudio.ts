@@ -196,7 +196,13 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   // Live meters for the studio surfaces; a fader drag moves the voice directly and commits once on release.
   const getLevels = useCallback(() => engineRef.current?.getLevels() ?? null, []);
   // Harness ears: a probe can read the real output levels, so "can you hear it" is a measurement, not a hope.
-  useEffect(() => { if (isE2E()) (window as unknown as { __levels?: () => unknown }).__levels = () => engineRef.current?.getLevels() ?? null; }, [getLevels]);
+  useEffect(() => {
+    if (!isE2E()) return;
+    const w = window as unknown as { __levels?: () => unknown; __audio?: () => unknown; __engine?: () => unknown };
+    w.__levels = () => engineRef.current?.getLevels() ?? null;
+    w.__audio = () => engineRef.current?.health() ?? null;   // dropouts, graphs alive, rebuild cost
+    w.__engine = () => engineRef.current;
+  }, [getLevels]);
   const setVolume = useCallback(async (id: string, db: number, commit: boolean) => {
     const res = applyOps(songRef.current, [{ op: "set", track: id, path: "volume", value: db }]);
     if (!res.applied) return;
