@@ -1,7 +1,7 @@
 // The FLOW CHECK: the current record's form against the measured patterns (data/dna/flow.json), in plain
 // sentences the Hands read on every exchange. Sections and their lengths from the song; energy per section
 // from the section's own energy target (and the ears' per-bar read when they have one).
-import flowJson from "../../data/dna/flow.json";
+import flowJson from "../../data/flow.json";
 import type { Song } from "../song/types";
 
 type Q = { p25: number; p50: number; p75: number } | null;

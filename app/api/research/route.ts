@@ -6,7 +6,7 @@ import { brainClient } from "@/lib/brain/client";
 import { supabaseAdmin } from "@/lib/account/supabase";
 import { lookupArtist, lookupSongs, artistSongs, artistLine, songLine, binsFor, binLine, norm, canonLines, heardLines, lookupGenre, genreLine } from "@/lib/brain/galton";
 import { findRecord, artistRows, soundLines } from "@/lib/brain/prints";
-import flowJson from "@/data/dna/flow.json";
+import flowJson from "@/data/flow.json";
 import { laneNamed, laneInfo } from "@/lib/brain/laneNames";
 
 export const maxDuration = 30;

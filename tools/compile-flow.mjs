@@ -1,6 +1,6 @@
 // The flow skill: the measured patterns of form, joining and feel as plain sentences. node tools/compile-flow.mjs
 import { readFileSync, writeFileSync } from "node:fs";
-const f = JSON.parse(readFileSync("data/dna/flow.json", "utf8"));
+const f = JSON.parse(readFileSync("data/flow.json", "utf8"));
 const pct = (x) => `${Math.round(x * 100)}%`;
 const q = (o, unit = "", d = 2) => (o ? `${o.p50.toFixed(d)}${unit} (middle half ${o.p25.toFixed(d)} to ${o.p75.toFixed(d)})` : "not enough rows");
 const names = { I: "intro", V: "verse", C: "chorus", B: "bridge", P: "pre-chorus", S: "solo", O: "outro", D: "drop", K: "break", U: "build", X: "other" };

@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "data" / "dna" / "flow.json"
+OUT = ROOT / "data" / "flow.json"   # beside galton.json: the app imports it, and data/dna steps aside for deploys
 CODES = {"I": "intro", "V": "verse", "C": "chorus", "B": "bridge", "P": "pre-chorus", "S": "solo", "O": "outro", "D": "drop", "K": "break", "U": "build", "X": "other"}
 CAMELOT_MAJOR = {0: "8B", 7: "9B", 2: "10B", 9: "11B", 4: "12B", 11: "1B", 6: "2B", 1: "3B", 8: "4B", 3: "5B", 10: "6B", 5: "7B"}   # pitch class -> wheel position (major)
 
