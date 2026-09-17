@@ -195,6 +195,8 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const registerClip = useCallback((c: ClipMeta) => setClips((x) => (x.some((y) => y.id === c.id) ? x : [...x, c])), []);
   // Live meters for the studio surfaces; a fader drag moves the voice directly and commits once on release.
   const getLevels = useCallback(() => engineRef.current?.getLevels() ?? null, []);
+  // Harness ears: a probe can read the real output levels, so "can you hear it" is a measurement, not a hope.
+  useEffect(() => { if (isE2E()) (window as unknown as { __levels?: () => unknown }).__levels = () => engineRef.current?.getLevels() ?? null; }, [getLevels]);
   const setVolume = useCallback(async (id: string, db: number, commit: boolean) => {
     const res = applyOps(songRef.current, [{ op: "set", track: id, path: "volume", value: db }]);
     if (!res.applied) return;

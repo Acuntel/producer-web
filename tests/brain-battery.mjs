@@ -1,5 +1,6 @@
 // Conversational Ableton battery against the real brain: every reply must parse,
 // every op must apply, every resulting song must schedule. node tests/brain-battery.mjs [baseUrl]
+import "./ts-resolve.mjs";   // extensionless TypeScript imports inside lib/
 import { applyOps } from "../lib/song/ops.ts";
 import { migrateSong } from "../lib/song/migrate.ts";
 import { SEED_TECH_HOUSE } from "../lib/song/seeds.ts";
