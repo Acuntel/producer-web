@@ -349,3 +349,43 @@ The brief and its reading: docs/MASTERPROMPT_V11.md. The store contract: docs/DN
 - The canon's play-length figure is not a play length: the recognition cuts land every 20 s, so consecutive entries are often the same record. It is left out of the skill.
 - The first version of the flow check flagged a rise into a build and a fall into a break; those are the form, not faults. The rules now exempt them and the test pins it.
 - Deploy trap, new: anything the app imports at build time must live outside data/dna, because the deploy script moves data/dna aside for the archive. The flow artifact moved to data/flow.json beside galton.json; the first deploy of the round failed on Vercel's build for exactly that reason and the second went through. Live: "how does a house record flow" answers with the house grammar (320 structures, opens on an intro 72%, first peak at bar 18, 66% carry two peaks) in 2.9 s cold.
+
+## 2026-09-17: the instrument itself (masterprompt section 19)
+- Brady: finish the music tests, then work out why the music glitches when it runs, because storing it is not architected right; make sure every record is stored accurately; replace the coloured boxes with what real music software shows; nothing clickable but the voice box; process in real time and take a voice off a record online, landing it right before the drop; and say how the store goes further.
+- The tests first: 83 unit, the whole song battery eleven of eleven against the real brain, the audibility probe hearing the record. The audibility probe itself had a bug, which is why it had never run: it launched Chrome without its own profile, so with Chrome already open the launch handed off and no debug port ever appeared.
+- Then the glitch was measured rather than guessed at. A new counter in the engine (note events, late events, the thinnest scheduling margin, rigs alive on the transport, the cost of a move) and `npm run glitch`, which plays a record untouched, then makes ten ordinary moves, then reproduces the open-a-record path.
+
+### What was wrong, in the numbers
+| | before | after |
+|---|---|---|
+| late note events over ten moves | 126 | 1 to 5 |
+| worst main thread block during a move | 5,875 ms | 133 to 150 ms |
+| mean cost of one move | 147 ms | 31 ms |
+| rigs alive after opening a record and starting | 3 (a leak) | 1 |
+| offline contexts per listen | 8 | 1 |
+
+- A change tore down the whole studio and built it again. Now the desk and the voices live in a rig that survives: volume, pan, cutoff, resonance, reverb, delay, drive, crush and width ramp in place, only a real change of instrument builds a new voice, and it crosses over in fifteen milliseconds. Parts are content addressed, so a track whose hits have not changed keeps the schedule it already had.
+- Opening a record before the session started left a second rig alive on the transport, playing the record underneath itself forever. A load now only remembers the record; starting tears down anything a load built.
+- Listening to itself was the rest. The profiler named it: eight offline contexts per listen cost far more than the audio in them. One render now, every distinct section a couple of bars, sections that sound the same rendered once, the measuring in a worker, debounced and latest wins, and the leveler no longer asks to be re-heard after its own gain move.
+
+### The board
+- The field was coloured boxes. It is a console painted on a canvas outside React sixty times a second: bar and beat, the arrangement shaded by its energy with the energy the ears measured drawn over it and the drop marked, a ruler with every beat and its sixteenths, and per track a decibel meter with a peak hold beside the hits of the bar you are in, placed where they will actually fire, tall as their velocity, pitched where they will sound. Underneath, left and right in dBFS against a scale, peak, three second RMS, the integrated loudness, and the spectrum on a log axis. Dropouts sit in the corner.
+- The stage has no buttons. The library, a new record and the account answer to the voice.
+
+### Storing the music
+- A record was its song document, and the audio that document names lived only in the browser that made it. Every clip now has a row in the account keyed by the name the song carries; opening a record fetches back what this machine has never seen; bytes already in storage are recorded, not copied again; what cannot be found is named rather than played as silence.
+- Two records called Untitled overwrote each other, because the library was keyed by title. A record has its own identity now. A full browser store threw into an empty catch, which is how an evening disappears without anyone being told; the write is checked and the screen says so.
+
+### The voice off a record
+- The worker already separates the vocals. What was missing was everything after: the phrases inside the isolated voice, scored the way a producer picks a hook, the one asked for cut where it was measured (not hunted for a transient, which lands on the wrong syllable), its root read, tuned into the key when that move is small enough to leave it sounding like a voice and said plainly when it is not, and placed so its last word lands on the downbeat, with the build leaning out first so the phrase arrives in room made for it.
+- Proven on a record: `npm run vocal` builds a vocal stem with three phrases in a real browser, hands it to the studio, and checks where the phrase ended up. It takes the loud two and a half second hook over the quiet aside and the short tag, reads it as D, leaves it alone in D minor, and lands it at beat 26.94 to 32.00 of a thirty two beat build.
+- The placement is learned, not fixed: every record the studio isolates a voice from posts its phrases, the row records how long before that record's own drop the last word finished, and the rule reads the median for the family once eight records agree. Until then it lands on the downbeat and says so.
+
+### Traps
+- The audibility, glitch and vocal probes each need their own Chrome profile, or an open Chrome takes the launch.
+- `next build` while `next start` is serving `.next` breaks the running server: stop, build, start.
+- Tone renders offline cooperatively, yielding between chunks. That is why the listen costs wall time and almost no CPU, and why the fix was fewer renders rather than faster ones.
+- A `speak-ring` that pulses with a transform widens its ancestors' scroll width; as a box shadow it cannot.
+- A canvas sized from its own box still pushes the page wider unless it is taken out of the flow; absolute inset zero, and `min-w-0` on every flex and grid parent.
+- The transition that makes room for a vocal is applied before the vocal is active, or the phrase is ducked by its own gap.
+- The Vercel deploy answered "Not authorized" once again; the retry went through, as the last round recorded.

@@ -290,7 +290,16 @@ export function useStems(d: Deps) {
     if (!into) return "This record has no section to put a vocal in yet.";
     const secBeats = into.bars * 4;
     const phraseBeats = cut.durationSec * (song.bpm / 60);
-    const { startBeat, cut: tooLong } = leadIn(secBeats, phraseBeats);
+    // How long before the drop records of this kind actually leave the last word hanging. Measured from
+    // the records the studio has heard; until enough of them exist, the word lands on the downbeat.
+    const { dnaLaneFor } = await import("@/lib/brain/laneNames");
+    const family = dnaLaneFor(song.lane);
+    const measured = await fetch(`/api/dna/vocal?family=${encodeURIComponent(family)}&bpm=${Math.round(song.bpm)}`).then((r) => r.json()).catch(() => null);
+    const enough = measured && typeof measured.leadInBeats === "number" && measured.records >= 8;
+    const beforeBeats = enough ? Math.max(0, Math.min(8, measured.leadInBeats)) : 0;
+    const { startBeat, cut: tooLong } = leadIn(secBeats, phraseBeats, beforeBeats);
+    // What this record teaches the store, posted whether or not it was used here.
+    void fetch("/api/dna/vocal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: jb.id, family, phrases: phrases.map((p) => ({ start: p.startSec, end: p.endSec, score: p.score })) }) }).catch(() => {});
 
     const ops: unknown[] = [
     // Room first, then the voice: the gap is measured against what is already playing, and a phrase
@@ -312,7 +321,7 @@ export function useStems(d: Deps) {
       ? (heard.midi === null ? "It is unpitched enough that I left it alone" : `It sits too far from ${song.key} to move without wrecking it, so it plays as it was sung`)
       : semitones === 0 ? `It was already in ${song.key}` : `Tuned ${semitones > 0 ? "up" : "down"} ${Math.abs(semitones)} to sit in ${song.key}`;
     dRef.current.flash(`Vocal from ${name} is in ${into.name}`);
-    return `VOCAL ISOLATED from "${name}": the phrase at ${mmss(pick.startSec)}, ${cut.durationSec.toFixed(1)} seconds of it, cut out of the separated vocal stem (${phrases.length} phrases were in there; this one scored ${pick.score} for loudness and length). ${tuneLine}. It is placed in ${into.name} starting at beat ${startBeat.toFixed(1)} of ${secBeats}, so its last word lands on the downbeat of ${dropAt > 0 ? order[dropAt].name : "the next section"}${tooLong ? ", though the phrase is longer than the section so it starts at the top of it" : ""}, and that section now leans out over its final bars to leave room. Tell the user in one breath what you did and what to listen for. Do not change anything else.`;
+    return `VOCAL ISOLATED from "${name}": the phrase at ${mmss(pick.startSec)}, ${cut.durationSec.toFixed(1)} seconds of it, cut out of the separated vocal stem (${phrases.length} phrases were in there; this one scored ${pick.score} for loudness and length). ${tuneLine}. It is placed in ${into.name} starting at beat ${startBeat.toFixed(1)} of ${secBeats}, so its last word lands ${enough ? `${beforeBeats.toFixed(1)} beats before` : "on"} the downbeat of ${dropAt > 0 ? order[dropAt].name : "the next section"}${enough ? ` (that gap is the median of ${measured.records} ${family} records the studio has heard, not a guess)` : ""}${tooLong ? ", though the phrase is longer than the section so it starts at the top of it" : ""}, and that section now leans out over its final bars to leave room. Tell the user in one breath what you did and what to listen for. Do not change anything else.`;
   }, [job]);
 
   dropVocalRef.current = dropVocal;
