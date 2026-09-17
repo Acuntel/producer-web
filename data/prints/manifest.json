@@ -1,10 +1,10 @@
 {
  "v": 2,
- "n": 1112906,
+ "n": 2277606,
  "dims": 32,
- "scale": 18.981815338134766,
+ "scale": 20.48940658569336,
  "codec": "br",
- "explained": 0.887,
+ "explained": 0.8829,
  "features": [
   "p_danceability_danceable",
   "p_gender_female",
@@ -98,7 +98,7 @@
   "hardstyle",
   "disco"
  ],
- "builtAt": "2026-09-15T19:29:11.802844+00:00",
+ "builtAt": "2026-09-17T00:02:15.948484+00:00",
  "files": [
   "akeys.u64",
   "tkeys.u32",
