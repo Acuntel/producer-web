@@ -14,7 +14,9 @@
     "deploy": "./tools/deploy.sh",
     "ritual": "node tests/ritual.e2e.mjs http://localhost:3111",
     "serve:mock": "PRODUCER_MOCK=1 next start -p 3111",
-    "battery": "node tests/voice.battery.mjs http://localhost:3111"
+    "battery": "node tests/voice.battery.mjs http://localhost:3111",
+    "battery:song": "node --import ./tests/ts-resolve.mjs tests/brain-battery.mjs http://localhost:3111",
+    "audible": "node tests/audible.mjs http://localhost:3111"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",

@@ -1,5 +1,6 @@
-// Conversational Ableton battery against the real brain: every reply must parse,
-// every op must apply, every resulting song must schedule. node tests/brain-battery.mjs [baseUrl]
+// Conversational Ableton battery against the real brain: every reply must parse, every op must apply,
+// every resulting song must schedule. The resolver has to load before the module graph:
+//   node --import ./tests/ts-resolve.mjs tests/brain-battery.mjs [baseUrl]   (npm run battery:song)
 import "./ts-resolve.mjs";   // extensionless TypeScript imports inside lib/
 import { applyOps } from "../lib/song/ops.ts";
 import { migrateSong } from "../lib/song/migrate.ts";
