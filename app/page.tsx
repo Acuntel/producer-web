@@ -78,12 +78,16 @@ export default function App() {
   const gate = account.ready && account.enabled && !account.user && !account.guest;
   const device = useMemo(() => { const cloud = new Set(projects.projects.map((p) => p.title)); return account.user ? studio.library.filter((s) => !cloud.has(s.song.title)) : studio.library; }, [account.user, projects.projects, studio.library]);
 
+  // Entering the stage never waits on anything that can hang: the screen switches first, the record loads behind it,
+  // and a failure to start audio says so out loud instead of leaving someone on the landing with nothing playing.
   async function enter(load: () => Promise<void>) {
-    voiceOut.warm();
-    await load();
     setView("stage");
-    if (!started) await studio.boot();
-    else if (paused) await studio.play();
+    try { voiceOut.warm(); } catch { /* warming the voice is a nicety, never a gate */ }
+    try { await load(); } catch { studio.flash("That record did not load. Tell me what to build and I will start fresh."); }
+    try {
+      if (!started) await studio.boot();
+      else if (paused) await studio.play();
+    } catch { studio.flash("Press and hold the button once so the browser lets the sound through."); }
   }
   landingRef.current = ({ open, new: fresh, library }) => {
     if (library) { if (playing) void studio.pause(); setView("library"); return; }
@@ -103,7 +107,7 @@ export default function App() {
   const measured = studio.facts ? `${Math.round(studio.facts.tempo.bpm)} measured · ${studio.facts.loudness.integrated.toFixed(1)} LUFS` : null;
 
   return (
-    <main className="relative flex h-dvh flex-col overflow-hidden bg-stage">
+    <main className="relative flex h-dvh flex-col overflow-hidden bg-stage" data-view={view} data-started={started ? "1" : "0"}>
       <Glow state={glow} level={speak.level} />
 
       {view === "landing" ? (
