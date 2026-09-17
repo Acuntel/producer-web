@@ -20,10 +20,10 @@ def main() -> None:
     lines = ["# SKILL: the charts (every genre, every year; what the biggest records measure)", "",
              f"{len(charts):,} chart rows from {charts['source_page'].nunique()} pages across {charts['chart'].nunique()} charts; {len(j):,} of them measured in the store. Quote a number, never an adjective; say the chart and the decade.", ""]
     for chart, g in j.groupby("chart"):
-        if len(g) < 40: continue
+        if len(g) < 60: continue
         lines.append(f"## {chart} ({len(g):,} measured records, {int(g['year'].min())} to {int(g['year'].max())})")
         for dec, d in g.groupby("decade"):
-            if len(d) < 15: continue
+            if len(d) < 25: continue
             t = pd.to_numeric(d["tempo"], errors="coerce").dropna(); mn = (d["mode"] == "minor").mean(); e = pd.to_numeric(d["energy"], errors="coerce").dropna(); v = pd.to_numeric(d["valence"], errors="coerce").dropna()
             hc = d["harmony_class"].dropna().value_counts(normalize=True).head(2)
             fam = d["family"].dropna().value_counts(normalize=True).head(2)
@@ -33,8 +33,8 @@ def main() -> None:
     # The all-time year-end top ten: the records a producer is expected to know.
     top = charts[charts["yearend"] & charts["position"].between(1, 3)].sort_values(["year", "position"])
     if len(top):
-        lines.append("## Year-end top three, the last thirty years (Billboard Hot 100 and the UK best sellers)")
-        for y, g in top[top["year"] >= top["year"].max() - 30].groupby("year"):
+        lines.append("## Year-end top three, the last dozen years (Billboard Hot 100 and the UK best sellers)")
+        for y, g in top[top["year"] >= top["year"].max() - 12].groupby("year"):
             lines.append(f"- {int(y)}: " + "; ".join(f"{r.position}. {r.artist}: {r.title}" for r in g.drop_duplicates(['artist_norm', 'title_norm']).head(3).itertuples()))
     out = ROOT / "knowledge" / "skills" / "charts.md"; out.write_text("\n".join(lines) + "\n")
     print(f"[charts skill] {len(j):,} measured chart records; wrote {out} ({out.stat().st_size:,} bytes)")

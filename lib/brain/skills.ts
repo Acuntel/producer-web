@@ -33,11 +33,17 @@ export function skillsBlock(ids: string[]): string | null {
   if (!ids.length) return null;
   const parts: string[] = [];
   let used = 0;
+  // A skill bigger than the whole budget used to drop every skill, so an ask about the charts arrived with nothing.
+  // Each one now takes the room that is left, trimmed at a line break, and the smaller ones still get through.
   for (const id of ids) {
     const text = SKILLS_DATA[id];
     if (!text) continue;
-    if (used + text.length > MAX_CHARS) break;
-    parts.push(text); used += text.length;
+    const room = MAX_CHARS - used;
+    if (room < 500) break;
+    if (text.length <= room) { parts.push(text); used += text.length; continue; }
+    const cut = text.slice(0, room - 60);
+    parts.push(cut.slice(0, Math.max(cut.lastIndexOf("\n"), 400)) + "\n(trimmed to fit this exchange)");
+    used = MAX_CHARS;
   }
   if (!parts.length) return null;
   return `SKILLS LOADED FOR THIS EXCHANGE (apply them; cite a number, not an adjective, when you reason):\n\n${parts.join("\n\n---\n\n")}`;

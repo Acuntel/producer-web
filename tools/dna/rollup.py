@@ -139,6 +139,8 @@ def calibrate_acousticbrainz(df: pd.DataFrame) -> pd.DataFrame:
         fitted[tgt] = beta; report["fits"][tgt] = {"r2": round(float(r2), 3), "n": int(m.sum()), "beta": [round(float(b), 4) for b in beta]}
     Xa = design(df.loc[ab, ["id", "tempo"]].join(native, on="id"))
     for tgt, beta in fitted.items():
+        # The condensed store keeps these columns as float32; pandas 3 refuses a float64 array into one, so widen first.
+        df[tgt] = pd.to_numeric(df[tgt], errors="coerce").astype("float64")
         df.loc[ab, tgt] = np.clip(Xa @ beta, 0.0, 1.0)
     (DATA_DIR / "calibration.json").write_text(json.dumps(report, indent=1))
     print(f"[rollup] calibrated {int(ab.sum()):,} AcousticBrainz rows on {len(both):,} shared recordings: " + ", ".join(f"{k} R2 {v['r2']}" for k, v in report["fits"].items()))
