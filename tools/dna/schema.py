@@ -31,6 +31,7 @@ COLUMNS: list[tuple[str, str]] = [
     ("repetition", "Float32"),
     ("valence_read", "Float32"), ("arousal_read", "Float32"),
     ("tension_read", "Float32"), ("warmth_read", "Float32"),
+    ("fame", "Float32"),         # section 18: charts + listens + buys, 0-1 (tools/dna/fame.py), attached by the rollup
     ("voice", "Float32"),        # probability the recording carries a voice (AcousticBrainz), 1 - instrumentalness (Spotify)
     ("artist_mbid", "string"),   # MusicBrainz artist gid where the source carries one (AcousticBrainz): the family join
 ]

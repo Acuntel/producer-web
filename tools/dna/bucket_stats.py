@@ -32,7 +32,9 @@ def exemplar_map(df: pd.DataFrame, group_cols: list[str], n: int) -> dict:
         return {}
     sub["_peak"] = sub["chart_peak"].fillna(10_000)
     sub["_pop"] = sub["popularity"].fillna(-1)
-    sub = sub.sort_values(group_cols + ["_peak", "_pop"], ascending=[True] * len(group_cols) + [True, False])
+    # Section 18: the famous first (charts, listens, buys), then the chart peak, then popularity.
+    sub["_fame"] = pd.to_numeric(sub["fame"], errors="coerce").fillna(0.0) if "fame" in sub.columns else 0.0
+    sub = sub.sort_values(group_cols + ["_fame", "_peak", "_pop"], ascending=[True] * len(group_cols) + [False, True, False])
     top = sub.groupby(group_cols, dropna=False, observed=True).head(n)
     out: dict = {}
     for key, g in top.groupby(group_cols, dropna=False, observed=True):

@@ -4,7 +4,7 @@
 // the answer is cached for everyone.
 import { brainClient } from "@/lib/brain/client";
 import { supabaseAdmin } from "@/lib/account/supabase";
-import { lookupArtist, lookupSongs, artistSongs, artistLine, songLine, binsFor, binLine, norm, canonLines, heardLines, lookupGenre, genreLine } from "@/lib/brain/galton";
+import { lookupArtist, lookupSongs, artistSongs, artistLine, songLine, binsFor, binLine, norm, canonLines, heardLines, lookupGenre, genreLine, chartLines } from "@/lib/brain/galton";
 import { findRecord, artistRows, soundLines } from "@/lib/brain/prints";
 import flowJson from "@/data/flow.json";
 import { laneNamed, laneInfo } from "@/lib/brain/laneNames";
@@ -51,7 +51,8 @@ export async function POST(req: Request) {
   else if (byTitle.length) { kind = "song"; lines.push(...byTitle.map(songLine)); }
   // The fingerprint: the record's own address and what sits beside it by sound (in-process, no database).
   const printRows = dash ? [findRecord(norm(dash[1]), norm(dash[2]))].filter((r): r is number => r !== null) : artistRows(artist?.artist_norm ?? norm(query), like ? 2 : 1);
-  for (const row of printRows.slice(0, like ? 2 : 1)) { if (kind === "none") kind = dash ? "song" : "artist"; lines.push(...soundLines(row, like ? 8 : 5)); }
+  const wantFamous = /\b(famous|hit|hits|big|biggest|popular|viral|charted|known)\b/i.test(asked);
+  for (const row of printRows.slice(0, like ? 2 : 1)) { if (kind === "none") kind = dash ? "song" : "artist"; lines.push(...soundLines(row, like ? 8 : 5, { famous: wantFamous })); }
   if (canon.length) { if (kind === "none") kind = "artist"; lines.push(...canon); }
   if (heard.length) { if (kind === "none") kind = "song"; lines.push(...heard); }
   // A decade in the words ("80s", "1990s", "nineties") becomes a pin.
@@ -92,6 +93,12 @@ export async function POST(req: Request) {
       }
     }
     if (fams.length >= 2) lines.push(`Two families named (${fams.join(" and ")}): build the floor from the first family's bin and borrow the second family's hook contour, vocal placement and one signature timbre; say which choice you made.`);
+  }
+  // "The biggest house records of 2019", "what was famous in 1985": the charts, year by year, genre by genre.
+  const yearAsk = asked.match(/\b(19[4-9]\d|20[0-2]\d)\b/);
+  if (yearAsk && /\b(biggest|best|top|famous|hits?|number ones?|charts?|viral|popular|year[- ]end|what (was|were) (big|hot|popular))\b/i.test(asked)) {
+    const cl = await chartLines(fams[0] ?? (genre?.family ?? null), Number(yearAsk[1]), 8);
+    if (cl.length) { lines.unshift(...cl); if (kind === "none") kind = "genre"; }
   }
   // "How does a house record flow": the measured form for the family named, or the store as a whole.
   if (/\b(flow|arrangement|structure|how (does|should) .* (go|move|flow)|build ?up|transition)\b/i.test(asked)) {

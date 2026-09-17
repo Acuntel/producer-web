@@ -13,8 +13,8 @@ Layout v2 (masterprompt section 13), rows sorted by (artist key, title key), bro
   vec.i8.br       rows x 32 int8
   names.txt.br    artist TAB title per row, UTF-8
   lens.u16.br     byte length of each name (offsets are their prefix sums)
-  meta.bin.br     9 bytes a row: tempo x10 u16, year u16, energy u8, valence u8, arousal u8,
-                  key (4 bits, 15 unknown) | mode (2 bits) << 4 | voice (2 bits) << 6, family index u8
+  meta.bin.br     10 bytes a row: tempo x10 u16, year u16, energy u8, valence u8, arousal u8,
+                  key (4 bits, 15 unknown) | mode (2 bits) << 4 | voice (2 bits) << 6, family index u8, fame u8
   proof.json      duplicate rate, family agreement, DJ-played neighbours
 
   <dna-venv>/bin/python tools/dna/prints.py
@@ -68,6 +68,11 @@ def main() -> None:
     t0 = time.time()
     ab = pd.read_parquet(AB)
     print(f"[prints] {len(ab):,} recordings, {sum(c.startswith('p_') for c in ab.columns)} probabilities ({time.time() - t0:.0f}s)", flush=True)
+    fame_p = ROOT / "data" / "dna" / "fame.parquet"
+    if fame_p.exists():
+        f = pd.read_parquet(fame_p, columns=["artist_norm", "title_norm", "fame"]).drop_duplicates(["artist_norm", "title_norm"])
+        ab = ab.merge(f, on=["artist_norm", "title_norm"], how="left")
+    if "fame" not in ab.columns: ab["fame"] = 0.0
     if SONGS.exists():
         songs = pd.read_parquet(SONGS, columns=["id", "energy", "valence_read", "arousal_read", "family", "voice"]).drop_duplicates("id").set_index("id")
         ab = ab.join(songs, on="id", rsuffix="_rolled")
@@ -104,12 +109,13 @@ def main() -> None:
     voice = ab["voice"].to_numpy(dtype="float64") if "voice" in ab else np.full(len(ab), np.nan)
     voice = np.where(np.isnan(voice), 0, np.where(voice >= 0.5, 1, 2)).astype("uint8")
     fam_idx = {f: i for i, f in enumerate(FAMILIES)}
-    meta = np.zeros((len(ab), 9), dtype="uint8")
+    meta = np.zeros((len(ab), 10), dtype="uint8")
     meta[:, 0:2] = np.clip(np.rint(tempo * 10), 0, 65535).astype("<u2").view("uint8").reshape(-1, 2)
     meta[:, 2:4] = np.clip(year, 0, 65535).astype("<u2").view("uint8").reshape(-1, 2)
     meta[:, 4] = u8("energy", 0.5); meta[:, 5] = u8("valence_read", 0.5); meta[:, 6] = u8("arousal_read", 0.5)
     meta[:, 7] = key | (mode << 4) | (voice << 6)
     meta[:, 8] = ab["family"].map(lambda f: fam_idx.get(f, 0) if isinstance(f, str) else 0).to_numpy(dtype="uint8")
+    meta[:, 9] = u8("fame", 0.0)   # section 18: fame 0-255
     OUT.mkdir(parents=True, exist_ok=True)
     for old in OUT.glob("*"):
         if old.name not in ("manifest.json", "proof.json"): old.unlink()
@@ -145,7 +151,7 @@ def main() -> None:
             proof.update({"canon_with_print": len(hit), "played_neighbours_at_10": round(near / max(tot, 1), 4), "played_base_rate": round(float(played.mean()), 6)})
         except Exception as ex:
             proof["canon_error"] = str(ex)[:200]
-    manifest = {"v": 2, "n": int(len(vec)), "dims": DIMS, "scale": scale, "codec": "br", "explained": round(explained, 4), "features": names, "families": FAMILIES,
+    manifest = {"v": 3, "n": int(len(vec)), "dims": DIMS, "scale": scale, "codec": "br", "explained": round(explained, 4), "features": names, "families": FAMILIES,
                 "builtAt": pd.Timestamp.utcnow().isoformat(), "files": files}
     (OUT / "manifest.json").write_text(json.dumps(manifest, indent=1)); (OUT / "proof.json").write_text(json.dumps(proof, indent=1))
     size = sum((OUT / f).stat().st_size for f in files) / 1048576

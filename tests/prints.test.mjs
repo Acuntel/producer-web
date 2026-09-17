@@ -7,7 +7,7 @@ const built = existsSync("data/prints/manifest.json");
 
 test("the fingerprint store loads and every row has a name and an address", { skip: !built && "data/prints not built" }, () => {
   const s = prints(); assert.ok(s && s.m.n > 100000, `expected over 100k prints, got ${printsCount()}`);
-  assert.equal(s.m.v, 2); assert.equal(s.vec.length, s.m.n * s.m.dims); assert.equal(s.offs.length, s.m.n + 1); assert.equal(s.meta.length, s.m.n * 9);
+  assert.equal(s.m.v, 3); assert.equal(s.vec.length, s.m.n * s.m.dims); assert.equal(s.offs.length, s.m.n + 1); assert.equal(s.meta.length, s.m.n * 10);
   for (let i = 1; i < 2000; i++) assert.ok(s.akeys[i - 1] <= s.akeys[i], "rows sorted by artist key");
   const p = printOf(Math.floor(s.m.n / 2));
   assert.ok(p.artist.length > 0 && p.title.length > 0, `row decodes to a name: ${JSON.stringify(p)}`);

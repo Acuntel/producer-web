@@ -29,16 +29,27 @@ NAMES = {"tempo": "tempo", "energy": "energy", "danceability": "danceability", "
 MIN_ROWS = 30
 
 
-def cohen_d(a: pd.Series, b: pd.Series) -> float | None:
-    a = pd.to_numeric(a, errors="coerce").dropna(); b = pd.to_numeric(b, errors="coerce").dropna()
-    if len(a) < MIN_ROWS or len(b) < MIN_ROWS: return None
-    sp = np.sqrt((a.var(ddof=1) * (len(a) - 1) + b.var(ddof=1) * (len(b) - 1)) / (len(a) + len(b) - 2))
+def cohen_d(a: pd.Series, b: pd.Series, wa: pd.Series | None = None, wb: pd.Series | None = None) -> float | None:
+    """Cohen's d, weighted when fame weights are given (section 18): a famous hit counts up to four times a forgotten one."""
+    a = pd.to_numeric(a, errors="coerce"); b = pd.to_numeric(b, errors="coerce")
+    ma, mb = a.notna(), b.notna()
+    if ma.sum() < MIN_ROWS or mb.sum() < MIN_ROWS: return None
+    wa = (1.0 + 3.0 * pd.to_numeric(wa, errors="coerce").fillna(0.0)) if wa is not None else pd.Series(1.0, index=a.index)
+    wb = (1.0 + 3.0 * pd.to_numeric(wb, errors="coerce").fillna(0.0)) if wb is not None else pd.Series(1.0, index=b.index)
+    av, aw = a[ma].to_numpy(dtype=float), wa[ma].to_numpy(dtype=float); bv, bw = b[mb].to_numpy(dtype=float), wb[mb].to_numpy(dtype=float)
+    mean_a, mean_b = np.average(av, weights=aw), np.average(bv, weights=bw)
+    var_a, var_b = np.average((av - mean_a) ** 2, weights=aw), np.average((bv - mean_b) ** 2, weights=bw)
+    sp = np.sqrt((var_a * (len(av) - 1) + var_b * (len(bv) - 1)) / (len(av) + len(bv) - 2))
     if not sp or np.isnan(sp): return None
-    return float((a.mean() - b.mean()) / sp)
+    return float((mean_a - mean_b) / sp)
 
 
 def main() -> None:
-    s = pd.read_parquet(DATA / "songs.parquet", columns=["source", "artist_norm", "title_norm", "family", "decade", "hit_tier"] + NUMERIC)
+    cols = ["source", "artist_norm", "title_norm", "family", "decade", "hit_tier"] + NUMERIC
+    import pyarrow.parquet as pq
+    if "fame" in pq.read_schema(DATA / "songs.parquet").names: cols.append("fame")
+    s = pd.read_parquet(DATA / "songs.parquet", columns=cols)
+    if "fame" not in s.columns: s["fame"] = 0.0
     s["join_key"] = s["artist_norm"].fillna("") + "|" + s["title_norm"].fillna("")
     chart = s[s.source == "billboard"][["join_key", "hit_tier"]].drop_duplicates("join_key")
     measured = s[s.source != "billboard"].drop_duplicates("join_key")
@@ -55,13 +66,13 @@ def main() -> None:
         for tier in ["number1", "top10", "top40", "charted"]:
             hit = g[g.tier == tier]
             for col in NUMERIC:
-                d = cohen_d(hit[col], never[col])
+                d = cohen_d(hit[col], never[col], hit["fame"], never["fame"])
                 if d is None or abs(d) < 0.35: continue
                 findings.append({"family": fam, "decade": dec, "tier": tier, "measure": col, "d": round(d, 2), "hit_p50": round(float(pd.to_numeric(hit[col], errors="coerce").median()), 3), "never_p50": round(float(pd.to_numeric(never[col], errors="coerce").median()), 3), "n_hit": int(hit[col].notna().sum()), "n_never": int(never[col].notna().sum())})
     findings.sort(key=lambda f: (-abs(f["d"]) * np.log10(f["n_hit"] + 1)))
     top = findings[:60]
     (DATA / "discoveries.json").write_text(json.dumps({"count": len(findings), "top": top}, indent=1))
-    lines = ["# SKILL: what the store found on its own (effect sizes, hits against never-charted, same family and decade)", "",
+    lines = ["# SKILL: what the store found on its own (effect sizes, hits against never-charted, same family and decade; famous records weigh up to four times)", "",
              f"{len(findings)} differences with an effect size of at least 0.35 and thirty or more rows on each side; the strongest and best supported first. d is Cohen's d: 0.35 small, 0.5 medium, 0.8 large. Quote the measure, the direction and the size; never invent a cause.", ""]
     for f in top[:25]:
         where = "across everything" if f["family"] == "all" else f"{f['family']}{'' if f['decade'] == 'all' else ' in the ' + f['decade'] + 's'}"

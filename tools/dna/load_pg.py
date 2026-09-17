@@ -17,7 +17,7 @@ import pandas as pd
 
 DATA = Path(__file__).resolve().parents[2] / "data" / "dna"
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "supabase" / "migrations"
-MIGRATIONS = ["0008_dna.sql", "0009_dna_performer_raw.sql", "0011_dna_voice.sql", "0012_dna_songs_lean.sql", "0015_genres.sql"]
+MIGRATIONS = ["0008_dna.sql", "0009_dna_performer_raw.sql", "0011_dna_voice.sql", "0012_dna_songs_lean.sql", "0015_genres.sql", "0016_charts_fame.sql"]
 
 
 def load_ddl() -> str:
@@ -150,6 +150,15 @@ def run(dsn: str | None, dry_run: bool) -> None:
             with conn.cursor() as cur:
                 copy_dataframe(cur, "public.dna_genres", genres, json_cols={"exemplars"}, conn=conn)
             conn.commit()
+
+        for name, table, jcols in (("charts.parquet", "public.dna_charts", set()), ("fame.parquet", "public.dna_fame", {"charts", "years"})):
+            path = DATA / name
+            if path.exists():
+                frame = pd.read_parquet(path)
+                if table == "public.dna_fame": frame = frame[frame["fame"] >= 0.02]   # the long tail of near-zero fame stays in parquet
+                with conn.cursor() as cur:
+                    copy_dataframe(cur, table, frame, json_cols=jcols, conn=conn)
+                conn.commit()
 
         buckets_path = DATA / "buckets.parquet"
         # The product reads bins from data/galton.json; buckets load only on request (they were 203 MB of the tier).

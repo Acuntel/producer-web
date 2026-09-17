@@ -169,6 +169,19 @@ def fill_family(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def attach_fame(df: pd.DataFrame) -> pd.DataFrame:
+    """The fame score (tools/dna/fame.py) by folded names; songs the charts never carried get 0."""
+    if "fame" not in df.columns: df["fame"] = np.nan
+    fp = DATA_DIR / "fame.parquet"
+    if not fp.exists(): df["fame"] = df["fame"].fillna(0.0); return df
+    f = pd.read_parquet(fp, columns=["artist_norm", "title_norm", "fame"]).drop_duplicates(["artist_norm", "title_norm"])
+    key = df["artist_norm"].fillna("") + "|" + df["title_norm"].fillna("")
+    m = pd.Series(f["fame"].values, index=(f["artist_norm"].fillna("") + "|" + f["title_norm"].fillna("")).values)
+    df["fame"] = key.map(m).fillna(0.0).astype("float32")
+    print(f"[rollup] fame attached: {(df['fame'] > 0).sum():,} songs above zero, {(df['fame'] >= 0.5).sum():,} at 0.5 or more")
+    return df
+
+
 def combine() -> pd.DataFrame:
     frames = []
     for name in FRAGMENTS:
@@ -187,6 +200,7 @@ def combine() -> pd.DataFrame:
     combined = fill_voice(combined)
     combined = calibrate_acousticbrainz(combined)
     combined = fill_family(combined)
+    combined = attach_fame(combined)
     combined = apply_artist_fold(combined)
     combined = disambiguate_ids(combined)
     SONGS_OUT.parent.mkdir(parents=True, exist_ok=True)

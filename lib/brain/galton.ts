@@ -224,3 +224,35 @@ export async function lookupGenre(text: string): Promise<GenreRow | null> {
 }
 export const genreLine = (g: GenreRow) =>
   `${g.genre[0].toUpperCase()}${g.genre.slice(1)} in the store: ${g.artists} artists, ${g.songs ?? 0} songs${g.chart_songs ? `, ${g.chart_songs} charted` : ""}${g.tempo_p50 ? `, tempo p50 ${Math.round(g.tempo_p50)}` : ""}${g.energy_p50 ? `, energy ${g.energy_p50.toFixed(2)}` : ""}${g.family ? `, family ${g.family}` : ""}${g.exemplars?.length ? `; artists: ${g.exemplars.slice(0, 5).join(", ")}` : ""}.`;
+
+// The charts (dna_charts: year-end ranks and number ones across the genre charts) and fame (dna_fame).
+export type ChartRow = { chart: string; year: number | null; position: number | null; yearend: boolean; artist: string | null; title: string | null; artist_norm: string | null; title_norm: string | null; store_family: string | null };
+const CHART_FOR_FAMILY: Record<string, string[]> = {
+  house: ["Dance Club Songs number ones", "UK Dance number ones"], electronic: ["Dance Club Songs number ones", "UK Dance number ones", "Hot Dance/Electronic number ones"], techno: ["UK Dance number ones", "Dance Club Songs number ones"],
+  hiphop: ["Hot Rap Songs number ones", "R&B/Hip-Hop number ones"], rnb: ["R&B/Hip-Hop number ones"], country: ["Hot Country Songs number ones"], rock: ["Alternative Airplay number ones", "Mainstream Rock number ones"],
+  latin: ["Hot Latin Songs number ones"], pop: ["Billboard year-end Hot 100", "Hot 100 number ones", "UK number ones"],
+};
+/** The biggest records of a year for a family (or the Hot 100 when none): year-end ranks first, then the number ones. */
+export async function chartLines(family: string | null, year: number | null, limit = 8): Promise<string[]> {
+  const sb = supabaseAdmin(); if (!sb || !year) return [];
+  try {
+    const charts = family && CHART_FOR_FAMILY[family] ? CHART_FOR_FAMILY[family] : ["Billboard year-end Hot 100"];
+    let q = sb.from("dna_charts").select("chart,year,position,yearend,artist,title,artist_norm,title_norm,store_family").eq("year", year).in("chart", charts).order("yearend", { ascending: false }).order("position", { ascending: true }).limit(limit * 3);
+    const r = await q; let rows = (r.data ?? []) as ChartRow[];
+    if (!rows.length && family) { const r2 = await sb.from("dna_charts").select("chart,year,position,yearend,artist,title,artist_norm,title_norm,store_family").eq("year", year).eq("chart", "Billboard year-end Hot 100").order("position", { ascending: true }).limit(limit); rows = (r2.data ?? []) as ChartRow[]; }
+    if (!rows.length) return [];
+    const seen = new Set<string>(); const picked: ChartRow[] = [];
+    for (const x of rows) { const k = `${x.artist_norm}|${x.title_norm}`; if (seen.has(k)) continue; seen.add(k); picked.push(x); if (picked.length >= limit) break; }
+    // The store's own numbers for those records, where it has them.
+    const keys = picked.map((x) => x.title_norm ?? "").filter(Boolean);
+    const songs = keys.length ? await sb.from("dna_songs").select("artist_norm,title_norm,tempo,key_pc,mode,energy,valence,family").in("title_norm", keys).limit(200) : { data: [] };
+    const byKey = new Map<string, { tempo?: number | null; key_pc?: number | null; mode?: string | null; energy?: number | null; family?: string | null }>();
+    for (const srow of (songs.data ?? []) as { artist_norm: string; title_norm: string; tempo?: number | null; key_pc?: number | null; mode?: string | null; energy?: number | null; family?: string | null }[]) byKey.set(`${srow.artist_norm}|${srow.title_norm}`, srow);
+    const chartName = picked[0].chart;
+    const items = picked.map((x) => { const sr = byKey.get(`${x.artist_norm}|${x.title_norm}`); const bits = [sr?.tempo ? `${Math.round(sr.tempo)} BPM` : null, sr && typeof sr.key_pc === "number" ? `${KEYS[sr.key_pc]}${sr.mode === "minor" ? "m" : ""}` : null, typeof sr?.energy === "number" ? `energy ${sr.energy.toFixed(2)}` : null].filter(Boolean); return `${x.yearend && x.position ? `${x.position}. ` : ""}${x.artist}: ${x.title}${bits.length ? ` (${bits.join(", ")})` : ""}`; });
+    const tempos = picked.map((x) => byKey.get(`${x.artist_norm}|${x.title_norm}`)?.tempo).filter((t): t is number => typeof t === "number").sort((a, b) => a - b);
+    const minor = picked.map((x) => byKey.get(`${x.artist_norm}|${x.title_norm}`)?.mode).filter(Boolean); const minorShare = minor.length ? minor.filter((m) => m === "minor").length / minor.length : null;
+    const summary = tempos.length >= 3 ? ` Across them the store measures tempo p50 ${Math.round(tempos[Math.floor(tempos.length / 2)])}${minorShare !== null ? `, ${Math.round(minorShare * 100)}% minor` : ""}.` : "";
+    return [`${chartName}, ${year}: ${items.join("; ")}.${summary}`];
+  } catch { return []; }
+}

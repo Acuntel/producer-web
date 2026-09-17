@@ -9,8 +9,8 @@ import { createHash } from "node:crypto";
 
 type Manifest = { v: number; n: number; dims: number; scale: number; codec?: string; families: string[]; builtAt?: string };
 type Store = { m: Manifest; akeys: BigUint64Array; tkeys: Uint32Array; vec: Int8Array; names: Buffer; offs: Uint32Array; meta: Uint8Array };
-export type Print = { row: number; artist: string; title: string; year: number | null; tempo: number | null; keyPc: number | null; mode: string | null; energy: number; valence: number; arousal: number; voice: string | null; family: string | null };
-const META = 9;
+export type Print = { row: number; artist: string; title: string; year: number | null; tempo: number | null; keyPc: number | null; mode: string | null; energy: number; valence: number; arousal: number; voice: string | null; family: string | null; fame: number };
+const META = 10;
 
 let store: Store | null | undefined;
 const aligned = (buf: Buffer | Uint8Array) => { const ab = new ArrayBuffer(buf.byteLength); new Uint8Array(ab).set(buf); return ab; };
@@ -20,7 +20,7 @@ export function prints(): Store | null {
   try {
     const dir = join(process.cwd(), "data", "prints");
     const m = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as Manifest;
-    if (m.v !== 2) throw new Error(`prints layout v${m.v} is not v2`);
+    if (m.v !== 3) throw new Error(`prints layout v${m.v} is not v3`);
     const raw = (f: string) => readFileSync(join(dir, f));
     const packed = (f: string) => (m.codec === "gz" ? gunzipSync(raw(f)) : brotliDecompressSync(raw(f)));
     const lens = new Uint16Array(aligned(packed("lens.u16.br")));
@@ -70,16 +70,18 @@ export function printOf(row: number): Print {
   const o = row * META, m = s.meta; const u16 = (i: number) => m[i] | (m[i + 1] << 8);
   const tempo = u16(o) / 10, year = u16(o + 2), packed = m[o + 7], key = packed & 15, mode = (packed >> 4) & 3, voice = (packed >> 6) & 3, fam = s.m.families[m[o + 8]] ?? "";
   return { row, artist: artist ?? "", title: title ?? "", year: year || null, tempo: tempo || null, keyPc: key === 15 ? null : key, mode: mode === 1 ? "major" : mode === 2 ? "minor" : null,
-    energy: m[o + 4] / 255, valence: m[o + 5] / 255, arousal: m[o + 6] / 255, voice: voice === 1 ? "vocal" : voice === 2 ? "instrumental" : null, family: fam || null };
+    energy: m[o + 4] / 255, valence: m[o + 5] / 255, arousal: m[o + 6] / 255, voice: voice === 1 ? "vocal" : voice === 2 ? "instrumental" : null, family: fam || null, fame: m[o + 9] / 255 };
 }
 
 /** The k nearest by sound, other artists only (the same artist's other records are a different question). */
-export function nearest(row: number, k = 6): { p: Print; d: number }[] {
+export function nearest(row: number, k = 6, opts?: { famous?: boolean }): { p: Print; d: number }[] {
   const s = prints(); if (!s) return [];
-  const D = s.m.dims, n = s.m.n, vec = s.vec, akeys = s.akeys, me = akeys[row], q = vec.subarray(row * D, row * D + D);
+  const D = s.m.dims, n = s.m.n, vec = s.vec, akeys = s.akeys, meta = s.meta, me = akeys[row], q = vec.subarray(row * D, row * D + D);
   const K = Math.max(k * 4, 24); const top: { i: number; d: number }[] = []; let worst = Infinity;
+  const minFame = opts?.famous ? 26 : 0;   // section 18: the famous version of "sounds like" keeps only records with fame above 0.1
   for (let i = 0; i < n; i++) {
     if (akeys[i] === me) continue;
+    if (minFame && meta[i * META + 9] < minFame) continue;
     const o = i * D; let d = 0;
     for (let j = 0; j < D; j++) { const x = vec[o + j] - q[j]; d += x * x; if (d >= worst) break; }
     if (d >= worst) continue;
@@ -106,12 +108,13 @@ export function address(p: Print): string {
 }
 
 const KEYS = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
-const tag = (p: Print) => `${p.artist}: ${p.title}${p.year ? ` (${p.year})` : ""}${p.tempo ? ` at ${Math.round(p.tempo)}` : ""}${p.keyPc !== null ? ` in ${KEYS[p.keyPc]}${p.mode === "minor" ? "m" : ""}` : ""}`;
+const tag = (p: Print) => `${p.artist}: ${p.title}${p.year ? ` (${p.year})` : ""}${p.tempo ? ` at ${Math.round(p.tempo)}` : ""}${p.keyPc !== null ? ` in ${KEYS[p.keyPc]}${p.mode === "minor" ? "m" : ""}` : ""}${p.fame >= 0.5 ? ", famous" : p.fame >= 0.2 ? ", charted" : ""}`;
 
 /** Lines for the research lane: where the record sits and what sits beside it by sound. */
-export function soundLines(row: number, k = 6): string[] {
+export function soundLines(row: number, k = 6, opts?: { famous?: boolean }): string[] {
   const me = printOf(row); const nn = nearest(row, k);
-  const lines = [`Address of ${me.artist}: ${me.title}: ${address(me)}.`];
+  const lines = [`Address of ${me.artist}: ${me.title}: ${address(me)}${me.fame >= 0.5 ? " (famous)" : me.fame >= 0.2 ? " (charted)" : ""}.`];
   if (nn.length) lines.push(`By sound, ${me.artist}: ${me.title} sits closest to ${nn.map(({ p }) => tag(p)).join("; ")}.`);
+  if (opts?.famous) { const fam = nearest(row, Math.min(k, 4), { famous: true }); if (fam.length) lines.push(`The famous records nearest by sound: ${fam.map(({ p }) => tag(p)).join("; ")}.`); }
   return lines;
 }
