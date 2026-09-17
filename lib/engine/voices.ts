@@ -1,5 +1,11 @@
 // One voice per track: the instrument, its insert chain, sends, and the
 // automation surface. Ableton's device chain, radically simplified.
+//
+// A voice outlives a change. Everything the producer usually moves (volume, pan,
+// cutoff, resonance, reverb, delay, drive, crush, width) ramps in place through
+// `tune`, and only a change of instrument (role, synth shape, clip, kit) builds a
+// new voice. `voiceSignature` is what decides that, and `tune` also puts every
+// automatable parameter back to the written value before a new schedule is laid down.
 import * as Tone from "tone";
 import type { Track, Note, Role, AutoParam, SynthParams, Wave } from "../song/types";
 import type { Kit, KitSound } from "./kits";
@@ -10,6 +16,7 @@ export type Voice = {
   gate: Tone.Gain;
   out: Tone.ToneAudioNode;   // post-fader output, for meters
   setVolume: (db: number) => void;   // live fader moves, no rebuild
+  tune: (track: Track) => void;      // the track's rampable values, ramped in place
   dispose: () => void;
 };
 
@@ -22,6 +29,47 @@ const ROLE_CUTOFF: Partial<Record<Role, number>> = { pad: 2400, chords: 3600, st
 const ROLE_TRIM: Partial<Record<Role, number>> = { kick: -2.5, clap: 2, snare: 3, hat: 5, openhat: 4, perc: 4, bass: 3, sub: -3, stab: 7, chords: 7, pad: 8, lead: 6, pluck: 6, arp: 6, fx: 4, audio: 3 };
 const ROLE_WAVE: Partial<Record<Role, Wave>> = { pad: "fatsawtooth", chords: "fatsawtooth", stab: "fatsawtooth", lead: "fatsawtooth", arp: "sawtooth", pluck: "triangle" };
 const ROLE_UNISON: Partial<Record<Role, [number, number]>> = { pad: [3, 26], chords: [2, 14], stab: [2, 12], lead: [2, 10] };
+const DRUM_ROLES: Role[] = ["kick", "clap", "snare", "hat", "openhat", "perc"];
+
+const RAMP = 0.04;   // a parameter move the ear reads as instant but never hears as a click
+
+// What the track's own numbers say each rampable parameter should be right now.
+function baseOf(track: Track) {
+  const p = track.synth ?? {}; const fx = track.fx ?? {};
+  return {
+    cutoff: fx.filter?.cutoff ?? p.cutoff ?? ROLE_CUTOFF[track.role] ?? 20000,
+    q: fx.filter?.q ?? p.resonance ?? 0.7,
+    volume: track.volume + (ROLE_TRIM[track.role] ?? 0),
+    pan: fx.pan ?? 0,
+    width: fx.width ?? 0.5,
+    reverb: fx.reverb ?? REV_WET[track.role] ?? 0,
+    delayWet: fx.delay?.wet ?? 0,
+    delayTime: fx.delay?.time ?? "8n",
+    delayFeedback: Math.min(0.9, fx.delay?.feedback ?? 0.2),
+    drive: fx.drive ?? (track.role === "bass" ? 0.25 : track.role === "stab" ? 0.12 : 0),
+    crush: fx.crush ?? 0,
+    drumTune: p.drumTune ?? 0,
+    drumDecay: p.drumDecay,
+  };
+}
+
+/** What makes this a different instrument. Same signature, same voice: the change ramps instead of rebuilding. */
+export function voiceSignature(track: Track, ctx?: { kitId?: string; bpm?: number }): string {
+  const p = track.synth ?? {}; const fx = track.fx ?? {}; const c = track.clip;
+  const sampled = DRUM_ROLES.includes(track.role) || track.role === "audio";
+  return JSON.stringify([
+    track.role,
+    // A sampled voice plays a buffer, so tuning and decay are per hit and never rebuild it;
+    // a synthesized one bakes them into its envelopes.
+    sampled ? { wave: p.wave, octave: p.octave } : p,
+    c ? [c.clipId, c.sampleId, c.semitones, c.reverse, c.startSec, c.oneShot, c.warp, c.bpm, c.lengthBeats, c.warp !== false && c.bpm ? ctx?.bpm : 0] : null,
+    !!track.duck,
+    fx.filter?.type ?? null,
+    fx.eq ?? null,
+    fx.comp ?? null,
+    DRUM_ROLES.includes(track.role) ? ctx?.kitId ?? "" : "",
+  ]);
+}
 
 function oscOf(p: SynthParams | undefined, fallback: Wave, unison?: [number, number]): Tone.OmniOscillatorOptions {
   let wave = p?.wave ?? fallback;
@@ -38,37 +86,39 @@ function keyboardVoice(kind: "epiano" | "organ", p: SynthParams, envOf: (d: { at
   return new Tone.PolySynth(Tone.AMSynth, { harmonicity: 2, oscillator: { type: "sine" }, modulation: { type: "square" }, envelope: envOf({ attack: 0.01, decay: 0.1, sustain: 0.9, release: 0.12 }), modulationEnvelope: { attack: 0.01, decay: 0.1, sustain: 1, release: 0.1 } });
 }
 
-export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: Kit): Voice {
+// A voice that will be tuned later keeps every rampable device in its chain even when the device is
+// off, bypassed by a zero wet. A voice rendered once offline builds only what it uses: the bypassed
+// devices are transparent, so the sound is identical, and eight section renders do not pay for them.
+export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: Kit, live = true): Voice {
   const { role } = track;
   const p = track.synth ?? {};
   const fx = track.fx ?? {};
   const disp: { dispose: () => void }[] = [];
   const dest = track.duck ? buses.duck : buses.master;
+  let base = baseOf(track);
 
   // Insert chain (built back to front): filter -> drive -> crush -> eq -> delay -> pan -> width -> volume.
-  const volume = new Tone.Volume(track.volume + (ROLE_TRIM[role] ?? 0)).connect(dest); disp.push(volume);
+  const volume = new Tone.Volume(base.volume).connect(dest); disp.push(volume);
   let head: Tone.ToneAudioNode = volume;
-  if (typeof fx.width === "number") { const w = new Tone.StereoWidener(fx.width); w.connect(head); head = w; disp.push(w); }
-  const panner = new Tone.Panner(fx.pan ?? 0); panner.connect(head); head = panner; disp.push(panner);
-  let delay: Tone.FeedbackDelay | null = null;
-  if (fx.delay && fx.delay.wet > 0) {
-    delay = new Tone.FeedbackDelay(fx.delay.time, Math.min(0.9, fx.delay.feedback)); delay.wet.value = fx.delay.wet;
-    delay.connect(head); head = delay; disp.push(delay);
-  }
+  const widener = live || typeof fx.width === "number" ? new Tone.StereoWidener(base.width) : null;
+  if (widener) { widener.connect(head); head = widener; disp.push(widener); }
+  const panner = live || fx.pan ? new Tone.Panner(base.pan) : null;
+  if (panner) { panner.connect(head); head = panner; disp.push(panner); }
+  const delay = live || base.delayWet > 0 ? new Tone.FeedbackDelay(base.delayTime, base.delayFeedback) : null;
+  if (delay) { delay.wet.value = base.delayWet; delay.connect(head); head = delay; disp.push(delay); }
   if (fx.eq) { const eq = new Tone.EQ3(fx.eq.low, fx.eq.mid, fx.eq.high); eq.connect(head); head = eq; disp.push(eq); }
   if (fx.comp) { const c = new Tone.Compressor(fx.comp.threshold, fx.comp.ratio); c.connect(head); head = c; disp.push(c); }
-  if (fx.crush && fx.crush > 0) { const b = new Tone.BitCrusher(Math.max(4, Math.min(12, fx.crush))); b.connect(head); head = b; disp.push(b); }
-  const driveAmt = fx.drive ?? (role === "bass" ? 0.25 : role === "stab" ? 0.12 : 0);
-  let drive: Tone.Distortion | null = null;
-  if (driveAmt > 0) { drive = new Tone.Distortion(Math.min(1, driveAmt)); drive.connect(head); head = drive; disp.push(drive); }
-  const cutoff = fx.filter?.cutoff ?? p.cutoff ?? ROLE_CUTOFF[role] ?? 20000;
-  const filter = new Tone.Filter(cutoff, fx.filter?.type ?? "lowpass"); filter.Q.value = fx.filter?.q ?? p.resonance ?? 0.7;
+  const crush = live || base.crush > 0 ? new Tone.BitCrusher(Math.max(4, Math.min(12, base.crush || 8))) : null;
+  if (crush) { crush.wet.value = base.crush > 0 ? 1 : 0; crush.connect(head); head = crush; disp.push(crush); }
+  const drive = live || base.drive > 0 ? new Tone.Distortion(Math.min(1, Math.max(0.001, base.drive))) : null;
+  if (drive) { drive.wet.value = base.drive > 0 ? 1 : 0; drive.connect(head); head = drive; disp.push(drive); }
+  const filter = new Tone.Filter(base.cutoff, fx.filter?.type ?? "lowpass"); filter.Q.value = base.q;
   filter.connect(head); head = filter; disp.push(filter);
   const gate = new Tone.Gain(1); gate.connect(head); head = gate; disp.push(gate);
 
-  const revAmt = fx.reverb ?? REV_WET[role] ?? 0;
-  let send: Tone.Gain | null = null;
-  if (revAmt > 0) { send = new Tone.Gain(revAmt); volume.connect(send); send.connect(buses.reverb); disp.push(send); }
+  // The reverb send always exists at the track's amount, so "more space on the pad" is a ramp.
+  const send = live || base.reverb > 0 ? new Tone.Gain(base.reverb) : null;
+  if (send) { volume.connect(send); send.connect(buses.reverb); disp.push(send); }
 
   const vel = (n: Note) => Math.min(1, n[3] / 127);
   const durSec = (n: Note, bpm: number) => Math.max(0.05, n[2] * (60 / bpm));
@@ -89,43 +139,61 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: 
       case "filter.cutoff": return ramp(filter.frequency as unknown as Tone.Signal<"frequency">, curve !== "linear");
       case "filter.q": return ramp(filter.Q as unknown as Tone.Signal<"positive">, false);
       case "volume": { const trim = ROLE_TRIM[role] ?? 0; volume.volume.cancelScheduledValues(t0); volume.volume.setValueAtTime(from + trim, t0); volume.volume.linearRampToValueAtTime(to + trim, t1); return true; }
-      case "pan": return ramp(panner.pan as unknown as Tone.Signal<"audioRange">, false);
+      case "pan": return panner ? ramp(panner.pan as unknown as Tone.Signal<"audioRange">, false) : false;
+      case "width": return widener ? ramp(widener.width as unknown as Tone.Signal<"normalRange">, false) : false;
       case "reverb": return send ? ramp(send.gain as unknown as Tone.Signal<"normalRange">, false) : false;
       case "delay.wet": return delay ? ramp(delay.wet as unknown as Tone.Signal<"normalRange">, false) : false;
-      case "drive": if (drive) { drive.distortion = Math.min(1, Math.max(0, to)); return true; } return false;
+      case "drive": { if (!drive) return false; drive.distortion = Math.min(1, Math.max(0.001, to)); drive.wet.rampTo(to > 0 ? 1 : 0, Math.max(0.01, t1 - t0)); return true; }
       default: return false;
     }
   };
 
+  // A move the producer made: the numbers that can ramp, ramped; the ones that cannot are a new voice.
+  // It also puts back whatever an automation sweep or a trance gate left behind, so every new
+  // schedule starts from the written record instead of from the middle of a filter sweep.
+  const tune: Voice["tune"] = (t) => {
+    base = baseOf(t);
+    gate.gain.rampTo(1, 0.02);
+    filter.frequency.rampTo(base.cutoff, RAMP);
+    filter.Q.rampTo(base.q, RAMP);
+    volume.volume.rampTo(base.volume, RAMP);
+    panner?.pan.rampTo(base.pan, RAMP);
+    widener?.width.rampTo(base.width, RAMP);
+    send?.gain.rampTo(base.reverb, RAMP);
+    if (delay) { delay.delayTime.rampTo(base.delayTime, RAMP); delay.feedback.rampTo(base.delayFeedback, RAMP); delay.wet.rampTo(base.delayWet, RAMP); }
+    if (drive) { drive.distortion = Math.min(1, Math.max(0.001, base.drive)); drive.wet.rampTo(base.drive > 0 ? 1 : 0, RAMP); }
+    if (crush) { if (base.crush > 0) crush.bits.value = Math.max(4, Math.min(12, base.crush)); crush.wet.rampTo(base.crush > 0 ? 1 : 0, RAMP); }
+  };
 
   let trigger: Voice["trigger"];
-  const kitSound: KitSound | null = ["kick", "clap", "snare", "hat", "openhat", "perc"].includes(role) ? (role as KitSound) : null;
+  const kitSound: KitSound | null = DRUM_ROLES.includes(role) ? (role as KitSound) : null;
   // A drum track carrying its own clip (a one-shot sliced from a record) plays that sound; else the kit; else the synth.
   const drumBuf = kitSound ? (track.clip && clip ? clip : kit && !p.wave ? kit[kitSound] : undefined) : undefined;
   if (kitSound && drumBuf) {
     // Sampled drums: one Player per voice, velocity to gain, tune to rate, optional decay shaping.
+    // Tune and decay are read per hit, so "tune the kick down" never rebuilds the voice.
     const player = new Tone.Player(drumBuf);
     const decayGain = new Tone.Gain(1);
     player.connect(decayGain); decayGain.connect(head); disp.push(player, decayGain);
-    const rate = Math.pow(2, ((p.drumTune ?? 0) + (track.clip && clip ? track.clip.semitones ?? 0 : 0)) / 12);
-    const dec = p.drumDecay;
+    const clipSemis = track.clip && clip ? track.clip.semitones ?? 0 : 0;
     const clipGain = track.clip && clip ? track.clip.gainDb ?? 0 : 0;
     trigger = (n, t) => {
-      player.playbackRate = rate;
+      player.playbackRate = Math.pow(2, (base.drumTune + clipSemis) / 12);
       player.volume.value = clipGain + 20 * Math.log10(Math.max(0.03, vel(n)));
+      const dec = base.drumDecay;
       if (dec) { decayGain.gain.cancelScheduledValues(t); decayGain.gain.setValueAtTime(1, t); decayGain.gain.exponentialRampToValueAtTime(0.001, t + dec); }
       try { player.start(t); } catch { /* overlapping start */ }
     };
-    return { trigger, automate, gate, out: volume, setVolume: (db) => volume.volume.rampTo(db + (ROLE_TRIM[role] ?? 0), 0.03), dispose: () => disp.forEach((d) => d.dispose()) };
+    return { trigger, automate, gate, out: volume, setVolume: (db) => volume.volume.rampTo(db + (ROLE_TRIM[role] ?? 0), 0.03), tune, dispose: () => disp.forEach((d) => d.dispose()) };
   }
   switch (role) {
     case "kick": {
-      const tune = 48 * Math.pow(2, (p.drumTune ?? 0) / 12);
+      const tune0 = 48 * Math.pow(2, (p.drumTune ?? 0) / 12);
       const body = new Tone.MembraneSynth({ pitchDecay: 0.035, octaves: 5.5, oscillator: { type: "sine" }, envelope: { attack: 0.001, decay: p.drumDecay ?? 0.32, sustain: 0 } }).connect(head);
       const click = new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.02, sustain: 0 } });
       const clickHp = new Tone.Filter(3000, "highpass").connect(head); click.connect(clickHp);
       disp.push(body, click, clickHp);
-      trigger = (n, t) => { body.triggerAttackRelease(tune, (p.drumDecay ?? 0.32) + 0.05, t, vel(n)); click.triggerAttackRelease(0.02, t, vel(n) * 0.5); };
+      trigger = (n, t) => { body.triggerAttackRelease(tune0, (p.drumDecay ?? 0.32) + 0.05, t, vel(n)); click.triggerAttackRelease(0.02, t, vel(n) * 0.5); };
       break;
     }
     case "clap": {
@@ -208,5 +276,5 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: 
     }
   }
 
-  return { trigger, automate, gate, out: volume, setVolume: (db) => volume.volume.rampTo(db + (ROLE_TRIM[role] ?? 0), 0.03), dispose: () => disp.forEach((d) => d.dispose()) };
+  return { trigger, automate, gate, out: volume, setVolume: (db) => volume.volume.rampTo(db + (ROLE_TRIM[role] ?? 0), 0.03), tune, dispose: () => disp.forEach((d) => d.dispose()) };
 }

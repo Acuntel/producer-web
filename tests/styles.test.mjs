@@ -28,7 +28,7 @@ test("every source directory is in the tailwind content globs", () => {
 
 test("arbitrary-value classes used in components survive the build", () => {
   // Guards the class shapes the stage depends on: the speak button size, the stage grid, the lane height.
-  for (const [file, cls] of [["components/SpeakButton.tsx", "h-[88px]"], ["components/Field.tsx", "h-7"], ["app/page.tsx", "lg:grid-cols-[minmax(0,1fr)_minmax(320px,40%)]"]]) {
+  for (const [file, cls] of [["components/SpeakButton.tsx", "h-[88px]"], ["components/Board.tsx", "min-h-[240px]"], ["app/page.tsx", "lg:grid-cols-[minmax(0,1fr)_minmax(320px,40%)]"]]) {
     assert.ok(readFileSync(file, "utf8").includes(cls), `${file} should still use ${cls}`);
   }
 });

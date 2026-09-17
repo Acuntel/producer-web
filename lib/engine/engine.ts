@@ -1,31 +1,32 @@
-// The live studio transport: play/pause/stop, hot-swap while playing, loop
-// regions, jump to a section, the visible playhead.
+// The live studio transport: play/pause/stop, a change applied to the rig while it
+// plays, loop regions, jump to a section, the visible playhead, and the rig's health.
 import * as Tone from "tone";
 import type { Song } from "../song/types";
-import { buildGraph, type Clips, type Graph, type Health } from "./graph";
-import { locate, loopBounds, type SectionSpan } from "./schedule";
+import { Rig, type Clips, type Health } from "./rig";
+import { locate, loopBounds, type SectionSpan, type Schedule } from "./schedule";
 import { loadClipsFor, clipKeysFor } from "./clips";
-import { getKit, type Kit } from "./kits";
+import { getKit, kitStyleFor, type Kit } from "./kits";
 
 export type Levels = { master: [number, number]; spectrum: Float32Array | null; tracks: Record<string, number> };
 export type Position = { section: string; sectionId: string; index: number; barInSection: number; beatInBar: number; absBar: number; beat: number };
-// What a DAW shows in its corner: dropouts, and how many graphs are actually alive on the transport (one is right;
+// What a DAW shows in its corner: dropouts, and how many rigs are actually alive on the transport (one is right;
 // more than one means an older build of the record is still playing underneath the current one).
 export type EngineHealth = { graphsAlive: number; events: number; late: number; minMarginMs: number; rebuilds: number; lastRebuildMs: number };
 
-// Every graph built on the live transport, so a leak (a build that was never torn down) is countable.
-const liveGraphs = new Set<Graph>();
+// Every rig alive on the live transport, so a leak (one that was never torn down) is countable.
+const liveRigs = new Set<Rig>();
 
 export class Engine {
-  private graph: Graph | null = null;
-  private rebuilds = 0;
-  private lastRebuildMs = 0;
-  private folded: Health = { events: 0, late: 0, minMarginMs: Infinity };   // counts from graphs already torn down, so deltas across rebuilds are honest
+  private rig: Rig | null = null;
   private watch: number | null = null;
-  private sectionStarts: SectionSpan[] = [];
-  private builtBeats = 0;
   private clips: Clips = new Map();
   private kit: Kit | null = null;
+  private kitId = "";
+  private song: Song | null = null;
+  private rebuilds = 0;
+  private lastRebuildMs = 0;
+  private folded: Health = { events: 0, late: 0, minMarginMs: Infinity };   // counts from rigs already torn down
+  private lastSection = -1;
   playing = false;
   onSection: ((name: string, index: number, total: number) => void) | null = null;
 
@@ -33,9 +34,11 @@ export class Engine {
 
   async start(song: Song) {
     await Tone.start();
-    await this.prepareClips(song);
-    this.kit = await getKit(song.lane, song.kit, song.bpm);
-    this.buildLive(song);
+    await this.prepare(song);
+    // Whatever a load built before the session opened comes down first: two rigs on one
+    // transport is the whole record playing twice, a beat apart.
+    this.teardown();
+    this.lay(song);
     this.transport.start();
     this.playing = true;
   }
@@ -44,19 +47,16 @@ export class Engine {
   resume() { this.transport.start(); this.playing = true; }
   stop() { this.transport.stop(); this.transport.cancel(); this.teardown(); this.playing = false; }
 
-  // Rebuild playing OR paused, keeping the groove position (clamped to the new length).
+  /** A change, applied while it plays. Before the session opens this only remembers the record. */
   async update(song: Song) {
-    await this.prepareClips(song);
-    this.kit = await getKit(song.lane, song.kit, song.bpm);
-    const pos = this.transport.ticks;
-    this.teardown();
-    this.buildLive(song);
-    const end = Math.max(1, this.builtBeats * this.transport.PPQ);
-    this.transport.ticks = pos % end;
+    this.song = song;
+    await this.prepare(song);
+    if (!this.rig) return;
+    this.lay(song);
   }
 
   goto(sectionIdOrName: string): boolean {
-    const s = this.sectionStarts.find((x) => x.id === sectionIdOrName || x.name.toLowerCase() === sectionIdOrName.toLowerCase());
+    const s = this.sections.find((x) => x.id === sectionIdOrName || x.name.toLowerCase() === sectionIdOrName.toLowerCase());
     if (!s) return false;
     this.transport.ticks = Math.round(s.startBeat * this.transport.PPQ);
     return true;
@@ -64,31 +64,38 @@ export class Engine {
 
   gotoBar(absBar: number) {
     const beat = Math.max(0, (absBar - 1) * 4);
-    if (beat >= this.builtBeats) return false;
+    if (beat >= this.totalBeats) return false;
     this.transport.ticks = Math.round(beat * this.transport.PPQ);
     return true;
   }
 
   getBeat(): number | null {
-    if (this.sectionStarts.length === 0) return null;
+    if (this.sections.length === 0) return null;
     return this.transport.ticks / this.transport.PPQ;
   }
 
   getPosition(): Position | null {
     const beat = this.getBeat();
     if (beat === null) return null;
-    const l = locate(this.sectionStarts, beat);
+    const l = locate(this.sections, beat);
     return l ? { ...l, beat } : null;
   }
 
-  /** Live meters in dB (about -100 silent, 0 full) and the master spectrum (dB per bin). Null before the graph exists. */
+  /** Live meters in dB (about -100 silent, 0 full) and the master spectrum (dB per bin). Null before the rig exists. */
   getLevels(): Levels | null {
-    const g = this.graph; if (!g) return null;
-    const m = g.analysis.meter.getValue();
+    const r = this.rig; if (!r) return null;
+    const m = r.analysis.meter.getValue();
     const master: [number, number] = Array.isArray(m) ? [Number(m[0]), Number(m[1] ?? m[0])] : [Number(m), Number(m)];
     const tracks: Record<string, number> = {};
-    for (const [id, tm] of g.analysis.tracks) { const v = tm.getValue(); tracks[id] = Array.isArray(v) ? Number(v[0]) : Number(v); }
-    return { master, spectrum: g.analysis.fft.getValue(), tracks };
+    for (const [id, tm] of r.analysis.tracks) { const v = tm.getValue(); tracks[id] = Array.isArray(v) ? Number(v[0]) : Number(v); }
+    return { master, spectrum: r.analysis.fft.getValue(), tracks };
+  }
+
+  /** Dropouts and leaks, summed over every rig alive on the transport. */
+  health(): EngineHealth {
+    let { events, late, minMarginMs } = this.folded;
+    for (const r of liveRigs) { events += r.health.events; late += r.health.late; if (r.health.minMarginMs < minMarginMs) minMarginMs = r.health.minMarginMs; }
+    return { graphsAlive: liveRigs.size, events, late, minMarginMs, rebuilds: this.rebuilds, lastRebuildMs: this.lastRebuildMs };
   }
 
   /** Audition one clip, once, through the master. The producer's "listen to this". */
@@ -100,63 +107,65 @@ export class Engine {
     return true;
   }
 
-  /** Dropouts and leaks, summed over every graph alive on the transport. */
-  health(): EngineHealth {
-    let { events, late, minMarginMs } = this.folded;
-    for (const g of liveGraphs) { events += g.health.events; late += g.health.late; if (g.health.minMarginMs < minMarginMs) minMarginMs = g.health.minMarginMs; }
-    return { graphsAlive: liveGraphs.size, events, late, minMarginMs, rebuilds: this.rebuilds, lastRebuildMs: this.lastRebuildMs };
-  }
-
   /** The music steps back while the producer speaks, and comes back after. */
   duck(on: boolean) { try { Tone.getDestination().volume.rampTo(on ? -7 : 0, on ? 0.12 : 0.35); } catch { /* no context yet */ } }
 
   /** A fader move while playing: the voice ramps, nothing is rebuilt. */
-  setTrackVolume(id: string, db: number): boolean { const v = this.graph?.voiceById.get(id); if (!v) return false; v.setVolume(db); return true; }
+  setTrackVolume(id: string, db: number): boolean { const v = this.rig?.voiceById.get(id); if (!v) return false; v.setVolume(db); return true; }
 
-  get totalBeats() { return this.builtBeats; }
-  get sections() { return this.sectionStarts; }
+  get totalBeats() { return this.rig?.schedule.totalBeats ?? 0; }
+  get sections(): SectionSpan[] { return this.rig?.schedule.sectionStarts ?? []; }
+  /** Exactly the hits the transport will fire, humanized timing and all, for the board to draw. */
+  getSchedule(): Schedule | null { return this.rig?.schedule ?? null; }
 
-  private async prepareClips(song: Song) {
+  private async prepare(song: Song) {
     const ids = clipKeysFor(song);
-    if (ids.length === 0) return;
     const missing = ids.filter((id) => !this.clips.has(id));
-    if (missing.length === 0) return;
-    const loaded = await loadClipsFor(missing);
-    for (const [k, v] of loaded) this.clips.set(k, v);
+    if (missing.length) { const loaded = await loadClipsFor(missing); for (const [k, v] of loaded) this.clips.set(k, v); }
+    // Only what this record references is held here; a voice still playing an old clip keeps its own reference.
+    const want = new Set(ids);
+    for (const k of [...this.clips.keys()]) if (!want.has(k)) this.clips.delete(k);
+    const kitId = `${song.kit ?? "synth"}|${kitStyleFor(song.lane, song.bpm)}`;
+    if (kitId !== this.kitId || !this.kit) { this.kit = await getKit(song.lane, song.kit, song.bpm); this.kitId = kitId; }
   }
 
-  private buildLive(song: Song) {
+  // One pass of the record onto the rig, keeping the groove position (clamped to the new length).
+  private lay(song: Song) {
     const t0 = performance.now();
-    const g = buildGraph(song, this.transport, this.clips, this.kit ?? undefined);
+    if (!this.rig) { this.rig = new Rig(this.transport); liveRigs.add(this.rig); }
+    const pos = this.transport.ticks;
+    this.rig.apply(song, this.clips, this.kit ?? undefined, this.kitId);
     this.rebuilds++; this.lastRebuildMs = Math.round(performance.now() - t0);
-    liveGraphs.add(g);
-    this.graph = g;
-    this.sectionStarts = g.schedule.sectionStarts;
-    this.builtBeats = g.schedule.totalBeats;
-    const loop = loopBounds(song, this.sectionStarts, this.builtBeats);
+    const end = Math.max(1, this.totalBeats * this.transport.PPQ);
+    if (pos > end) this.transport.ticks = pos % end;
+    const loop = loopBounds(song, this.sections, this.totalBeats);
     this.transport.loop = true;
     this.transport.loopStart = `${Math.round(loop.start * this.transport.PPQ)}i`;
     this.transport.loopEnd = `${Math.round(Math.max(loop.start + 1, loop.end) * this.transport.PPQ)}i`;
     const beat = this.transport.ticks / this.transport.PPQ;
     if (beat < loop.start || beat >= loop.end) this.transport.ticks = Math.round(loop.start * this.transport.PPQ);
-    if (this.watch) window.clearInterval(this.watch);
-    this.watch = window.setInterval(() => {
-      if (!this.playing || !this.onSection) return;
-      const b = this.transport.ticks / this.transport.PPQ;
-      const idx = g.schedule.sectionStarts.findIndex((s) => b >= s.startBeat && b < s.startBeat + s.beats);
-      if (idx >= 0) this.onSection(g.schedule.sectionStarts[idx].name, idx, g.schedule.sectionStarts.length);
-    }, 250);
+    if (!this.watch) this.watch = window.setInterval(() => this.tellSection(), 200);
+  }
+
+  private tellSection() {
+    if (!this.playing || !this.onSection || !this.rig) return;
+    const b = this.transport.ticks / this.transport.PPQ;
+    const starts = this.sections;
+    const idx = starts.findIndex((s) => b >= s.startBeat && b < s.startBeat + s.beats);
+    if (idx < 0 || idx === this.lastSection) return;
+    this.lastSection = idx;
+    this.onSection(starts[idx].name, idx, starts.length);
   }
 
   private teardown() {
     if (this.watch) { window.clearInterval(this.watch); this.watch = null; }
-    const g = this.graph;
-    if (!g) return;
-    g.parts.forEach((p) => { p.stop(); p.dispose(); });
-    g.voices.forEach((v) => v.dispose());
-    g.nodes.forEach((n) => n.dispose());
-    this.folded.events += g.health.events; this.folded.late += g.health.late; if (g.health.minMarginMs < this.folded.minMarginMs) this.folded.minMarginMs = g.health.minMarginMs;
-    liveGraphs.delete(g);
-    this.graph = null;
+    const r = this.rig;
+    if (!r) return;
+    this.folded.events += r.health.events; this.folded.late += r.health.late;
+    if (r.health.minMarginMs < this.folded.minMarginMs) this.folded.minMarginMs = r.health.minMarginMs;
+    r.dispose();
+    liveRigs.delete(r);
+    this.rig = null;
+    this.lastSection = -1;
   }
 }

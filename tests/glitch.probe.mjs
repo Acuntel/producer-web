@@ -23,7 +23,11 @@ const { result: { sessionId } } = await send("Target.attachToTarget", { targetId
 await send("Page.enable", {}, sessionId); await send("Runtime.enable", {}, sessionId);
 await send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId);
 const errors = [];
-ws.addEventListener("message", (m) => { const d = JSON.parse(m.data); if (d.method === "Runtime.exceptionThrown") errors.push((d.params?.exceptionDetails?.exception?.description ?? d.params?.exceptionDetails?.text ?? "").slice(0, 300)); });
+ws.addEventListener("message", (m) => {
+  const d = JSON.parse(m.data);
+  if (d.method === "Runtime.exceptionThrown") errors.push((d.params?.exceptionDetails?.exception?.description ?? d.params?.exceptionDetails?.text ?? "").slice(0, 300));
+  if (d.method === "Runtime.consoleAPICalled" && (d.params?.type === "error" || d.params?.type === "warning")) errors.push(`${d.params.type}: ${(d.params.args ?? []).map((a) => a.description ?? a.value ?? "").join(" ").slice(0, 300)}`);
+});
 const js = async (expr) => { const r = await send("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true }, sessionId); if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description ?? "eval failed"); return r.result?.result?.value; };
 const waitFor = async (expr, ms, what) => { const t0 = Date.now(); for (;;) { const v = await js(expr); if (v) return v; if (Date.now() - t0 > ms) throw new Error(`timeout waiting for ${what}`); await sleep(400); } };
 
@@ -32,21 +36,44 @@ await waitFor(`typeof window.__audio === "function" && !!window.__audio()`, 6000
 await waitFor(`/playing/.test(document.querySelector('[data-role="status"]')?.innerText ?? '')`, 60000, "the transport to play").catch(() => console.log("[glitch] status never said playing; measuring anyway"));
 // Long tasks on the main thread (anything over 50 ms blocks the scheduler's tick), and the cost of every rebuild.
 await js(`(() => {
-  window.__lt = []; new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__lt.push(Math.round(e.duration)); }).observe({ entryTypes: ["longtask"] });
+  window.__lt = []; new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__lt.push({ d: Math.round(e.duration), t: Math.round(e.startTime) }); }).observe({ entryTypes: ["longtask"] });
   const P = Object.getPrototypeOf(window.__engine()); const orig = P.update; window.__updates = [];
   P.update = async function (s) { const t0 = performance.now(); await orig.call(this, s); window.__updates.push(Math.round(performance.now() - t0)); };
   return true; })()`);
 const health = async () => JSON.parse(await js(`JSON.stringify(window.__audio())`));
 const longTasks = async () => JSON.parse(await js(`JSON.stringify(window.__lt.splice(0))`));
 const sum = (a) => a.reduce((x, y) => x + y, 0);
-const line = (label, h0, h1, lt, ups) => console.log(`[glitch] ${label}: events ${h1.events - h0.events}, late ${h1.late - h0.late}, thinnest margin ${Number.isFinite(h1.minMarginMs) ? h1.minMarginMs.toFixed(1) : "n/a"} ms, graphs alive ${h1.graphsAlive}, long tasks ${lt.length} (max ${lt.length ? Math.max(...lt) : 0} ms, total ${sum(lt)} ms)${ups ? `, rebuilds ${ups.length} (max ${Math.max(...ups)} ms, mean ${Math.round(sum(ups) / ups.length)} ms)` : ""}`);
+const line = (label, h0, h1, lt, ups) => {
+  const ds = lt.map((x) => x.d);
+  const worst = [...lt].sort((a, b) => b.d - a.d).slice(0, 3).map((x) => `${x.d} ms at ${(x.t / 1000).toFixed(1)} s`);
+  console.log(`[glitch] ${label}: events ${h1.events - h0.events}, late ${h1.late - h0.late}, thinnest margin ${Number.isFinite(h1.minMarginMs) ? h1.minMarginMs.toFixed(1) : "n/a"} ms, graphs alive ${h1.graphsAlive}, long tasks ${lt.length} (max ${ds.length ? Math.max(...ds) : 0} ms, total ${sum(ds)} ms)${ups ? `, rebuilds ${ups.length} (max ${Math.max(...ups)} ms, mean ${Math.round(sum(ups) / ups.length)} ms)` : ""}`);
+  if (worst.length) console.log(`[glitch]   worst blocks: ${worst.join(", ")} (page time)`);
+};
 
 const song = JSON.parse(await js(`localStorage.getItem('producer.song.v4')`));
 console.log(`[glitch] record: ${song.title}, ${song.bpm} BPM, ${song.tracks.length} tracks, ${song.sections.length} sections`);
-// 1. Untouched: eight seconds of playback with nothing changing.
+// 1. Untouched: eight seconds of playback with nothing changing, with the profiler on it so a
+// block is named rather than guessed at.
 await longTasks();
+await send("Profiler.enable", {}, sessionId);
+await send("Profiler.setSamplingInterval", { interval: 500 }, sessionId);
+await send("Profiler.start", {}, sessionId);
 const a0 = await health(); await sleep(8000); const a1 = await health();
+const prof = (await send("Profiler.stop", {}, sessionId)).result?.profile;
 line("untouched 8 s", a0, a1, await longTasks());
+if (prof?.nodes) {
+  const self = new Map();
+  const byId = new Map(prof.nodes.map((n) => [n.id, n]));
+  const dt = prof.timeDeltas ?? [];
+  prof.samples.forEach((id, i) => {
+    const n = byId.get(id); if (!n) return;
+    const f = n.callFrame;
+    const name = `${f.functionName || "(anonymous)"} ${String(f.url || "").split("/").pop() ?? ""}:${f.lineNumber}`;
+    self.set(name, (self.get(name) ?? 0) + (dt[i] ?? 0) / 1000);
+  });
+  const top = [...self.entries()].filter(([k]) => !/^\(program\)|^\(idle\)|^\(garbage/.test(k)).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  console.log(`[glitch]   where the thread went: ${top.map(([k, v]) => `${k} ${Math.round(v)} ms`).join(" · ")}`);
+}
 
 // 2. A working session: ten instant moves, each one a full rebuild, spaced the way a person talks.
 const MOVES = ["mute the pad", "unmute the pad", "mute the hats", "unmute the hats", "128 bpm", "126 bpm", "louder", "quieter", "mute the clap", "unmute the clap"];
@@ -56,6 +83,12 @@ for (const m of MOVES) { await type(m); await sleep(900); }
 await sleep(3000);
 const b1 = await health();
 line("ten moves", b0, b1, await longTasks(), JSON.parse(await js(`JSON.stringify(window.__updates.splice(0))`)));
+// How long the studio takes to hear itself, measured rather than assumed.
+await waitFor(`(window.__ears?.()?.sections ?? 0) > 0 || (window.__facts?.() ? 1 : 0)`, 120000, "the first listen to land").catch(() => console.log("[glitch] the first listen had not landed after two minutes"));
+const ears = JSON.parse(await js(`JSON.stringify(window.__ears?.() ?? null)`) ?? "null");
+if (ears) console.log(`[glitch] listening: ${ears.sections} renders (${ears.cached} from cache), render ${ears.renderMs} ms, measure ${ears.hearMs} ms, off the main thread: ${ears.worker ? "yes" : "NO"}`);
+const facts = JSON.parse(await js(`(() => { const f = window.__facts?.(); return f ? JSON.stringify({ bpm: Math.round(f.tempo.bpm), key: f.key.name, lufs: Math.round(f.loudness.integrated * 10) / 10, sections: f.structure.sections.length, read: (f.read || "").slice(0, 90) }) : "null"; })()`) ?? "null");
+console.log(facts ? `[glitch] the ears heard: ${facts.bpm} BPM, ${facts.key}, ${facts.lufs} LUFS, ${facts.sections} sections. "${facts.read}"` : "[glitch] THE EARS HEARD NOTHING (facts are null)");
 
 // 3. The open-a-project path: the record is loaded (update) before the session starts (start).
 const c = JSON.parse(await js(`(async () => { const e = window.__engine(); const E = e.constructor; const s = JSON.parse(localStorage.getItem('producer.song.v4'));

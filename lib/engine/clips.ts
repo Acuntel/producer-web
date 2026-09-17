@@ -34,7 +34,34 @@ export function newClipId() {
   return `clip_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+// Decoded audio is the heaviest thing the browser holds: one four minute stem is about
+// 170 MB of float samples, so the cache is a fixed room. Least recently asked for leaves
+// first; a buffer a voice is still playing lives on through that voice's own reference.
 const decoded = new Map<string, AudioBuffer>();
+const CACHE_MAX_BYTES = 256 * 1024 * 1024;
+let cachedBytes = 0;
+const bytesOf = (b: AudioBuffer) => b.length * b.numberOfChannels * 4;
+
+function remember(id: string, buf: AudioBuffer) {
+  const had = decoded.get(id);
+  if (had) { cachedBytes -= bytesOf(had); decoded.delete(id); }
+  decoded.set(id, buf); cachedBytes += bytesOf(buf);
+  for (const [k, v] of decoded) {
+    if (cachedBytes <= CACHE_MAX_BYTES) break;
+    if (k === id) continue;
+    decoded.delete(k); cachedBytes -= bytesOf(v);
+  }
+}
+
+// Asking for a buffer makes it the most recent (Map keeps insertion order, so re-setting moves it to the end).
+function recall(id: string): AudioBuffer | undefined {
+  const v = decoded.get(id);
+  if (v) { decoded.delete(id); decoded.set(id, v); }
+  return v;
+}
+
+/** What the decoded cache is holding, for the board's corner and the probes. */
+export const clipCacheBytes = () => cachedBytes;
 
 export async function decodeBytes(bytes: ArrayBuffer): Promise<AudioBuffer> {
   const ctx = new OfflineAudioContext(2, 1, 44100);
@@ -50,12 +77,13 @@ async function decodeStored(id: string): Promise<AudioBuffer | null> {
 export async function loadClipsFor(ids: string[]): Promise<Map<string, AudioBuffer>> {
   const out = new Map<string, AudioBuffer>();
   for (const id of ids) {
-    if (decoded.has(id)) { out.set(id, decoded.get(id)!); continue; }
+    const have = recall(id);
+    if (have) { out.set(id, have); continue; }
     try {
       const sid = sampleIdOf(id);
       const buf = sid ? await (await import("./samples")).decodeSample(sid) : await decodeStored(id);
       if (!buf) continue;
-      decoded.set(id, buf); out.set(id, buf);
+      remember(id, buf); out.set(id, buf);
     } catch { /* skip broken clip */ }
   }
   return out;
@@ -79,4 +107,4 @@ export function clipBuffer(clips: Map<string, AudioBuffer>, clip: AudioClip | un
   return fromSample ?? (clip.clipId ? clips.get(clip.clipId) : undefined);
 }
 
-export function cacheDecoded(id: string, buf: AudioBuffer) { decoded.set(id, buf); }
+export function cacheDecoded(id: string, buf: AudioBuffer) { remember(id, buf); }

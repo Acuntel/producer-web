@@ -55,7 +55,6 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const [starting, setStarting] = useState(false);
   const [paused, setPaused] = useState(false);
   const [nowSection, setNowSection] = useState(-1);
-  const [beat, setBeat] = useState<number | null>(null);
   const [library, setLibrary] = useState<SavedSong[]>([]);
   const [clips, setClips] = useState<ClipMeta[]>([]);
   const [facts, setFacts] = useState<MusicFacts | null>(null);
@@ -105,11 +104,9 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     void import("@/lib/engine").then(({ listClips }) => listClips().then((all) => setClips(all.map((c) => ({ id: c.id, name: c.name, bpm: c.bpm, key: c.key, durationSec: c.durationSec }))))).catch(() => {});
   }, []);
   useEffect(() => { try { localStorage.setItem(SONG_KEY, JSON.stringify(song)); localStorage.setItem(CHAT_KEY, JSON.stringify(messages.slice(-40))); } catch {} }, [song, messages]);
-  useEffect(() => {
-    if (!started) return;
-    const t = window.setInterval(() => setBeat(engineRef.current?.getBeat() ?? null), 90);
-    return () => window.clearInterval(t);
-  }, [started]);
+  // No playhead in React: the board reads the transport itself, sixty times a second, without
+  // re-rendering the page. A state update every ninety milliseconds was re-rendering everything
+  // on screen eleven times a second and starving the scheduler that has to hit the beat.
 
   const flash = useCallback((t: string) => { setToast(t); setTimeout(() => setToast(""), 1800); }, []);
   // The meter: every brain call adds its list-price cost to this record's running total.
@@ -144,7 +141,24 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   }, []);
 
   // The ears on our own render. Only changed sections re-render (cache); sequenced so stale results never win.
+  // One listen at a time, and the newest version wins. Two renders racing was the studio competing
+  // with itself for the thread that has to hit the next beat; a queue of them meant the producer was
+  // still listening to a record from five moves ago.
+  const listening = useRef(false);
+  const nextToHear = useRef<Song | null>(null);
   const hearNow = useCallback(async (s: Song): Promise<MusicFacts | null> => {
+    if (listening.current) { nextToHear.current = s; return null; }
+    listening.current = true;
+    try { return await hearOnce(s); }
+    finally {
+      listening.current = false;
+      const again = nextToHear.current; nextToHear.current = null;
+      if (again) void hearNow(again);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const hearOnce = useCallback(async (s: Song): Promise<MusicFacts | null> => {
     const seq = ++hearSeq.current;
     setHearing(true);
     try {
@@ -161,14 +175,22 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
           const { song: leveled } = applyOps(s, lv.ops);
           localMovesRef.current.push(`studio leveled master ${lv.delta > 0 ? "+" : ""}${lv.delta.toFixed(1)} dB (drop read ${lv.from.toFixed(1)} LUFS)`);
           flash(levelLine(lv));
-          void setSongRef.current?.(leveled, { noHistory: true, label: "level" });
+          // Silent on purpose: the leveler acts on what was just measured, and re-listening to its
+          // own gain move put the studio on a treadmill of renders it never got off.
+          void setSongRef.current?.(leveled, { noHistory: true, label: "level", silent: true });
         }
       }
       return f;
-    } catch { return null; }
+    } catch (e) { console.warn("listen failed", e instanceof Error ? e.message : e); return null; }
     finally { if (seq === hearSeq.current) setHearing(false); }
   }, []);
-  const refreshEars = useCallback((s: Song) => { void hearNow(s); }, [hearNow]);
+  // The ears follow a change instead of racing it: a burst of moves is heard once, when it settles.
+  const earsTimer = useRef<number | null>(null);
+  const refreshEars = useCallback((s: Song, after = 500) => {
+    if (earsTimer.current) window.clearTimeout(earsTimer.current);
+    earsTimer.current = window.setTimeout(() => { earsTimer.current = null; void hearNow(s); }, after);
+  }, [hearNow]);
+  useEffect(() => () => { if (earsTimer.current) window.clearTimeout(earsTimer.current); }, []);
 
   const setSong = useCallback(async (s: Song, opts?: { silent?: boolean; label?: string; noHistory?: boolean; noSnapshot?: boolean }) => {
     if (!opts?.noHistory) historyRef.current.push(songRef.current, opts?.label ?? "change");
@@ -195,13 +217,19 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const registerClip = useCallback((c: ClipMeta) => setClips((x) => (x.some((y) => y.id === c.id) ? x : [...x, c])), []);
   // Live meters for the studio surfaces; a fader drag moves the voice directly and commits once on release.
   const getLevels = useCallback(() => engineRef.current?.getLevels() ?? null, []);
+  // What the board paints from: the hits the transport will fire, where it is, and the rig's health.
+  const getSchedule = useCallback(() => engineRef.current?.getSchedule() ?? null, []);
+  const getHealth = useCallback(() => engineRef.current?.health() ?? null, []);
   // Harness ears: a probe can read the real output levels, so "can you hear it" is a measurement, not a hope.
   useEffect(() => {
     if (!isE2E()) return;
-    const w = window as unknown as { __levels?: () => unknown; __audio?: () => unknown; __engine?: () => unknown };
+    const w = window as unknown as { __levels?: () => unknown; __audio?: () => unknown; __engine?: () => unknown; __facts?: () => unknown };
     w.__levels = () => engineRef.current?.getLevels() ?? null;
     w.__audio = () => engineRef.current?.health() ?? null;   // dropouts, graphs alive, rebuild cost
     w.__engine = () => engineRef.current;
+    w.__facts = () => factsRef.current;
+    // Where a listen spends its time, so a stutter is traced and not guessed at.
+    void import("@/lib/engine").then((m) => { (window as unknown as { __ears?: () => unknown }).__ears = () => m.hearTiming; });
   }, [getLevels]);
   const setVolume = useCallback(async (id: string, db: number, commit: boolean) => {
     const res = applyOps(songRef.current, [{ op: "set", track: id, path: "volume", value: db }]);
@@ -499,7 +527,9 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
         const isGreeting = (t: string) => /^(New record\. Who are we chasing|We are back\.|We are live\. That is our groove)/.test(t);
         setMessages((m) => { const kept = [...m]; while (kept.length && kept[kept.length - 1].role === "assistant" && isGreeting(kept[kept.length - 1].content)) kept.pop(); return [...kept, { role: "assistant", content: greeting }]; });
         say(greeting);
-        refreshEars(songRef.current);
+        // The record gets a clean start: the first listen waits until the transport has settled,
+        // because building a render while the first bar is being scheduled is what the ear catches.
+        refreshEars(songRef.current, 2500);
       } finally { setStarting(false); }
       return;
     }
@@ -526,7 +556,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const { loadSaved, saveNow, download } = useLibraryActions({ autoSave, flash, say, setSong, started, getSong: () => songRef.current, setRendering });
   const { addReference, addClip } = useUploads({ flash, send, setSong, setClips, factsRef, referenceRef, setReference, setDeltaText, getSong: () => songRef.current });
 
-  return { song, messages, busy, started, starting, paused, nowSection, beat, library, clips, facts, hearing, reference, deltaText, listenHint, toast, lastMoveId, rendering, ab, score, canUndo, canRedo, rollout,
-    boot, send, sendVoice, ignored, ignoredCount, thatWasForMe, loadChat, newSession, setReferenceBuffer, moves, previewClip, brainDown, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, setVolume, toggleTrack,
+  return { song, messages, busy, started, starting, paused, nowSection, library, clips, facts, hearing, reference, deltaText, listenHint, toast, lastMoveId, rendering, ab, score, canUndo, canRedo, rollout,
+    boot, send, sendVoice, ignored, ignoredCount, thatWasForMe, loadChat, newSession, setReferenceBuffer, moves, previewClip, brainDown, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, getSchedule, getHealth, setVolume, toggleTrack,
     play, pause, append, tryLocal, spend, cost, getPosition, duck };
 }

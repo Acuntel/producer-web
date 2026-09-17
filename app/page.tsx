@@ -18,7 +18,7 @@ import { Landing } from "@/components/Landing";
 import { Library } from "@/components/Library";
 import { SpeakButton, type SpeakState } from "@/components/SpeakButton";
 import { Ribbon } from "@/components/Ribbon";
-import { Field } from "@/components/Field";
+import { Board } from "@/components/Board";
 import { WorkCards } from "@/components/WorkCards";
 import { StatusLine } from "@/components/StatusLine";
 import { AccountSheet } from "@/components/AccountSheet";
@@ -41,7 +41,7 @@ export default function App() {
   const snapshotRef = useRef<(s: Song, m: SnapshotMeta) => void>(() => {});
   const actionsRef = useRef<Actions>({ analyze: async () => {}, vocal: async () => {}, findSound: async () => {}, hear: async () => null, identify: async () => null, tracklist: async () => {} });
   const duckRef = useRef<(on: boolean) => void>(() => {});
-  const landingRef = useRef<(c: { open?: string; new?: boolean; library?: boolean }) => void>(() => {});
+  const landingRef = useRef<(c: { open?: string; new?: boolean; library?: boolean; account?: boolean }) => void>(() => {});
 
   const voiceOut = useVoiceOut({ duck: (on) => duckRef.current(on) });
   const hum = useHum();
@@ -89,7 +89,8 @@ export default function App() {
       else if (paused) await studio.play();
     } catch { studio.flash("Press and hold the button once so the browser lets the sound through."); }
   }
-  landingRef.current = ({ open, new: fresh, library }) => {
+  landingRef.current = ({ open, new: fresh, library, account: acct }) => {
+    if (acct) { setShowAccount(true); return; }
     if (library) { if (playing) void studio.pause(); setView("library"); return; }
     if (fresh) { void enter(async () => { projects.startFresh(); await studio.newSession(); }); return; }
     if (!open) return;
@@ -124,22 +125,24 @@ export default function App() {
             versionsOf={projects.versions} onOpenVersion={(v) => void enter(() => projects.openVersion(v))} onSignIn={account.enabled ? () => setShowAccount(true) : undefined} />
         </div>
       ) : (
-        <div className="relative z-10 flex min-h-0 flex-1 flex-col px-4 pb-3 pt-4 sm:px-8 sm:pt-5">
+        <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col px-4 pb-3 pt-4 sm:px-8 sm:pt-5">
+          {/* Nothing on the stage is pressed. The library, a new record and the account all answer
+              to the voice; the only control in the room is the one at the bottom. */}
           <header className="flex shrink-0 items-center justify-between gap-3">
-            <button onClick={() => { if (playing) void studio.pause(); setView("landing"); }} className="flex items-center gap-2.5 text-sm font-semibold text-ink-2 transition-colors hover:text-ink" aria-label="Back to the start">
+            <span className="flex items-center gap-2.5 text-sm font-semibold text-ink-2">
               <span className="mark h-7 w-7" />
               <span className="hidden sm:inline">The Producer</span>
-            </button>
+            </span>
             <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-3">
               <StatusLine song={song} cost={studio.cost} measured={measured} paused={paused} started={started} />
-              <button onClick={() => { if (playing) void studio.pause(); setView("library"); }} aria-label="Library" title="Library" data-role="library-button" className="grid h-8 w-8 place-items-center rounded-full bg-s2 text-ink-3 transition-colors hover:text-ink"><Icon name="library" size={15} /></button>
-              {account.enabled && <button onClick={() => setShowAccount(true)} aria-label={account.user ? "Your account" : "Sign in"} className="grid h-8 w-8 place-items-center rounded-full bg-s2 text-ink-3 transition-colors hover:text-ink"><Icon name="user" size={15} /></button>}
             </div>
           </header>
 
-          <section className="mt-4 grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,40%)] lg:grid-rows-1">
-            <div className="scroll-y flex max-h-[40dvh] min-h-0 flex-col gap-3 lg:max-h-none">
-              <Field song={song} beat={playing ? studio.beat : null} sectionIdx={studio.nowSection} playing={playing} getLevels={studio.getLevels} moves={studio.moves} />
+          <section className="mt-4 grid min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,40%)] lg:grid-rows-1">
+            <div className="flex max-h-[46dvh] min-h-0 min-w-0 flex-col gap-3 lg:max-h-none">
+              <Board song={song} playing={playing} facts={studio.facts} moves={studio.moves}
+                getLevels={studio.getLevels} getPosition={studio.getPosition} getSchedule={studio.getSchedule} getHealth={studio.getHealth} />
+              <div className="scroll-y flex shrink-0 flex-col gap-3">
               {song.tracks.length === 0 && !convo.work.length && (
                 <div className="rounded-3xl border border-line/50 bg-s1/50 px-5 py-6 text-center">
                   <p className="text-lg text-ink">Nothing on the record yet.</p>
@@ -155,8 +158,9 @@ export default function App() {
                 </div>
               )}
               {studio.listenHint && <p className="flex items-start gap-1.5 text-sm text-live"><Icon name="ear" size={15} className="mt-0.5 shrink-0" /><span>{studio.listenHint}</span></p>}
+              </div>
             </div>
-            <div className="flex min-h-0 flex-col justify-end">
+            <div className="flex min-h-0 min-w-0 flex-col justify-end">
               <Ribbon lines={studio.messages} interim={speak.interim} speakingText={voiceOut.current} thinking={convo.thinking || studio.busy} tall />
             </div>
           </section>

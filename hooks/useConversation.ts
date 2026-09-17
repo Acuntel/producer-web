@@ -18,7 +18,7 @@ type Deps = {
   voice: { speak: (t: string) => Promise<void>; stop: () => void; speaking: boolean };
   screen: "landing" | "library" | "stage";
   projects: string[];
-  onLanding: (c: { open?: string; new?: boolean; library?: boolean }) => void;
+  onLanding: (c: { open?: string; new?: boolean; library?: boolean; account?: boolean }) => void;
   grab?: (what: string, at?: number | null) => Promise<string | null>;   // a part of the heard record, into this one (hooks/useStems)
 };
 export type Timing = { stt: number; firstWord: number; voiceMs: number };
@@ -147,6 +147,7 @@ export function useConversation(d: Deps) {
     const s = dRef.current.studio;
     if (c.stop) { interrupt(true); return; }
     if (c.library) { dRef.current.onLanding({ library: true }); return; }
+    if (c.account) { dRef.current.onLanding({ account: true }); return; }
     if (c.grab?.what) { void doGrab(c.grab); }
     if (c.research) void doResearch(c.research);
     if (dRef.current.screen !== "stage") { if (c.open || c.new) dRef.current.onLanding({ open: c.open, new: c.new }); return; }

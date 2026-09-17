@@ -1,5 +1,6 @@
 // Browser glue: decode a file, hear an AudioBuffer, compact facts for the brain prompt.
-import { hear, type HearOptions, type MusicFacts } from "./facts";
+import { type HearOptions, type MusicFacts } from "./facts";
+import { hearOffThread } from "./offthread";
 import { mmss } from "./describe";
 import { grooveTemplateLine } from "./groove";
 
@@ -10,10 +11,9 @@ export async function decodeFile(file: Blob): Promise<AudioBuffer> {
 }
 
 export async function hearBuffer(buf: AudioBuffer, opts?: HearOptions): Promise<MusicFacts> {
-  await new Promise((r) => setTimeout(r, 0)); // let the UI paint before the crunch
   const channels: Float32Array[] = [];
   for (let c = 0; c < Math.min(2, buf.numberOfChannels); c++) channels.push(buf.getChannelData(c));
-  return hear(channels, buf.sampleRate, opts);
+  return hearOffThread(channels, buf.sampleRate, opts);
 }
 
 const pc = (v: number) => Math.round(v * 100);

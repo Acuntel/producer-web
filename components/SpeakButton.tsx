@@ -53,7 +53,7 @@ export function SpeakButton({
   return (
     <div className="flex flex-col items-center gap-3 select-none">
       <div className="relative grid place-items-center" style={{ width: 104, height: 104 }}>
-        {speaking && <span aria-hidden className="absolute inset-0 rounded-full border-2 border-live/70" style={{ animation: "speak-ring 1.4s ease-out infinite" }} />}
+        {speaking && <span aria-hidden className="absolute inset-0 rounded-full" style={{ animation: "speak-ring 1.4s ease-out infinite" }} />}
         {holding && <span aria-hidden className="absolute inset-[-10px] rounded-full bg-accent/25 blur-xl transition-transform duration-75" style={{ transform: `scale(${scale})` }} />}
         <button
           type="button"

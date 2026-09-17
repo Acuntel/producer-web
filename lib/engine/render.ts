@@ -5,7 +5,8 @@ import { buildGraph, type Clips } from "./graph";
 import { scheduleEvents } from "./schedule";
 import { loadClipsFor, clipKeysFor } from "./clips";
 import { getKit } from "./kits";
-import { hear, describe, type MusicFacts, type HearOptions, type SectionFacts } from "../ears";
+import { describe, type MusicFacts, type HearOptions, type SectionFacts } from "../ears";
+import { hearOffThread, workerAlive } from "../ears/offthread";
 import { parseKey, keyName, chordsForSection, condense } from "../song/harmony";
 import { audibleTracks } from "./schedule";
 import { songSwing } from "../song/groove";
@@ -34,22 +35,14 @@ export async function renderSong(song: Song, maxSeconds?: number): Promise<Audio
 
 export type HearSongOptions = HearOptions & { barsPerSection?: number; sampleRate?: number; sections?: string[]; force?: boolean };
 
-// Section excerpt cache across calls: only what changed is re-rendered.
-const sectionCache = new Map<string, MusicFacts>();
-const CACHE_MAX = 96;
-function cacheGet(key: string) { const v = sectionCache.get(key); if (v) { sectionCache.delete(key); sectionCache.set(key, v); } return v; }
-function cacheSet(key: string, v: MusicFacts) { sectionCache.set(key, v); if (sectionCache.size > CACHE_MAX) sectionCache.delete(sectionCache.keys().next().value as string); }
-export function sectionCacheKey(song: Song, secId: string, bars: number): string {
-  const sec = song.sections.find((x) => x.id === secId);
-  const audible = audibleTracks(song);
-  const active = song.tracks.filter((t) => sec?.active.includes(t.id) && audible.has(t.id));
-  return JSON.stringify({ sec, bars, bpm: song.bpm, h: song.humanize, g: song.groove ?? null, m: song.master, kit: song.kit ?? "synth", active });
-}
+// Where a listen actually spends its time, so "why is it stuttering" is a measurement.
+export const hearTiming = { renderMs: 0, hearMs: 0, sections: 0, cached: 0, worker: false };
 
-// Which sections would re-render for this song right now (everything else is cached).
-export function staleSections(song: Song, barsPerSection = 4): string[] {
-  return song.arrangement.filter((id) => { const sec = song.sections.find((x) => x.id === id); return sec ? !sectionCache.has(sectionCacheKey(song, id, Math.max(1, Math.min(sec.bars, barsPerSection)))) : false; });
-}
+// One listen, cached by the whole record: the same record heard twice is measured once.
+const listenCache = new Map<string, Map<string, MusicFacts>>();
+const CACHE_MAX = 16;
+function cacheGet(key: string) { const v = listenCache.get(key); if (v) { listenCache.delete(key); listenCache.set(key, v); } return v; }
+function cacheSet(key: string, v: Map<string, MusicFacts>) { listenCache.set(key, v); if (listenCache.size > CACHE_MAX) listenCache.delete(listenCache.keys().next().value as string); }
 
 // The producer's ears on its own work. Offline rendering cost grows faster
 // than linearly with duration, and every section is a loop anyway, so we hear
@@ -57,28 +50,52 @@ export function staleSections(song: Song, barsPerSection = 4): string[] {
 // back onto the real arrangement. Every section is heard; positions are exact.
 export async function hearSong(song: Song, opts?: HearSongOptions): Promise<MusicFacts> {
   const beatSec = 60 / song.bpm;
-  const maxBars = opts?.barsPerSection ?? 4;
+  // Two bars is a loop, and a loop is what these records are: it measures the same as four and the
+  // render is a cooperative one, so its length is time the producer waits to know what it just made.
+  const maxBars = opts?.barsPerSection ?? 2;
   const sr = opts?.sampleRate ?? 22050;
   const { sectionStarts, totalBeats } = scheduleEvents(song);
   const secById = new Map(song.sections.map((s) => [s.id, s]));
   const clips = await clipsFor(song);
-  const heard: { span: (typeof sectionStarts)[number]; facts: MusicFacts }[] = [];
-  const stripped = { ...song, loop: null as null };
-  for (const span of sectionStarts) {
-    const sec = secById.get(span.id);
-    if (!sec) continue;
-    const bars = Math.max(1, Math.min(sec.bars, maxBars));
-    const key = sectionCacheKey(song, sec.id, bars);
-    let f = opts?.force ? undefined : cacheGet(key);
-    if (!f) {
-      const mini: Song = { ...stripped, sections: [{ ...sec, bars }], arrangement: [sec.id] };
-      const buf = await renderOffline(mini, bars * 4 * beatSec + 0.4, clips, sr);
-      const ch = Array.from({ length: buf.numberOfChannels }, (_, c) => buf.getChannelData(c));
-      f = hear(ch, buf.sampleRate, { bpmHint: song.bpm, keyHint: song.key, label: sec.name, maxSeconds: opts?.maxSeconds });
-      cacheSet(key, f);
-    }
-    heard.push({ span, facts: f });
+  const barsOf = (id: string) => Math.max(1, Math.min(secById.get(id)?.bars ?? 1, maxBars));
+  // Every distinct section, a few bars each, played end to end and rendered ONCE. Eight offline
+  // contexts per listen was what made a move stutter: the contexts cost more than the audio.
+  // Two sections built from the same tracks and the same variants sound the same, so they are
+  // rendered once and both read the same measurement.
+  const audibleNow = audibleTracks(song);
+  const sigOf = (id: string) => { const s = secById.get(id)!; return JSON.stringify([s.active.filter((t) => audibleNow.has(t)), s.variants ?? null, s.fill ?? null, barsOf(id)]); };
+  const stand = new Map<string, string>();   // audio signature -> the section id that stands for it
+  const standsFor = new Map<string, string>();
+  for (const id of new Set(song.arrangement.filter((x) => secById.has(x)))) {
+    const sig = sigOf(id);
+    if (!stand.has(sig)) stand.set(sig, id);
+    standsFor.set(id, stand.get(sig)!);
   }
+  const uniq = [...stand.values()];
+  if (uniq.length === 0) throw new Error("nothing to hear");
+  const mini: Song = { ...song, loop: null, sections: song.sections.map((s) => ({ ...s, bars: barsOf(s.id) })), arrangement: uniq };
+  const key = JSON.stringify({ mini, sr, maxSeconds: opts?.maxSeconds });
+  let byId = opts?.force ? undefined : cacheGet(key);
+  if (!byId) {
+    byId = new Map<string, MusicFacts>();
+    const miniBeats = uniq.reduce((a, id) => a + barsOf(id) * 4, 0);
+    const t0 = performance.now();
+    const buf = await renderOffline(mini, miniBeats * beatSec + 0.5, clips, sr);
+    const t1 = performance.now();
+    hearTiming.renderMs += Math.round(t1 - t0); hearTiming.sections++;
+    let cursor = 0;
+    for (const id of uniq) {
+      const bars = barsOf(id);
+      const s0 = Math.floor(cursor * beatSec * buf.sampleRate);
+      const s1 = Math.min(buf.length, Math.ceil((cursor + bars * 4) * beatSec * buf.sampleRate));
+      cursor += bars * 4;
+      const ch = Array.from({ length: buf.numberOfChannels }, (_, c) => buf.getChannelData(c).subarray(s0, s1));
+      byId.set(id, await hearOffThread(ch, buf.sampleRate, { bpmHint: song.bpm, keyHint: song.key, label: secById.get(id)?.name, maxSeconds: opts?.maxSeconds }));
+    }
+    hearTiming.hearMs += Math.round(performance.now() - t1); hearTiming.worker = workerAlive();
+    cacheSet(key, byId);
+  } else hearTiming.cached++;
+  const heard = sectionStarts.filter((s) => byId!.has(standsFor.get(s.id) ?? s.id)).map((span) => ({ span, facts: byId!.get(standsFor.get(span.id) ?? span.id)! }));
   if (heard.length === 0) throw new Error("nothing to hear");
   const main = heard.find((h) => /drop/i.test(h.span.name)) ?? heard.reduce((a, b) => (b.facts.loudness.integrated > a.facts.loudness.integrated ? b : a));
   const maxLufs = Math.max(...heard.map((h) => h.facts.loudness.integrated));
