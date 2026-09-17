@@ -9,6 +9,8 @@ import { useCritic } from "@/hooks/useCritic";
 import { useAccount } from "@/hooks/useAccount";
 import { useProjects, type SnapshotMeta } from "@/hooks/useProjects";
 import { useStems } from "@/hooks/useStems";
+import { useVault } from "@/hooks/useVault";
+import { vaultKeysOf } from "@/lib/account/clips";
 import { useVoiceOut } from "@/hooks/useVoiceOut";
 import { useSpeak } from "@/hooks/useSpeak";
 import { useStopWords } from "@/hooks/useStopWords";
@@ -53,7 +55,12 @@ export default function App() {
   duckRef.current = studio.duck;
   const projects = useProjects({ user: account.user, loadSong: studio.loadSong, loadChat: studio.loadChat, getSong: studio.getSong, localLibrary: studio.library, flash: studio.flash });
   snapshotRef.current = projects.snapshot;
-  const stems = useStems({ user: account.user, projectId: projects.current?.id ?? null, flash: studio.flash, edit: studio.edit, send: studio.send, registerClip: studio.registerClip, getSong: studio.getSong, setReference: studio.setReferenceBuffer, recordSound: (bpm, beats) => hum.record(bpm, beats), previewClip: studio.previewClip });
+  const vault = useVault({ user: account.user, projectId: projects.current?.id ?? null, flash: studio.flash });
+  const stems = useStems({ user: account.user, projectId: projects.current?.id ?? null, flash: studio.flash, edit: studio.edit, send: studio.send, registerClip: studio.registerClip, getSong: studio.getSong, setReference: studio.setReferenceBuffer, recordSound: (bpm, beats) => hum.record(bpm, beats), previewClip: studio.previewClip, noteClip: vault.note });
+  // A record names its audio; this browser may never have seen it. Whenever that list changes,
+  // whatever is missing is fetched back from the account before anyone notices silence.
+  const clipKeys = useMemo(() => vaultKeysOf(studio.song).join("|"), [studio.song]);
+  useEffect(() => { if (clipKeys) void vault.restore(studio.getSong()); }, [clipKeys, account.user, vault, studio]);
   actionsRef.current = {
     analyze: async (i) => { setShowAnalyze(true); if (i.url) await stems.start({ url: i.url }); else await stems.findAndAnalyze(i.query ?? "", i.from ?? null); },
     vocal: async (p, l, ms) => { setShowAnalyze(true); await stems.renderVocal(p, l, ms); },
@@ -63,9 +70,11 @@ export default function App() {
     tracklist: async (i) => { setShowAnalyze(true); await stems.startTracklist(i); },
   };
   useCritic({ song: studio.song, facts: studio.facts, reference: studio.reference, paused: !!studio.rollout, send: studio.send, started: studio.started });
+  // The harness can hand the studio a vocal stem it made itself and watch where the phrase lands.
+  useEffect(() => { if (harnessMode()) (window as unknown as { __vocal?: unknown }).__vocal = (said: string | null, where: string | null, job: unknown) => stems.dropVocal(said, where, job as never); }, [stems]);
 
   const titles = useMemo(() => [...projects.projects.map((p) => p.title), ...studio.library.map((s) => s.song.title)], [projects.projects, studio.library]);
-  const convo = useConversation({ studio, voice: voiceOut, screen: view === "stage" ? "stage" : view, projects: titles, onLanding: (c) => landingRef.current(c), grab: stems.grab });
+  const convo = useConversation({ studio, voice: voiceOut, screen: view === "stage" ? "stage" : view, projects: titles, onLanding: (c) => landingRef.current(c), grab: stems.grab, vocal: stems.vocalFrom });
   const speak = useSpeak({ onFinal: (t, ms) => void convo.hear(t, ms), onPress: () => convo.interrupt() });
   useStopWords(convo.auditioning, () => convo.interrupt(true));
 
@@ -158,6 +167,19 @@ export default function App() {
                 </div>
               )}
               {studio.listenHint && <p className="flex items-start gap-1.5 text-sm text-live"><Icon name="ear" size={15} className="mt-0.5 shrink-0" /><span>{studio.listenHint}</span></p>}
+              {/* A record is never quietly incomplete: what is missing, and what did not save, are said. */}
+              {vault.missing.length > 0 && (
+                <p className="flex items-start gap-1.5 text-sm text-warn" data-role="missing-clips">
+                  <Icon name="cloud" size={15} className="mt-0.5 shrink-0" />
+                  <span>{vault.missing.length === 1 ? "One sound in this record is not on this device and could not be found in your account." : `${vault.missing.length} sounds in this record are not on this device and could not be found in your account.`} Everything else plays.</span>
+                </p>
+              )}
+              {studio.notSaved && (
+                <p className="flex items-start gap-1.5 text-sm text-warn" data-role="not-saved">
+                  <Icon name="cloud" size={15} className="mt-0.5 shrink-0" />
+                  <span>This browser is out of room, so the record is not being kept on this device. {account.user ? "Your account still has it." : "Sign in and it is kept in your account instead."}</span>
+                </p>
+              )}
               </div>
             </div>
             <div className="flex min-h-0 min-w-0 flex-col justify-end">

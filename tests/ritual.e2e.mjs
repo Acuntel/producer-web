@@ -82,6 +82,12 @@ async function main() {
   const grabLine = await waitFor(`(() => { const els = [...document.querySelectorAll('[data-role="producer-line"] p')]; const l = els.map((e) => e.textContent).find((t) => /Grabbed the synth|no heard record to grab/.test(t)); return l ?? ''; })()`, 20000, "the grab answer");
   console.log(`[ritual] 9. grab: ${grabLine.slice(0, 90)}`);
   assert.ok(/no heard record to grab|Grabbed the synth/.test(grabLine), "the grab control reaches the studio and is answered");
+  // 10. The voice off a record: the control reaches the studio, and with nothing pulled in it says so
+  // rather than pretending. The placement itself is proven on a real record by tests/vocal.probe.mjs.
+  await type("isolate the vocal and put it before the drop");
+  const vocalLine = await waitFor(`(() => { const els = [...document.querySelectorAll('[data-role="producer-line"] p')]; const l = els.map((e) => e.textContent).find((t) => /no record with a voice|VOCAL ISOLATED|Isolating the voice/.test(t)); return l ?? ''; })()`, 20000, "the vocal answer");
+  console.log(`[ritual] 10. vocal: ${vocalLine.slice(0, 90)}`);
+  assert.ok(/no record with a voice|VOCAL ISOLATED|Isolating the voice/.test(vocalLine), "the vocal control reaches the studio and is answered");
   console.log(`[ritual] cost: ${await js(`document.querySelector('[data-role="cost"]')?.innerText ?? ''`)}; exceptions: ${errors.length ? errors.join(" || ") : "none"}`);
   assert.equal(errors.length, 0, "no uncaught exceptions during the ritual");
   console.log("[ritual] ALL PASSED");

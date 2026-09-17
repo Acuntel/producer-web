@@ -76,6 +76,38 @@ export function sliceBuffer(src: AudioBuffer, atSec: number, lengthSec?: number,
   return out;
 }
 
+/** A phrase, cut where it was measured. No onset hunting: the measurement already found the word,
+ *  and hunting for a transient inside a sung line lands on the wrong syllable. */
+export async function cutPhraseClip(src: AudioBuffer, startSec: number, lengthSec: number, id: string, name: string): Promise<{ id: string; durationSec: number; buffer: AudioBuffer }> {
+  const sr = src.sampleRate;
+  const m = mono(src);
+  let start = Math.max(0, Math.min(m.length - 1, Math.floor(startSec * sr)));
+  // Back up at most five milliseconds to a zero crossing so the first word does not click.
+  for (let n = 0; n < Math.floor(0.005 * sr) && start > 1; n++, start--) if (m[start - 1] <= 0 && m[start] > 0) break;
+  const n = Math.max(Math.floor(0.05 * sr), Math.min(m.length - start, Math.floor(Math.min(8, lengthSec) * sr)));
+  const Ctx = typeof OfflineAudioContext !== "undefined" ? OfflineAudioContext : null;
+  if (!Ctx) throw new Error("no audio context");
+  const ctx = new Ctx(src.numberOfChannels, n, sr);
+  const out = ctx.createBuffer(src.numberOfChannels, n, sr);
+  const fadeIn = Math.floor(0.005 * sr), fadeOut = Math.floor(0.03 * sr);
+  let peak = 0;
+  for (let c = 0; c < src.numberOfChannels; c++) {
+    const d = src.getChannelData(c), o = out.getChannelData(c);
+    for (let i = 0; i < n; i++) {
+      let v = d[start + i] ?? 0;
+      if (i < fadeIn) v *= i / fadeIn;
+      if (i > n - fadeOut) v *= Math.max(0, (n - i) / fadeOut);
+      o[i] = v; peak = Math.max(peak, Math.abs(v));
+    }
+  }
+  const g = peak > 0 ? 0.891 / peak : 1;   // -1 dBFS, so the phrase arrives at a known level
+  for (let c = 0; c < out.numberOfChannels; c++) { const o = out.getChannelData(c); for (let i = 0; i < n; i++) o[i] *= g; }
+  const bytes = await audioBufferToWav(out).arrayBuffer();
+  await putClip({ id, name, type: "audio/wav", bytes, createdAt: Date.now(), durationSec: out.duration });
+  cacheDecoded(id, await decodeBytes(bytes.slice(0)));
+  return { id, durationSec: out.duration, buffer: out };
+}
+
 const isSlice = (o: unknown): o is SliceOp => !!o && typeof o === "object" && (o as { op?: string }).op === "slice" && typeof (o as SliceOp).from === "string" && typeof (o as SliceOp).at === "number";
 
 /** Replace every "slice" op with concrete ops: the blip becomes a stored clip on a drum track or a one-shot audio track. */

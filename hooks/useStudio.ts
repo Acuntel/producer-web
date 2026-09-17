@@ -4,6 +4,7 @@
 // history and the scorecard. The page only renders.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SEED_SONG, applyOps, migrateSong, withReferenceGroove, History, diffSongs, type Song, type Note, type Role } from "@/lib/song";
+import { newSongId } from "@/lib/song/migrate";
 import { levelOps, levelLine } from "@/lib/song/level";
 import { exchange, forceEconomy } from "@/lib/brain/stream";
 
@@ -37,7 +38,11 @@ export const BLANK_SONG: Song = { version: 3, title: "Untitled", bpm: 124, key: 
 export const isGenericTitle = (t: string) => /^(untitled|untitled record|new record|glow|g-town heat|northern lights|after hours|iron lung|holy water|probe)$/i.test(t.trim());
 const isBlank = (s: Song) => s.tracks.length === 0 && isGenericTitle(s.title);
 const loadLibrary = (): SavedSong[] => { try { return JSON.parse(localStorage.getItem(LIB_KEY) ?? "[]"); } catch { return []; } };
-const persistLibrary = (lib: SavedSong[]) => { try { localStorage.setItem(LIB_KEY, JSON.stringify(lib.slice(0, 30))); } catch {} };
+// A record is itself, not its name: two records called Untitled used to overwrite each other here.
+const sameRecord = (a: Song, b: Song) => (a.id && b.id ? a.id === b.id : a.title === b.title);
+/** Writes that can fail. The browser's store is small and it throws when it is full. */
+const keep = (key: string, value: string): boolean => { try { localStorage.setItem(key, value); return true; } catch { return false; } };
+const persistLibrary = (lib: SavedSong[]) => keep(LIB_KEY, JSON.stringify(lib.slice(0, 30)));
 const isE2E = () => typeof window !== "undefined" && /[?&](e2e|voice)=1/.test(window.location.search);
 
 export type SnapshotMeta = { label?: string; newProject?: boolean; facts?: unknown; chat?: { role: "user" | "assistant"; content: string }[]; blank?: boolean };
@@ -68,6 +73,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const [ab, setAb] = useState<AB>(null); const [score, setScore] = useState("");
   const [canUndo, setCanUndo] = useState(false); const [canRedo, setCanRedo] = useState(false);
   const [ignored, setIgnored] = useState<{ text: string; at: number } | null>(null);
+  const [notSaved, setNotSaved] = useState(false);
   const [brainDown, setBrainDownState] = useState<"credits" | "key" | "cap" | null>(null);
   const brainDownRef = useRef<"credits" | "key" | "cap" | null>(null);
   const setBrainDown = (v: "credits" | "key" | "cap" | null) => { brainDownRef.current = v; setBrainDownState(v); };
@@ -103,7 +109,15 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     setLibrary(loadLibrary()); setScore(scoreLine());
     void import("@/lib/engine").then(({ listClips }) => listClips().then((all) => setClips(all.map((c) => ({ id: c.id, name: c.name, bpm: c.bpm, key: c.key, durationSec: c.durationSec }))))).catch(() => {});
   }, []);
-  useEffect(() => { try { localStorage.setItem(SONG_KEY, JSON.stringify(song)); localStorage.setItem(CHAT_KEY, JSON.stringify(messages.slice(-40))); } catch {} }, [song, messages]);
+  // Saving on this device, and saying so when it cannot. A full store used to throw into an empty
+  // catch, which is how a session's work disappears without anyone being told.
+  useEffect(() => {
+    const body = JSON.stringify(song);
+    if (keep(SONG_KEY, body) && keep(CHAT_KEY, JSON.stringify(messages.slice(-40)))) { setNotSaved(false); return; }
+    try { localStorage.removeItem(CHAT_KEY); } catch {}
+    persistLibrary(loadLibrary().slice(0, 6));
+    setNotSaved(!keep(SONG_KEY, body));
+  }, [song, messages]);
   // No playhead in React: the board reads the transport itself, sixty times a second, without
   // re-rendering the page. A state update every ninety milliseconds was re-rendering everything
   // on screen eleven times a second and starving the scheduler that has to hit the beat.
@@ -136,8 +150,9 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     return engineRef.current;
   }, []);
   const autoSave = useCallback((s: Song) => {
-    const lib = [{ song: s, savedAt: Date.now() }, ...loadLibrary().filter((x) => x.song.title !== s.title)];
-    persistLibrary(lib); setLibrary(lib.slice(0, 30));
+    const lib = [{ song: s, savedAt: Date.now() }, ...loadLibrary().filter((x) => !sameRecord(x.song, s))];
+    if (!persistLibrary(lib)) setNotSaved(true);
+    setLibrary(lib.slice(0, 30));
   }, []);
 
   // The ears on our own render. Only changed sections re-render (cache); sequenced so stale results never win.
@@ -228,6 +243,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     w.__audio = () => engineRef.current?.health() ?? null;   // dropouts, graphs alive, rebuild cost
     w.__engine = () => engineRef.current;
     w.__facts = () => factsRef.current;
+    (w as { __engineModule?: () => unknown }).__engineModule = () => import("@/lib/engine");
     // Where a listen spends its time, so a stutter is traced and not guessed at.
     void import("@/lib/engine").then((m) => { (window as unknown as { __ears?: () => unknown }).__ears = () => m.hearTiming; });
   }, [getLevels]);
@@ -259,7 +275,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     setMessages([]); messagesRef.current = []; resumeRef.current = null; askedTitleRef.current = false; titlePendingRef.current = false;
     setListenHint(null); abRef.current = null; setAb(null); lastMoveRef.current = null; setLastMoveId(null); setFacts(null); factsRef.current = null;
     newProjectRef.current = true;
-    await setSong(BLANK_SONG, { label: "new session", noHistory: true, silent: true });
+    await setSong({ ...BLANK_SONG, id: newSongId() }, { label: "new session", noHistory: true, silent: true });
   }, [setSong]);
   const loadSong = useCallback(async (s: Song) => { await setSong(migrateSong(s) ?? s, { label: `open ${s.title}`, noHistory: true, noSnapshot: true }); flash(`Opened ${s.title}`); if (started) say(`Opened ${s.title}. Where were we?`); }, [flash, say, setSong, started]);
   const getSong = useCallback(() => songRef.current, []);
@@ -556,7 +572,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const { loadSaved, saveNow, download } = useLibraryActions({ autoSave, flash, say, setSong, started, getSong: () => songRef.current, setRendering });
   const { addReference, addClip } = useUploads({ flash, send, setSong, setClips, factsRef, referenceRef, setReference, setDeltaText, getSong: () => songRef.current });
 
-  return { song, messages, busy, started, starting, paused, nowSection, library, clips, facts, hearing, reference, deltaText, listenHint, toast, lastMoveId, rendering, ab, score, canUndo, canRedo, rollout,
+  return { song, messages, busy, started, starting, paused, nowSection, library, clips, facts, hearing, reference, deltaText, listenHint, toast, lastMoveId, rendering, ab, score, canUndo, canRedo, rollout, notSaved,
     boot, send, sendVoice, ignored, ignoredCount, thatWasForMe, loadChat, newSession, setReferenceBuffer, moves, previewClip, brainDown, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, getSchedule, getHealth, setVolume, toggleTrack,
     play, pause, append, tryLocal, spend, cost, getPosition, duck };
 }

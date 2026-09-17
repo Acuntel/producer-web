@@ -22,6 +22,9 @@ export function mockVoice(state: VoiceState, utterance: string): { say: string; 
   if (STOP.test(t)) return { say: "Stopped.", control: { stop: true } };
   const g = t.match(/\b(?:grab|pull|take|steal)\b.*?\b(synth|bass|vocal|vocals|kick|snare|hat|hats|pad|keys|guitar|piano)\b(?:.*?\bat\s+(\d+):(\d\d)|.*?\bat\s+(\d+(?:\.\d+)?)\s*s)?/i);
   if (g) { const at = g[2] ? Number(g[2]) * 60 + Number(g[3]) : g[4] ? Number(g[4]) : null; return { say: `Grabbing the ${g[1]}.`, control: { grab: { what: g[1], at } } }; }
+  // "isolate the vocal from X and put it before the drop"
+  const v = t.match(/\b(?:isolate|lift|steal|take)\b[^.]*?\b(?:vocal|voice|acapella|hook)\b(?:.*?\bfrom\s+([^,.]+?))?(?:\s*(?:and|then)?\s*(?:put|drop|place)\s+it\s+([^.]*))?$/i);
+  if (v) return { say: `Isolating the voice${v[1] ? ` on ${v[1].trim()}` : ""} and putting it into the build.`, control: { vocal: { what: null, from: v[1]?.trim() ?? null, where: v[2]?.trim() ?? "before the drop" } } };
   if (CMD.test(t)) return { say: "Playing eight bars. Say stop any time.", control: { audition: { section: "current", bars: 8 } } };
   if (CHANGE.test(t)) return { say: "On it. One second.", control: { task: t } };
   // Anything else on a blank record is the name of who we are chasing: research it, keep asking.

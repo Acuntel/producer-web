@@ -70,8 +70,15 @@ export async function POST(req: Request) {
   input.flow = flowNotes(input.song, { family: dnaLaneFor(lane) });
   const finalUser = buildUserBlock(input, last?.content ?? "");
 
+  // Five dollars a record (masterprompt section 7). Measured on 09-17: a move on the flagship costs about fourteen
+  // cents, a move on the fast model about three. The flagship is worth it where the whole record is decided (the
+  // blueprint on a blank record, a rollout, a full-song pass); every ordinary move goes fast. The governor can still
+  // force economy, and PRODUCER_FORCE_FLAGSHIP=1 puts everything back on the flagship.
+  const blank = (input.song?.tracks?.length ?? 0) === 0;
+  const bigAsk = /\b(blueprint|whole (song|record)|full (song|record|arrangement)|build (me |us )?(a|the) (record|song|track)|start (a|the) (record|song)|first (sixteen|8|16|32) bars|arrange the whole)\b/i.test(last?.content ?? "");
+  const flagship = process.env.PRODUCER_FORCE_FLAGSHIP === "1" || ((blank || bigAsk) && !economy(req));
   const params = {
-    model: economy(req) ? FAST : MODEL,
+    model: flagship ? MODEL : FAST,
     max_tokens: 16000,
     output_config: { effort: "low" as const },
     tools: [{ type: "web_search_20260209" as const, name: "web_search" as const, max_uses: 3 }],
@@ -101,7 +108,7 @@ export async function POST(req: Request) {
   const capped = await guardSpend(req, source);
   if (capped) return Response.json({ ...friendly(new Error("cap")), say: capped, detail: "cap: daily house allowance", down: "cap", keySource: source }, { status: 200 });
   // A transient failure gets one more try; the second try runs on the fast model so an overloaded flagship never stalls the room.
-  const modelFor = (attempt: number) => (attempt > 0 ? FAST : params.model);
+  const modelFor = (attempt: number) => (attempt > 0 ? FAST : params.model);   // a retry always drops to the fast model
   if (!wantsStream) {
     try {
       let used = params.model;

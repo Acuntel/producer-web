@@ -23,6 +23,8 @@ export function migrateSong(input: unknown): Song | null {
   const h = (s.humanize as Loose) ?? {};
   return {
     version: 3,
+    // A record kept before ids existed is given one here, once, and keeps it from then on.
+    id: typeof s.id === "string" && s.id ? s.id : newSongId(),
     title: typeof s.title === "string" ? s.title : "Untitled",
     bpm: typeof s.bpm === "number" ? s.bpm : 126,
     key: typeof s.key === "string" ? s.key : "D minor",
@@ -41,6 +43,9 @@ export function migrateSong(input: unknown): Song | null {
 }
 
 const num = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d);
+
+/** A record's own identity, independent of what it ends up being called. */
+export const newSongId = () => `rec_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 function migrateTrack(t: Loose): Track | null {
   if (!t || typeof t.id !== "string") return null;

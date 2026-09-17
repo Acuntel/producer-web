@@ -25,7 +25,14 @@ function tx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T
   }));
 }
 
-export const putClip = (c: StoredClip) => tx("readwrite", (s) => s.put(c)).then(() => c.id);
+// Anything stored here is also offered to the account's vault, so a record made on this machine
+// can be opened on another one with its audio intact. The sink is set by the app when signed in.
+type ClipSink = (c: StoredClip) => void;
+let sink: ClipSink | null = null;
+export function setClipSink(fn: ClipSink | null) { sink = fn; }
+
+export const putClip = (c: StoredClip, opts?: { mirror?: boolean }) =>
+  tx("readwrite", (s) => s.put(c)).then(() => { if (opts?.mirror !== false) try { sink?.(c); } catch { /* the vault is never a gate on playing */ } return c.id; });
 export const getClip = (id: string) => tx<StoredClip | undefined>("readonly", (s) => s.get(id));
 export const listClips = () => tx<StoredClip[]>("readonly", (s) => s.getAll()).then((all) => all.map((c) => ({ ...c, bytes: new ArrayBuffer(0) })));
 export const deleteClip = (id: string) => tx("readwrite", (s) => s.delete(id)).then(() => undefined);

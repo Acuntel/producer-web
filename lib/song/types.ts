@@ -154,6 +154,7 @@ export type Lane = string;
 
 export type Song = {
   version: 3;
+  id?: string;         // this record's own name for itself; two records called Untitled are still two records
   title: string;
   bpm: number;
   key: string;

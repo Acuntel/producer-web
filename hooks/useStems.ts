@@ -21,7 +21,7 @@ export const identityLine = (i: Identity | null | undefined) => i?.title ? `${i.
 export type FindCandidate = { source: string; title: string; url: string; artist: string | null; duration_sec: number | null; year: number | null; license: string | null; kind: string; score: number };
 export type StemsJob = { id: string; kind?: "stems" | "hear" | "tracklist"; status: "queued" | "running" | "done" | "error"; progress: number; result: StemsResult | null; error: string | null; source: { url?: string; storage_path?: string; name?: string; query?: string } };
 
-type Deps = { user: User | null; projectId: string | null; flash: (t: string) => void; edit: (ops: unknown[], label: string) => Promise<boolean>; send: (t: string, o?: { hidden?: boolean }) => Promise<void>; registerClip: (c: ClipMeta) => void; getSong: () => Song; setReference?: (buf: AudioBuffer, name: string) => Promise<void>; recordSound?: (bpm: number, beats: number) => Promise<{ samples: Float32Array; sampleRate: number; notes: unknown[] } | null>; previewClip?: (clipId: string) => Promise<boolean> };
+type Deps = { user: User | null; projectId: string | null; flash: (t: string) => void; edit: (ops: unknown[], label: string) => Promise<boolean>; send: (t: string, o?: { hidden?: boolean }) => Promise<void>; registerClip: (c: ClipMeta) => void; getSong: () => Song; setReference?: (buf: AudioBuffer, name: string) => Promise<void>; recordSound?: (bpm: number, beats: number) => Promise<{ samples: Float32Array; sampleRate: number; notes: unknown[] } | null>; previewClip?: (clipId: string) => Promise<boolean>; noteClip?: (key: string, name: string, path: string, meta: { durationSec?: number; bpm?: number; key?: string; mime?: string }) => Promise<void> };
 
 const NOTE = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 export const hzToNote = (hz: number) => { const m = Math.round(69 + 12 * Math.log2(hz / 440)); return `${NOTE[((m % 12) + 12) % 12]}${Math.floor(m / 12) - 1}`; };
@@ -43,6 +43,10 @@ export function useStems(d: Deps) {
   const ensureClipRef = useRef<(path: string, id: string, name: string, meta: { durationSec?: number; bpm?: number; key?: string }) => Promise<string>>(async () => "");
 
   const autoPlaceRef = useRef<string | null>(null);   // a stem name to place automatically when the job lands (vocal renders)
+  // An ask that arrived before the record did: "isolate the voice from X and put it before the drop"
+  // starts the analysis and is carried out the moment the stems land.
+  const pendingVocalRef = useRef<{ said: string | null; where: string | null } | null>(null);
+  const dropVocalRef = useRef<((said?: string | null, where?: string | null, job?: StemsJob) => Promise<string | null>) | null>(null);
   const stopPolling = () => { if (pollRef.current) { window.clearTimeout(pollRef.current); pollRef.current = null; } };
   useEffect(() => () => stopPolling(), []);
 
@@ -80,6 +84,11 @@ export function useStems(d: Deps) {
             const ids: string[] = [];
             for (const s of res?.stems ?? []) { try { ids.push(await ensureClipRef.current(s.path, `stem_${id}_${s.stem}`, `${name} · ${s.stem}`, { durationSec: f?.durationSec, bpm: f?.bpm, key: f?.key })); } catch {} }
             for (const o of res?.oneshots ?? []) { try { ids.push(await ensureClipRef.current(o.path, `shot_${id}_${o.role}${o.path.includes("-2") ? "_2" : ""}`, `${name} · ${o.role}`, { durationSec: o.durationSec })); } catch {} }
+            if (pendingVocalRef.current) {
+              const ask = pendingVocalRef.current; pendingVocalRef.current = null;
+              const report = await dropVocalRef.current?.(ask.said, ask.where, { id, status: "done", progress: 100, result: res, error: null, source: {} } as StemsJob);
+              if (report) { void dRef.current.send(report, { hidden: true }); return; }
+            }
             if (autoPlaceRef.current) {
               const want = autoPlaceRef.current; autoPlaceRef.current = null;
               const st = (res?.stems ?? []).find((x) => x.stem === want);
@@ -145,9 +154,11 @@ export function useStems(d: Deps) {
       const { data, error: sErr } = await sb.storage.from("clips").createSignedUrl(path, 600);
       if (sErr || !data?.signedUrl) throw new Error(sErr?.message ?? "no url");
       const bytes = await (await fetch(data.signedUrl)).arrayBuffer();
-      await putClip({ id, name, type: path.endsWith(".mp3") ? "audio/mpeg" : "audio/wav", bytes, createdAt: Date.now(), durationSec: meta.durationSec, bpm: meta.bpm, key: meta.key });
+      // Already in the account's storage: the vault records where, it does not copy it again.
+      await putClip({ id, name, type: path.endsWith(".mp3") ? "audio/mpeg" : "audio/wav", bytes, createdAt: Date.now(), durationSec: meta.durationSec, bpm: meta.bpm, key: meta.key }, { mirror: false });
       cacheDecoded(id, await decodeBytes(bytes));
     }
+    void dRef.current.noteClip?.(id, name, path, { ...meta, mime: path.endsWith(".mp3") ? "audio/mpeg" : "audio/wav" });
     dRef.current.registerClip({ id, name, bpm: meta.bpm, key: meta.key, durationSec: meta.durationSec });
     return id;
   }, []);
@@ -235,6 +246,88 @@ export function useStems(d: Deps) {
     const ok = await dRef.current.edit(ops, `grab: ${name}`);
     return ok ? `${name}${tuned}` : null;
   }, [job, useOneShot]);
+
+  /** Isolate a voice from the record the studio pulled in and land it so its last word hits the drop.
+   *  The vocals are already separated; what this does is find the phrases inside them, pick the one
+   *  asked for, tune it into the key, and place it in the section before the drop with room made for it. */
+  const dropVocal = useCallback(async (said?: string | null, where?: string | null, jobIn?: StemsJob): Promise<string | null> => {
+    // The finished job, whether it came from state or straight from the poll that just landed it.
+    const jb: StemsJob | null = jobIn ?? job;
+    const res = jb?.result;
+    if (!jb || jb.status !== "done" || !res?.stems?.length) return null;
+    const stem = res.stems.find((s) => s.stem === "vocals");
+    if (!stem) return "That record came back with no vocal to isolate.";
+    const name = res.name ?? "the record";
+    const { loadClipsFor } = await import("@/lib/engine");
+    const src = (await loadClipsFor([`stem_${jb.id}_${stem.stem}`])).get(`stem_${jb.id}_${stem.stem}`);
+    if (!src) return "I could not open the vocal from that record.";
+
+    // Every phrase in the isolated voice, then the one they pointed at.
+    const { findPhrases, pickPhrase, tuneFor, leadIn } = await import("@/lib/song/vocal");
+    const mono = src.getChannelData(0);
+    const phrases = findPhrases(mono, src.sampleRate);
+    if (!phrases.length) return `I isolated the voice on ${name} but could not find a phrase in it worth taking.`;
+    const pick = pickPhrase(phrases, { said, words: res.hearing?.lyrics?.lines });
+    if (!pick) return `I isolated the voice on ${name} but could not find a phrase in it worth taking.`;
+
+    const song = dRef.current.getSong();
+    const id = `vox_${jb.id.slice(0, 6)}_${Math.round(pick.startSec)}`;
+    const label = `${name} vocal at ${mmss(pick.startSec)}`;
+    const { cutPhraseClip } = await import("@/lib/engine/slice");
+    const cut = await cutPhraseClip(src, pick.startSec, pick.endSec - pick.startSec, id, label);
+    dRef.current.registerClip({ id, name: label, durationSec: cut.durationSec });
+
+    // In the key, if that is a move small enough to leave the voice sounding like a voice.
+    const { detectRootPitch } = await import("@/lib/engine/pitch");
+    const heard = detectRootPitch(cut.buffer.getChannelData(0), cut.buffer.sampleRate);
+    const semitones = tuneFor(heard.midi, song.key);
+
+    // The section before the drop is where a vocal lead in lives, and the drop is the downbeat it aims at.
+    const order = song.arrangement.map((sid) => song.sections.find((s) => s.id === sid)).filter((s): s is Song["sections"][number] => !!s);
+    const target = where && !/before|drop/i.test(where) ? order.find((s) => s.name.toLowerCase().includes(where.toLowerCase())) : null;
+    const dropAt = order.findIndex((s) => /drop|chorus|hook/i.test(s.name));
+    const into = target ?? (dropAt > 0 ? order[dropAt - 1] : order[Math.max(0, order.length - 2)]);
+    if (!into) return "This record has no section to put a vocal in yet.";
+    const secBeats = into.bars * 4;
+    const phraseBeats = cut.durationSec * (song.bpm / 60);
+    const { startBeat, cut: tooLong } = leadIn(secBeats, phraseBeats);
+
+    const ops: unknown[] = [
+    // Room first, then the voice: the gap is measured against what is already playing, and a phrase
+    // that arrives before it would duck itself.
+    { op: "transition", from: into.id, bars: 4, gap: true, lift: 0 },
+    {
+      op: "addTrack",
+      track: {
+        id, name: label.slice(0, 24), role: "audio", volume: -3, duck: false, loopBeats: secBeats,
+        notes: [[60, startBeat, Math.min(phraseBeats, secBeats), 112]],
+        clip: { clipId: id, name: label, oneShot: true, warp: false, semitones: semitones ?? 0, gainDb: 0, durationSec: cut.durationSec },
+        fx: { filter: { type: "highpass", cutoff: 140 }, delay: { time: "8n", feedback: 0.22, wet: 0.16 }, reverb: 0.2 },
+      },
+    }, { op: "active", section: into.id, add: [id] }];
+
+    const ok = await dRef.current.edit(ops, `isolated the vocal from ${name} into ${into.name}`);
+    if (!ok) return "The vocal did not land. Say it again and I will try a different phrase.";
+    const tuneLine = semitones === null
+      ? (heard.midi === null ? "It is unpitched enough that I left it alone" : `It sits too far from ${song.key} to move without wrecking it, so it plays as it was sung`)
+      : semitones === 0 ? `It was already in ${song.key}` : `Tuned ${semitones > 0 ? "up" : "down"} ${Math.abs(semitones)} to sit in ${song.key}`;
+    dRef.current.flash(`Vocal from ${name} is in ${into.name}`);
+    return `VOCAL ISOLATED from "${name}": the phrase at ${mmss(pick.startSec)}, ${cut.durationSec.toFixed(1)} seconds of it, cut out of the separated vocal stem (${phrases.length} phrases were in there; this one scored ${pick.score} for loudness and length). ${tuneLine}. It is placed in ${into.name} starting at beat ${startBeat.toFixed(1)} of ${secBeats}, so its last word lands on the downbeat of ${dropAt > 0 ? order[dropAt].name : "the next section"}${tooLong ? ", though the phrase is longer than the section so it starts at the top of it" : ""}, and that section now leans out over its final bars to leave room. Tell the user in one breath what you did and what to listen for. Do not change anything else.`;
+  }, [job]);
+
+  dropVocalRef.current = dropVocal;
+  /** The whole ask in one move: pull the record in if it is not already here, then land the voice. */
+  const vocalFrom = useCallback(async (said?: string | null, where?: string | null, from?: string | null): Promise<string | null> => {
+    const have = job?.status === "done" && job.result?.stems?.some((s) => s.stem === "vocals");
+    const named = from?.trim();
+    const isThisOne = have && named ? (job?.result?.name ?? "").toLowerCase().includes(named.toLowerCase().split(/\s+/)[0]) : have;
+    if (have && (!named || isThisOne)) return dropVocal(said, where);
+    if (!named) return "Tell me which record the voice is from and I will pull it in.";
+    pendingVocalRef.current = { said: said ?? null, where: where ?? null };
+    await findAndAnalyze(named, null);
+    return null;   // the poll carries it out when the stems land
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job, dropVocal]);
 
   const addStemLoop = useCallback(async (stem: StemOut) => { if (!job?.result?.facts) return; await placeStem(job, stem, job.result.facts, job.result.name ?? "record", "best8"); }, [job, placeStem]);
 
@@ -425,7 +518,7 @@ export function useStems(d: Deps) {
   const reset = useCallback(() => { stopPolling(); setJob(null); setError(null); setCandidates([]); setLocalHits([]); }, []);
   const askBreakdown = useCallback(() => { const n = job?.result?.name ?? "that record"; void dRef.current.send(`Break down "${n}" for me: structure, the engine, the hook, the drum language, the mix picture, and the one trick. Then say which piece we should take.`); }, [job]);
 
-  return { job, error, starting, start, useOneShot, addStemLoop, grab, renderVocal, findSound, hearOurRender, previewUrl, reset, askBreakdown, find, prefetch, candidates, localHits, finding, connectLocal, analyzeLocal, findAndAnalyze, folder: folderInfo(), canPickFolder: canPickFolder(), identifyClip, identifyPlaying, startCaptured, startTracklist, keepGoing, identified, identifying };
+  return { job, error, starting, start, useOneShot, addStemLoop, grab, dropVocal, vocalFrom, renderVocal, findSound, hearOurRender, previewUrl, reset, askBreakdown, find, prefetch, candidates, localHits, finding, connectLocal, analyzeLocal, findAndAnalyze, folder: folderInfo(), canPickFolder: canPickFolder(), identifyClip, identifyPlaying, startCaptured, startTracklist, keepGoing, identified, identifying };
 }
 
 function friendly(msg: string): string {

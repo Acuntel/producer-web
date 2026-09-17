@@ -20,6 +20,7 @@ type Deps = {
   projects: string[];
   onLanding: (c: { open?: string; new?: boolean; library?: boolean; account?: boolean }) => void;
   grab?: (what: string, at?: number | null) => Promise<string | null>;   // a part of the heard record, into this one (hooks/useStems)
+  vocal?: (what?: string | null, where?: string | null, from?: string | null) => Promise<string | null>;   // a voice off a record, landed before the drop
 };
 export type Timing = { stt: number; firstWord: number; voiceMs: number };
 
@@ -143,19 +144,34 @@ export function useConversation(d: Deps) {
     } catch { doneWork(id, "did not land"); }
   }, [addWork, doneWork]);
 
+  // A voice off a record: the studio isolates it, finds the phrase, tunes it and lands it. The Hands
+  // never touch it, but they are told what happened so the next move is made knowing it is there.
+  const doVocal = useCallback(async (v: { what?: string | null; from?: string | null; where?: string | null }) => {
+    const s = dRef.current.studio;
+    const id = addWork({ kind: "record", title: v.from ? `Isolating the voice on ${v.from}` : "Isolating the voice", detail: v.what ?? undefined });
+    try {
+      const report = await dRef.current.vocal?.(v.what ?? null, v.where ?? null, v.from ?? null);
+      if (report === null) { doneWork(id, "pulling the record in first"); return; }
+      doneWork(id, report ? "landed" : "nothing to take");
+      if (report) void s.send(report, { hidden: true });
+      else { const line = "I have no record with a voice on it yet. Name one and I will pull it in."; s.append("assistant", line); await dRef.current.voice.speak(line); }
+    } catch { doneWork(id, "did not land"); }
+  }, [addWork, doneWork]);
+
   const act = useCallback(async (c: VoiceControl) => {
     const s = dRef.current.studio;
     if (c.stop) { interrupt(true); return; }
     if (c.library) { dRef.current.onLanding({ library: true }); return; }
     if (c.account) { dRef.current.onLanding({ account: true }); return; }
     if (c.grab?.what) { void doGrab(c.grab); }
+    if (c.vocal) { void doVocal(c.vocal); }
     if (c.research) void doResearch(c.research);
     if (dRef.current.screen !== "stage") { if (c.open || c.new) dRef.current.onLanding({ open: c.open, new: c.new }); return; }
     if (c.task) void runTask(c.task);
     else if (c.audition) void audition(c.audition.section, c.audition.bars);
     else if (c.open || c.new) dRef.current.onLanding({ open: c.open, new: c.new });
     void s;
-  }, [audition, doResearch, doGrab, interrupt, runTask]);
+  }, [audition, doResearch, doGrab, doVocal, interrupt, runTask]);
 
   // The entry point: what you said, and how long the engine took to commit it.
   const hear = useCallback(async (text: string, sttMs: number) => {
