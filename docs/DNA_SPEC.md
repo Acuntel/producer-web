@@ -143,3 +143,15 @@ The raw dumps are not part of the store. Re-download when a parser changes (segm
 - AcousticBrainz (CC0): `https://data.metabrainz.org/pub/musicbrainz/acousticbrainz/dumps/acousticbrainz-highlevel-json-20220623/acousticbrainz-highlevel-json-20220623-{0..29}.tar.zst` (about 1 GB each, thirty parts; parts 0 and 2 are ingested) and `.../acousticbrainz-lowlevel-features-20220623/acousticbrainz-lowlevel-features-20220623-{rhythm,tonal}.tar.zst`.
 - MusicBrainz artists (CC0): `https://data.metabrainz.org/pub/musicbrainz/data/json-dumps/<LATEST>/artist.tar.xz` (1.7 GB; `LATEST` is a text file beside it).
 The parse caches (`data/dna/raw/ab/highlevel-<n>.parquet`, `features.parquet`, `data/dna/raw/mb_artist_genres.parquet`) are what re-assembly and the rollup read; the dumps are only needed to widen what a parser keeps.
+
+## 10. Fame and the charts (09-17, section 18 of the masterprompt)
+
+Sources and their terms:
+- **Wikipedia chart pages** (CC BY-SA 4.0, attribution: English Wikipedia contributors). `tools/dna/charts_wiki.py` reads the page list in `<scratchpad>/wiki_chart_pages.json` (591 titles found by title prefix) through the MediaWiki API with a named user agent, parses every wikitable through a span-aware grid, and keeps only chart, year, position, artist and title. No page text ships; only the aggregate rows and the statistics drawn from them.
+- **ListenBrainz popularity** (CC0, MetaBrainz). `tools/dna/listens.py` posts up to 1,000 MusicBrainz recording ids a call (30 calls a window, resumable, a partial parquet is reused) and keeps total listen and listener counts.
+- **Apple RSS top songs** (public feeds). `tools/dna/viral_now.py` reads 15 genres across 7 countries, 100 a feed, dated so a record's weeks on the feed accumulate. These are purchases, not streams, and are labelled that way.
+- Nothing is downloaded or kept as audio. `tools/dna/listen_queue.py` finds a public copy of a famous record, analyses and separates it locally, writes one `dna_heard` DNA row, and deletes every file before the next record.
+
+`tools/dna/fame.py` folds them into `data/dna/fame.parquet`: fame = 0.45 chart score (year-end rank, number-one runs, how many chart families, how many years; the Billboard weekly peak and weeks already in the store count too) + 0.35 listen score (log listens against the corpus 99.9th percentile) + 0.20 buys score. `data/dna/charts.parquet` carries the folded chart rows. Migration 0016 adds `dna_charts` and `dna_fame` (the loader keeps rows at fame 0.02 or more; the long tail stays in parquet).
+
+Fame then rides: `rollup.attach_fame` writes the `fame` column on every song row; `bucket_stats.exemplar_map` sorts exemplars by fame before chart peak; `discover.py` weights Cohen's d by 1 + 3 x fame, so a famous record counts up to four times a forgotten one; `prints.py` writes a fame byte into the fingerprint meta (layout v3, 10 bytes a row) and `lib/brain/prints.ts` can ask for the famous neighbours only; `galton.chartLines` answers "the biggest records of a year" per family; `knowledge/skills/charts.md` carries what each chart's records measure by decade.
