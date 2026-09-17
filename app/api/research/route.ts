@@ -11,7 +11,7 @@ import { laneNamed, laneInfo } from "@/lib/brain/laneNames";
 export const maxDuration = 30;
 const MODEL = process.env.PRODUCER_VOICE_MODEL || "claude-haiku-4-5";
 
-const FAMILY_WORDS: Record<string, string> = { house: "house", techno: "techno", trance: "trance", garage: "garage", edm: "electronic", dance: "electronic", club: "electronic", electro: "electronic", dnb: "dnb", "drum and bass": "dnb", jungle: "dnb", dubstep: "dubstep", hardstyle: "hardstyle", "hard dance": "hardstyle", rave: "hardstyle", disco: "disco", rap: "hiphop", "hip hop": "hiphop", hiphop: "hiphop", trap: "hiphop", drill: "hiphop", pop: "pop", rock: "rock", metal: "metal", country: "country", "r&b": "rnb", rnb: "rnb", soul: "rnb", funk: "rnb", jazz: "jazz", reggae: "world", afrobeats: "world", amapiano: "world", latin: "latin", reggaeton: "latin", folk: "folk", indie: "rock" };
+const FAMILY_WORDS: Record<string, string> = { house: "house", techno: "techno", trance: "trance", garage: "garage", edm: "electronic", dance: "electronic", club: "electronic", electro: "electronic", dnb: "dnb", "drum and bass": "dnb", jungle: "dnb", dubstep: "dubstep", hardstyle: "hardstyle", "hard dance": "hardstyle", rave: "hardstyle", disco: "disco", rap: "hiphop", "hip hop": "hiphop", hiphop: "hiphop", trap: "hiphop", drill: "hiphop", pop: "pop", rock: "rock", metal: "metal", country: "country", "r&b": "rnb", rnb: "rnb", soul: "rnb", funk: "rnb", jazz: "jazz", reggae: "world", afrobeats: "world", amapiano: "house", gqom: "house", latin: "latin", reggaeton: "latin", folk: "folk", indie: "rock" };
 
 function familiesIn(q: string): string[] {
   // Whole words only: "amapiano" is not "piano", "trapeze" is not "trap".
@@ -61,13 +61,13 @@ export async function POST(req: Request) {
   const lane = laneNamed(query);
   // A fine genre the family map has never heard of (amapiano, footwork, forest psytrance): the genre table answers,
   // and its family points the bins.
-  const genre = fams.length === 0 ? await lookupGenre(query) : null;
-  // A genre line rides when nothing else matched, or when the ask is exactly the genre's name (a record titled
-  // "Amapiano Mix" must not hide the genre itself).
-  if (genre && (kind === "none" || genre.genre === norm(query)) && !(kind === "artist" && genre.genre.length < 6)) {
+  // The genre table answers whenever the ask is exactly a genre's name, and otherwise when no family word matched.
+  const genre = await lookupGenre(query);
+  const exact = !!genre && genre.genre === norm(query);
+  if (genre && (exact || (fams.length === 0 && kind === "none")) && !(kind === "artist" && !exact)) {
     if (kind === "none") kind = "genre";
-    lines.push(genreLine(genre));
-    if (!fams.length && genre.family) fams = [genre.family];
+    lines.unshift(genreLine(genre));
+    if (genre.family && (exact || !fams.length)) fams = [genre.family];
   }
   if (fams.length || lane) {
     const info = lane ? laneInfo(lane) : null;
