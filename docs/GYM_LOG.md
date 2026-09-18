@@ -389,3 +389,26 @@ The brief and its reading: docs/MASTERPROMPT_V11.md. The store contract: docs/DN
 - A canvas sized from its own box still pushes the page wider unless it is taken out of the flow; absolute inset zero, and `min-w-0` on every flex and grid parent.
 - The transition that makes room for a vocal is applied before the vocal is active, or the phrase is ducked by its own gap.
 - The Vercel deploy answered "Not authorized" once again; the retry went through, as the last round recorded.
+
+## 2026-09-18: everything through the website (masterprompt section 20)
+- Brady: Railway is logged in, but everything should run through the website, nothing else, and the system should agentically have the tools to execute.
+- Two things were true and neither was visible. The worker had been running the four stem model since the seventh round, because that deploy never happened; and its health endpoint had the model name typed into it as a literal, so it answered "htdemucs" whatever it was loading. It is on `htdemucs_6s` now, a finished job comes back with drums, bass, vocals, other, guitar and piano plus the drums split again into kick, snare, hat and percussion, and `/health` reports what it actually loads.
+- One record had ever been through the studio's own ears. The store knew what a hundred thousand records ARE and what almost none of them SOUND like, because hearing one meant running a script on a laptop with a worker virtualenv and a library path set. That script also held a second copy of the rules that turn a hearing into a stored row, in Python, which would have drifted from the route's copy the first time either changed.
+- The learning lane is in the website now. The producer holds the control: "go learn the biggest house records of 2019" picks famous records the studio has never heard from the charts, hands each to the same worker one of ours goes through, keeps the DNA and no audio, reports as it goes because it takes minutes, and says what came back. The conversion is one function shared by the lane a person drives and the lane the producer drives. The local queue is deleted.
+- What the chart already knows wins over what a classifier guesses: the ears had called a UK Dance number one dubstep. The family and the year ride through on the job and beat the guess.
+- The asking is what is remembered, not the answer. A chart prints "Haven featuring Kaitlin Aragon" and the ears give the record back as "HAVEN. & Kaitlin Aragon", so matching heard rows against charts by name never matched and the lane kept re-picking records it already knew. A record that cannot be found twice is now left alone.
+
+### Measured
+| | before | after |
+|---|---|---|
+| stems from one job | 4 | 10 (six parts, drums split four ways) |
+| records heard with the studio's own ears | 1 | 11 |
+| families read from the chart rather than guessed | 0 | all of them |
+| implementations of the heard-row rules | 2 (TypeScript and Python) | 1 |
+
+- Eleven carry a chord progression, nine carry drum grids. A cache hit by identity costs about ten seconds; a record heard from scratch about sixty.
+
+### Traps
+- `railway up` restarts the worker, which kills whatever it was separating. Do not deploy the worker while a learning run is in flight.
+- Node buffers a background script's stdout when it is not a terminal: use `stdbuf -oL` or the log stays empty and looks hung.
+- The store's corpus build (`run_all.py`, the rollups, the prints) is a build of a dataset, not something the product does while someone is in the room. It stays a tool, and that is said in the spec rather than left to be discovered.
