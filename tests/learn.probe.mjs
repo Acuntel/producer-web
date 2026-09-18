@@ -45,8 +45,15 @@ const fam = families.length ? `&store_family=in.(${families.join(",")})` : "";
 const yr = year ? `&year=eq.${year}` : "";
 const rows = await rest(`dna_charts?select=artist,title,artist_norm,title_norm,chart,year,position,store_family&artist=not.is.null&title=not.is.null${fam}${yr}&order=position.asc,year.desc&limit=${COUNT * 8}`);
 const titles = [...new Set(rows.map((r) => r.title_norm))].slice(0, 200);
-const known = titles.length ? await rest(`dna_heard?select=artist_norm,title_norm&title_norm=in.(${titles.map((t) => `"${t.replace(/"/g, "")}"`).join(",")})`) : [];
-const heard = new Set(known.map((k) => `${k.artist_norm}|${k.title_norm}`));
+const inList = titles.map((t) => `"${t.replace(/"/g, "")}"`).join(",");
+const known = titles.length ? await rest(`dna_heard?select=artist_norm,title_norm&title_norm=in.(${inList})`) : [];
+// The asking is what is remembered, under the chart's name: the ears give a record back under a
+// different name, so matching the heard rows by name alone sends the studio after it for ever.
+const asked = titles.length ? await rest(`dna_learned_asks?select=artist_norm,title_norm,ok,tries&title_norm=in.(${inList})`) : [];
+const heard = new Set([
+  ...known.map((k) => `${k.artist_norm}|${k.title_norm}`),
+  ...asked.filter((a) => a.ok || a.tries >= 2).map((a) => `${a.artist_norm}|${a.title_norm}`),
+]);
 const seen = new Set();
 const picks = rows.filter((c) => { const id = `${c.artist_norm}|${c.title_norm}`; if (heard.has(id) || seen.has(id)) return false; seen.add(id); return true; }).slice(0, COUNT);
 if (!picks.length) { console.log("[learn] nothing left to learn there"); process.exit(0); }
@@ -79,6 +86,7 @@ while (pending.size && Date.now() - t0 < 25 * 60 * 1000) {
     const admin = { from: (table) => makeQuery(table) };
     const pick = picks.find((x) => `${x.artist} - ${x.title}` === name);
     const out = await rememberHeard(admin, row.result, jid, { family: pick?.store_family ?? null, year: pick?.year ?? null });
+    if (pick) await rest("dna_learned_asks?on_conflict=artist_norm,title_norm", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ artist_norm: pick.artist_norm, title_norm: pick.title_norm, heard_key: out.key, ok: out.ok, tries: 1, last_try: new Date().toISOString() }) });
     if (out.ok) learned.push(`${out.artist ? `${out.artist} - ` : ""}${out.title ?? name}${out.tempo ? ` at ${Math.round(out.tempo)} BPM` : ""}${out.dna.key_pc !== null ? `, ${out.dna.mode ?? ""}` : ""}${out.dna.family ? `, ${out.dna.family}` : ""}${out.dna.progression ? `, ${out.dna.progression}` : ""}`);
     else failed.push(`${name}: ${out.error}`);
     console.log(`[learn]   ${Math.round((Date.now() - t0) / 1000)} s: ${out.ok ? "learned" : "failed"} ${name}`);

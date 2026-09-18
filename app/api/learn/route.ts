@@ -40,8 +40,15 @@ export async function POST(req: Request) {
   if (!candidates.length) return Response.json({ ok: true, started: [], pool: 0, note: `The charts hold nothing for ${what || "that"} yet.` });
 
   // Never learn the same record twice, and never two copies of the same record in one run.
+  // The asking is what is remembered, under the name the chart uses: a record comes back from the ears
+  // under the name the recognition service knows, which is not the name the chart printed, so matching
+  // the heard rows by name would send the studio after the same record for ever.
   const norms = [...new Set(candidates.map((c) => `${c.artist_norm}|${c.title_norm}`))];
   const heard = new Set<string>();
+  const { data: asked } = await admin.from("dna_learned_asks").select("artist_norm, title_norm, ok, tries").in("title_norm", [...new Set(candidates.map((c) => c.title_norm))].slice(0, 200));
+  for (const a of (asked ?? []) as { artist_norm: string; title_norm: string; ok: boolean; tries: number }[]) {
+    if (a.ok || a.tries >= 2) heard.add(`${a.artist_norm}|${a.title_norm}`);   // heard it, or it cannot be found
+  }
   const { data: known } = await admin.from("dna_heard").select("artist_norm, title_norm").in("title_norm", [...new Set(candidates.map((c) => c.title_norm))].slice(0, 200));
   for (const k of (known ?? []) as { artist_norm: string; title_norm: string }[]) heard.add(`${k.artist_norm}|${k.title_norm}`);
   const seen = new Set<string>();
@@ -56,7 +63,7 @@ export async function POST(req: Request) {
   for (const p of picks) {
     const query = `${p.artist} ${p.title}`.replace(/\s+/g, " ").trim().slice(0, 160);
     // The chart knows the family and the year; the ears do not need to guess at what is already written down.
-    const source = { query, name: `${p.artist} - ${p.title}`.slice(0, 120), learn: true, run, chart: p.chart, year: p.year, position: p.position, family: (p as Pick & { store_family?: string | null }).store_family ?? null };
+    const source = { query, name: `${p.artist} - ${p.title}`.slice(0, 120), learn: true, run, chart: p.chart, year: p.year, position: p.position, family: (p as Pick & { store_family?: string | null }).store_family ?? null, artist_norm: p.artist_norm, title_norm: p.title_norm };
     const { data: job } = await admin.from("jobs").insert({ owner: user.id, kind: "stems", source, status: "queued" }).select("id").single();
     if (!job) continue;
     try {
@@ -84,8 +91,19 @@ export async function GET(req: Request) {
 
   const learned: { title: string; artist: string | null; tempo: number | null; family: string | null }[] = [];
   for (const j of jobs) {
+    const askedAs = { artist_norm: j.source?.artist_norm as string | undefined, title_norm: j.source?.title_norm as string | undefined };
+    if (j.status === "error" && j.source?.learned !== true && askedAs.artist_norm && askedAs.title_norm) {
+      // A record that could not be found is remembered too, so the studio does not chase it for ever.
+      const { data: prior } = await admin.from("dna_learned_asks").select("tries").eq("artist_norm", askedAs.artist_norm).eq("title_norm", askedAs.title_norm).maybeSingle();
+      await admin.from("dna_learned_asks").upsert({ ...askedAs, ok: false, tries: ((prior as { tries?: number } | null)?.tries ?? 0) + 1, last_error: (j.error ?? "").slice(0, 200), last_try: new Date().toISOString() }, { onConflict: "artist_norm,title_norm" });
+      await admin.from("jobs").update({ source: { ...j.source, learned: true } }).eq("id", j.id);
+      continue;
+    }
     if (j.status !== "done" || j.source?.learned === true) continue;
     const out = await rememberHeard(admin, j.result as JobResult, j.id, { family: (j.source?.family as string | null) ?? null, year: (j.source?.year as number | null) ?? null });
+    if (askedAs.artist_norm && askedAs.title_norm) {
+      await admin.from("dna_learned_asks").upsert({ ...askedAs, heard_key: out.key, ok: out.ok, tries: 1, last_try: new Date().toISOString() }, { onConflict: "artist_norm,title_norm" });
+    }
     // Marked on the job, so a second poll never counts the same record twice.
     await admin.from("jobs").update({ source: { ...j.source, learned: true } }).eq("id", j.id);
     if (out.ok) learned.push({ title: out.title ?? String(j.source?.name ?? "a record"), artist: out.artist ?? null, tempo: out.tempo, family: out.dna.family });

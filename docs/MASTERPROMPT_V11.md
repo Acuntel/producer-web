@@ -405,7 +405,7 @@ Brady: learn more from famous and viral music, find their patterns and weight th
 
 ### 18.2 Mechanism
 
-`tools/dna/charts_wiki.py` harvests the pages through the MediaWiki API and parses the tables; `tools/dna/listens.py` fetches ListenBrainz; `tools/dna/shazam_charts.py` reads the genre charts; `tools/dna/fame.py` folds them into `data/dna/fame.parquet` and the `fame` column of the store, then the rollups, the hits and discoveries skills and the prints rebuild read it; `tools/dna/listen_queue.py` runs the local hearing over the famous records that lack a heard row. Attribution for Wikipedia and ListenBrainz goes in the spec.
+`tools/dna/charts_wiki.py` harvests the pages through the MediaWiki API and parses the tables; `tools/dna/listens.py` fetches ListenBrainz; `tools/dna/shazam_charts.py` reads the genre charts; `tools/dna/fame.py` folds them into `data/dna/fame.parquet` and the `fame` column of the store, then the rollups, the hits and discoveries skills and the prints rebuild read it; the learning lane in the website runs the hearing over the famous records that lack a heard row. Attribution for Wikipedia and ListenBrainz goes in the spec.
 
 ## 19. The instrument itself: no glitch, every record kept, the music visible like a console, and a voice from any record (2026-09-17, the eleventh stretch)
 
@@ -455,3 +455,27 @@ Ranked by what it teaches the machine per hour of work: (1) run the listen queue
 ### 19.6 Constraints, said once
 
 A vocal lifted from a commercial record is a sample; releasing a record that carries one needs clearance, so the library and the render name tag such clips "uncleared sample", while the user's own recordings and the CC sources (FMA, Jamendo, Freesound, the Archive) are clean. The worker reaches production only after `railway login` on this Mac. Section 18's fame chain left uncommitted data files and a chat route change in the tree; they are the previous stretch's and are not touched by this one. Agents: at most two, each a separate deliverable (the worker's vocal phrases; the storage mirror), the engine and the board inline.
+
+## 20. Everything through the website (2026-09-18, the twelfth stretch)
+
+Brady: Railway is logged in, but we want everything running through the website. Nothing else, and the system agentically should have the tools to execute.
+
+### 20.1 What was found
+- The worker had been running `htdemucs` since the seventh round, because that deploy never happened. Its health endpoint had the model name typed in as a literal, so it reported the four stem model whatever it was loading, and nobody could tell.
+- One record had ever been through the studio's own ears. The store knew what a hundred thousand records ARE, from charts and tags, and what almost none of them SOUND like, because hearing one meant running `tools/dna/listen_queue.py` on a laptop with a worker venv and a `DYLD_LIBRARY_PATH`. That script also held a second copy of the DNA rules, in Python, which would have drifted from the route's the first time either changed.
+
+### 20.2 What must be true at the end
+- The worker separates six ways with the drums split again, and says what it is actually loading.
+- The producer can learn on its own, from the website, with no script anywhere: it picks famous records the studio has never heard, has them separated and heard, and keeps the DNA. It is a control it holds, not an errand for a person.
+- One implementation of the rules that turn a hearing into what the store keeps, shared by the lane a person drives and the lane the producer drives.
+- What the charts already know (the family, the year) beats what a classifier guesses.
+- Learning answers to the same switch as pulling a record in by name, because it is the same act at volume.
+
+### 20.3 Mechanism
+`DEMUCS_MODEL=htdemucs_6s` and `DRUM_PARTS=1` on the worker, both models pulled at build so no job waits on a download, and `/health` reporting `os.environ`. `lib/dna/heard.ts` holds `heardRow` and `rememberHeard`, used by `app/api/dna/heard` and by the learning lane. `app/api/learn` POST picks from `dna_charts` by family and year, skips anything already in `dna_heard`, creates one ordinary stems job per record and hands each to the worker; GET reports the run and writes what has landed, marking each job so a second poll never counts a record twice. The Voice control `learn {what, count}` runs it, reports as it goes because it takes minutes, and says what came back. `lib/brain/families.ts` is the shared word map; `lib/brain/norm.ts` is the name normaliser, out of the store's lookups so a route that only needs a tidy name does not carry the bins.
+
+### 20.4 Proof
+Six stems on a real job: drums, bass, vocals, other, guitar, piano, then drum-kick, drum-snare, drum-hat, drum-perc. `npm run learn` against the live worker and the live store: three number ones picked, fetched, separated, heard and written, the store going from one record to four, each with its tempo, key, progression and grids.
+
+### 20.5 Said once
+The store's corpus build (`run_all.py`, the rollups, the prints) is a build of a dataset, not something the product does while someone is making a record, and it stays a tool. Everything the studio does while a person is in the room now happens in the website.
