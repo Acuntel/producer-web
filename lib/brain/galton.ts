@@ -2,6 +2,7 @@
 // Server only. Artist and song lookups hit the dna_* tables when they exist; the bin
 // medians come from data/galton.json, which ships in the repo so the grammar is
 // available with no database at all.
+import { norm } from "./norm";
 import galtonJson from "../../data/galton.json";
 import { supabaseAdmin } from "@/lib/account/supabase";
 
@@ -58,7 +59,7 @@ export type ArtistRow = {
 };
 export type SongRow = { title: string; artist: string; year?: number; tempo?: number; key_pc?: number; mode?: string; chart_peak?: number; chart_weeks?: number; hit_tier?: string; progression?: string; structure?: string; energy?: number; valence?: number; danceability?: number; family?: string; source: string };
 
-export const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/\b(feat|featuring|ft)\b.*$/, "").replace(/&/g, "and").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+export { norm };
 const KEYS = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
 const pct = (x: number | undefined) => (typeof x === "number" ? `${Math.round(x * 100)}%` : "?");
 

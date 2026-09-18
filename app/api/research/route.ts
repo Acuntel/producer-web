@@ -8,18 +8,12 @@ import { lookupArtist, lookupSongs, artistSongs, artistLine, songLine, binsFor, 
 import { findRecord, artistRows, soundLines } from "@/lib/brain/prints";
 import flowJson from "@/data/flow.json";
 import { laneNamed, laneInfo } from "@/lib/brain/laneNames";
+import { familiesIn } from "@/lib/brain/families";
 
 export const maxDuration = 30;
 const MODEL = process.env.PRODUCER_VOICE_MODEL || "claude-haiku-4-5";
 
-const FAMILY_WORDS: Record<string, string> = { house: "house", techno: "techno", trance: "trance", garage: "garage", edm: "electronic", dance: "electronic", club: "electronic", electro: "electronic", dnb: "dnb", "drum and bass": "dnb", jungle: "dnb", dubstep: "dubstep", hardstyle: "hardstyle", "hard dance": "hardstyle", rave: "hardstyle", disco: "disco", rap: "hiphop", "hip hop": "hiphop", hiphop: "hiphop", trap: "hiphop", drill: "hiphop", pop: "pop", rock: "rock", metal: "metal", country: "country", "r&b": "rnb", rnb: "rnb", soul: "rnb", funk: "rnb", jazz: "jazz", reggae: "world", afrobeats: "world", amapiano: "house", gqom: "house", latin: "latin", reggaeton: "latin", folk: "folk", indie: "rock" };
 
-function familiesIn(q: string): string[] {
-  // Whole words only: "amapiano" is not "piano", "trapeze" is not "trap".
-  const t = q.toLowerCase(); const out = new Set<string>();
-  for (const [w, f] of Object.entries(FAMILY_WORDS)) if (new RegExp(`(^|[^a-z])${w.replace(/[-\s]/g, "[-\\s]?")}([^a-z]|$)`).test(t)) out.add(f);
-  return [...out];
-}
 
 export async function POST(req: Request) {
   const t0 = Date.now();

@@ -107,6 +107,48 @@ export function useConversation(d: Deps) {
     finally { inflightRef.current.delete(id); release(); researchWaitRef.current = null; }
   }, [addWork, doneWork]);
 
+  // The producer going and learning by itself. It picks famous records the studio has never heard,
+  // sends them through the same worker one of ours goes through, and keeps only the DNA. It runs for
+  // minutes, so it reports as it goes and says what it learned at the end rather than blocking the room.
+  const learnRef = useRef<string | null>(null);
+  const doLearn = useCallback(async (l: { what?: string | null; count?: number | null }) => {
+    const s = dRef.current.studio;
+    if (learnRef.current) { const line = "I am already out listening to records. Let me finish this lot first."; s.append("assistant", line); await dRef.current.voice.speak(line); return; }
+    const what = (l.what ?? "").trim();
+    const id = addWork({ kind: "hear", title: what ? `Learning the biggest ${what}` : "Learning the records it has never heard", detail: "separating and listening, keeping only the DNA" });
+    try {
+      const started = await fetch("/api/learn", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ what, count: l.count ?? 6 }) }).then((x) => x.json());
+      if (!started?.ok || !started.started?.length) {
+        doneWork(id, started?.note ?? "nothing to learn from");
+        const line = started?.note ?? "I have nothing new to go and learn from there yet.";
+        s.append("assistant", line); await dRef.current.voice.speak(line); return;
+      }
+      learnRef.current = started.run;
+      const names = started.started.map((x: { artist: string; title: string }) => `${x.artist} - ${x.title}`);
+      progressWork(id, 0);
+      doneWork(id, `${names.length} records: ${names.slice(0, 3).join(", ")}${names.length > 3 ? " and more" : ""}`);
+      const watching = addWork({ kind: "hear", title: `Listening to ${names.length} records`, detail: names[0] });
+      // It listens on the worker; this only asks how it is going, and each answer writes what has landed.
+      const t0 = Date.now();
+      let last: { done: number; failed: number; learned: { title: string; artist: string | null; tempo: number | null }[]; heardInStore: number | null } | null = null;
+      const all: { title: string; artist: string | null; tempo: number | null }[] = [];
+      while (Date.now() - t0 < 20 * 60 * 1000) {
+        await new Promise((r) => setTimeout(r, 10000));
+        const p = await fetch(`/api/learn?run=${encodeURIComponent(started.run)}`).then((x) => x.json()).catch(() => null);
+        if (!p?.ok) continue;
+        last = p; all.push(...(p.learned ?? []));
+        progressWork(watching, Math.min(1, (p.done + p.failed) / Math.max(1, p.records)));
+        if (p.done + p.failed >= p.records) break;
+      }
+      doneWork(watching, last ? `${all.length} learned, ${last.failed} could not be found` : "gave up waiting");
+      const heard = all.length ? all.map((x) => `${x.artist ? `${x.artist} - ` : ""}${x.title}${x.tempo ? ` at ${Math.round(x.tempo)}` : ""}`).join("; ") : "";
+      void s.send(all.length
+        ? `LEARNED, by going and listening rather than reading tags: ${all.length} record${all.length === 1 ? "" : "s"} now in the store with their own grids, chords, structure and energy (${heard}). The store has heard ${last?.heardInStore ?? "?"} records in total now. Tell the user in one line what came back and one thing it changes about what you can do. Do not change the song.`
+        : `The learning run found no records it could hear: ${last?.failed ?? 0} could not be downloaded. Say so in one line and offer to try another genre or year. Do not change the song.`, { hidden: true });
+    } catch { doneWork(id, "the learning run failed"); }
+    finally { learnRef.current = null; }
+  }, [addWork, doneWork, progressWork]);
+
   const runTask = useCallback(async (task: string) => {
     const id = addWork({ kind: "hands", title: task.length > 88 ? task.slice(0, 85) + "..." : task, detail: "the hands are on it" });
     inflightRef.current.set(id, `hands: ${task.slice(0, 70)}`);
@@ -165,13 +207,14 @@ export function useConversation(d: Deps) {
     if (c.account) { dRef.current.onLanding({ account: true }); return; }
     if (c.grab?.what) { void doGrab(c.grab); }
     if (c.vocal) { void doVocal(c.vocal); }
+    if (c.learn) { void doLearn(c.learn); }
     if (c.research) void doResearch(c.research);
     if (dRef.current.screen !== "stage") { if (c.open || c.new) dRef.current.onLanding({ open: c.open, new: c.new }); return; }
     if (c.task) void runTask(c.task);
     else if (c.audition) void audition(c.audition.section, c.audition.bars);
     else if (c.open || c.new) dRef.current.onLanding({ open: c.open, new: c.new });
     void s;
-  }, [audition, doResearch, doGrab, doVocal, interrupt, runTask]);
+  }, [audition, doResearch, doGrab, doVocal, doLearn, interrupt, runTask]);
 
   // The entry point: what you said, and how long the engine took to commit it.
   const hear = useCallback(async (text: string, sttMs: number) => {

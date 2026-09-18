@@ -22,6 +22,16 @@ export function mockVoice(state: VoiceState, utterance: string): { say: string; 
   if (STOP.test(t)) return { say: "Stopped.", control: { stop: true } };
   const g = t.match(/\b(?:grab|pull|take|steal)\b.*?\b(synth|bass|vocal|vocals|kick|snare|hat|hats|pad|keys|guitar|piano)\b(?:.*?\bat\s+(\d+):(\d\d)|.*?\bat\s+(\d+(?:\.\d+)?)\s*s)?/i);
   if (g) { const at = g[2] ? Number(g[2]) * 60 + Number(g[3]) : g[4] ? Number(g[4]) : null; return { say: `Grabbing the ${g[1]}.`, control: { grab: { what: g[1], at } } }; }
+  // "go learn the biggest house records of 2019": everything after the verb is the description,
+  // minus the words that carry no genre and no year.
+  const l = t.match(/\b(?:go\s+)?(?:learn|study)\b\s+(.*)$/i);
+  if (l) {
+    const what = l[1]
+      .replace(/\b(some|the|a|an|biggest|best|top|new|more|about|of|from|in|records?|songs?|tracks?|tunes?)\b/gi, " ")
+      .replace(/[^a-z0-9&\s-]/gi, " ").replace(/\s+/g, " ").trim();
+    return { say: "Going out to listen to records. It takes a few minutes.", control: { learn: { what: what || null, count: 6 } } };
+  }
+
   // "isolate the vocal from X and put it before the drop"
   const v = t.match(/\b(?:isolate|lift|steal|take)\b[^.]*?\b(?:vocal|voice|acapella|hook)\b(?:.*?\bfrom\s+([^,.]+?))?(?:\s*(?:and|then)?\s*(?:put|drop|place)\s+it\s+([^.]*))?$/i);
   if (v) return { say: `Isolating the voice${v[1] ? ` on ${v[1].trim()}` : ""} and putting it into the build.`, control: { vocal: { what: null, from: v[1]?.trim() ?? null, where: v[2]?.trim() ?? "before the drop" } } };

@@ -5,8 +5,10 @@ WORKDIR /app
 RUN pip install torch==2.5.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cpu
 COPY requirements.txt .
 RUN pip install -r requirements.txt
-# Pull the separation model at build time so the first job is not a five-minute download.
+# Pull the separation models at build time so the first job is not a five-minute download.
+# htdemucs_6s adds guitar and piano to the four; the four-stem model stays as the fallback.
 RUN python -c "from demucs.pretrained import get_model; get_model('htdemucs')"
+RUN python -c "from demucs.pretrained import get_model; get_model('htdemucs_6s')"
 # The ears: CLAP for descriptors and embeddings, Whisper for the words. Pulled at build so jobs never wait on a download.
 ENV HF_HOME=/models/hf
 RUN python -c "from transformers import ClapModel, ClapProcessor; ClapModel.from_pretrained('laion/clap-htsat-unfused'); ClapProcessor.from_pretrained('laion/clap-htsat-unfused')"

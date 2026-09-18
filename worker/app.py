@@ -39,7 +39,10 @@ class Job(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "model": "htdemucs", "cpus": os.cpu_count(), "workers": pool._max_workers, "identifyCooldownSec": int(identify.cooling()), **state, "uptimeSec": int(time.time() - state["started"])}
+    # The model it actually loads, not a string typed once and left behind: the site shows this.
+    return {"ok": True, "model": os.environ.get("DEMUCS_MODEL", "htdemucs"), "drumParts": os.environ.get("DRUM_PARTS", "1") == "1",
+            "cpus": os.cpu_count(), "workers": pool._max_workers, "identifyCooldownSec": int(identify.cooling()),
+            **state, "uptimeSec": int(time.time() - state["started"])}
 
 
 @app.post("/jobs")

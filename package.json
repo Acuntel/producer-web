@@ -18,7 +18,8 @@
     "battery:song": "node --import ./tests/ts-resolve.mjs tests/brain-battery.mjs http://localhost:3111",
     "audible": "node tests/audible.mjs http://localhost:3111",
     "glitch": "node tests/glitch.probe.mjs http://localhost:3111",
-    "vocal": "node tests/vocal.probe.mjs http://localhost:3111"
+    "vocal": "node tests/vocal.probe.mjs http://localhost:3111",
+    "learn": "node --import ./tests/ts-resolve.mjs tests/learn.probe.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
