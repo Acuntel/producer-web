@@ -86,8 +86,14 @@ if (fs1) {
   console.log(`[audible] press to first audible sound: ${fs1.boot === null ? "not marked (no producer:boot mark in this build)" : `${Math.round(fs1.at - fs1.boot)} ms (the stage started at ${Math.round(fs1.boot)} ms)`}`);
   if (!FRESH) console.log(`[audible] first sound under 2.0 s: ${fs1.at < 2000 ? "yes" : "NO"}`);
 } else console.log("[audible] cold load to first audible sound: never measured (the master stayed below -60 dB)");
-const ok = peak > -45 && loud.length > 0;
-if (!ok) console.log(`[audible] quietest read: master ${peak.toFixed(1)} dB; tracks ${JSON.stringify(perTrack)}`);
+// The greeting goes first and the record joins underneath it: the first word's mark must come before the transport's.
+const order = JSON.parse(await js(`JSON.stringify({ voice: performance.getEntriesByName("producer:voice")[0]?.startTime ?? null, transport: performance.getEntriesByName("producer:transport")[0]?.startTime ?? null })`));
+const greetingFirst = order.voice !== null && order.transport !== null && order.voice <= order.transport;
+console.log(`[audible] greeting before transport: ${order.voice === null ? "not measured (the voice never spoke)" : order.transport === null ? "not measured (no transport mark)" : `${greetingFirst ? "yes" : "NO"} (first word ${Math.round(order.voice)} ms, transport ${Math.round(order.transport)} ms)`}`);
+const audible = peak > -45 && loud.length > 0;
+const ok = audible && !(order.voice !== null && order.transport !== null && !greetingFirst);
+if (!audible) console.log(`[audible] quietest read: master ${peak.toFixed(1)} dB; tracks ${JSON.stringify(perTrack)}`);
 if (errors.length) { console.log(`[audible] page errors (${errors.length}):`); for (const e of [...new Set(errors)].slice(0, 6)) console.log("   " + e.replace(/\n/g, " ").slice(0, 300)); }
-console.log(ok ? "[audible] AUDIBLE: the record is making sound" : "[audible] SILENT: nothing is coming out");
+console.log(audible ? "[audible] AUDIBLE: the record is making sound" : "[audible] SILENT: nothing is coming out");
+if (audible && !ok) console.log("[audible] GREETING LATE: the record started before the greeting's first word");
 process.exit(ok ? 0 : 1);

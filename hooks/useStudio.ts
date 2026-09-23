@@ -247,6 +247,8 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     // Where a listen spends its time, so a stutter is traced and not guessed at.
     void import("@/lib/engine").then((m) => { (window as unknown as { __ears?: () => unknown }).__ears = () => m.hearTiming; });
   }, [getLevels]);
+  // The kit, the seed's clips and the voice route all warm while the landing is up, so the press has nothing left to wait for.
+  useEffect(() => { void import("@/lib/engine").then((m) => m.warmFor(songRef.current)).catch(() => {}); void fetch("/api/speak").catch(() => {}); }, []);
   const setVolume = useCallback(async (id: string, db: number, commit: boolean) => {
     const res = applyOps(songRef.current, [{ op: "set", track: id, path: "volume", value: db }]);
     if (!res.applied) return;
@@ -509,18 +511,19 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   }, [noteIgnored, say, send, edit]);
   const thatWasForMe = useCallback(() => { const i = ignored; if (!i) return; setIgnored(null); void send(i.text); }, [ignored, send]);
 
-  // Initiative: a producer in the room does not wait forever. After a quiet minute of
-  // playing, once every four minutes at most, it offers one A/B or one call-out.
+  // Initiative: a producer in the room does not wait forever, but quiet is not a cue. The producer we
+  // watched worked through six minutes of talk with the loop running, so after six quiet minutes of
+  // playing, once every six minutes at most, it offers one A/B or one call-out.
   const lastUtteranceRef = useRef(Date.now());
   const lastInitiativeRef = useRef(0);
   useEffect(() => {
     if (!started || paused) return;
     const t = window.setInterval(() => {
       const now = Date.now();
-      if (busyRef.current || rollout || now - lastUtteranceRef.current < 120000 || now - lastInitiativeRef.current < 360000 || songRef.current.tracks.length === 0) return;
+      if (busyRef.current || rollout || now - lastUtteranceRef.current < 360000 || now - lastInitiativeRef.current < 360000 || songRef.current.tracks.length === 0) return;
       lastInitiativeRef.current = now;
       const pos = engineRef.current?.getPosition();
-      void send(`PRODUCER INITIATIVE: the user has been listening quietly for two minutes${pos ? ` (now in the ${pos.section}, bar ${pos.barInSection + 1})` : ""}. Take one initiative a real producer would: EITHER offer an A/B on one specific element (return ops for A and alternative for B, say "A or B?") OR pause and point at one bar with one proposed fix as a question. One sentence, no lecture, nothing else changes.`, { hidden: true });
+      void send(`PRODUCER INITIATIVE: the user has been listening quietly for six minutes${pos ? ` (now in the ${pos.section}, bar ${pos.barInSection + 1})` : ""}. Take one initiative a real producer would: EITHER offer an A/B on one specific element (return ops for A and alternative for B, say "A or B?") OR pause and point at one bar with one proposed fix as a question. One sentence, no lecture, nothing else changes.`, { hidden: true });
     }, 15000);
     return () => window.clearInterval(t);
   }, [started, paused, rollout, send]);
@@ -530,9 +533,6 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     if (!started) {
       setStarting(true); performance.mark("producer:boot");   // the press, for the first-sound probe
       try {
-        const eng = await getEngine();
-        await eng.start(songRef.current);
-        setStarted(true); setPaused(false);
         const blank = isBlank(songRef.current);
         const greeting = blank
           ? "New record. Who are we chasing tonight? An artist, a song, or a feeling."
@@ -542,10 +542,17 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
         // One greeting per session on screen: earlier boot greetings (a reload, a second start) are replaced, never stacked.
         const isGreeting = (t: string) => /^(New record\. Who are we chasing|We are back\.|We are live\. That is our groove)/.test(t);
         setMessages((m) => { const kept = [...m]; while (kept.length && kept[kept.length - 1].role === "assistant" && isGreeting(kept[kept.length - 1].content)) kept.pop(); return [...kept, { role: "assistant", content: greeting }]; });
+        // The greeting goes first and the record joins underneath it: the transport waits for the first word,
+        // or 0.8 s at most, so a cold voice never holds the music past the two-second mark.
+        const spoke = new Promise<void>((res) => window.addEventListener("producer:voice", () => res(), { once: true }));
         say(greeting);
-        // The record gets a clean start: the first listen waits until the transport has settled,
-        // because building a render while the first bar is being scheduled is what the ear catches.
-        refreshEars(songRef.current, 2500);
+        const eng = await getEngine();
+        void import("@/lib/engine").then((m) => m.warmFor(songRef.current)).catch(() => {});
+        await Promise.race([spoke, new Promise<void>((res) => window.setTimeout(res, 800))]);
+        await eng.start(songRef.current);
+        setStarted(true); setPaused(false);
+        // The listen yields to the scheduler every few ms now, so it no longer has to wait out the first bar.
+        refreshEars(songRef.current);
       } finally { setStarting(false); }
       return;
     }

@@ -8,6 +8,12 @@ export const maxDuration = 30;
 
 const VOICE = () => process.env.ELEVENLABS_VOICE_ID || "CwhRBWXzGAHq8TQ4Fs17";
 
+// A warm-up with no speech: the landing calls it so the first greeting does not pay for a cold key lookup.
+export async function GET(req: Request) {
+  await userElevenLabsKey(req).catch(() => null);
+  return new Response(null, { status: 204 });
+}
+
 export async function POST(req: Request) {
   const key = (await userElevenLabsKey(req).catch(() => null)) ?? process.env.ELEVENLABS_API_KEY;
   if (!key) return new Response("no voice configured", { status: 503 });

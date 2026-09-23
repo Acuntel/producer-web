@@ -465,3 +465,23 @@ The brief and its reading: docs/MASTERPROMPT_V11.md. The store contract: docs/DN
 
 - Audible at load 18.41: `[audible] cold load to first audible sound: 791 ms`, `[audible] press to first audible sound: 474 ms (the stage started at 316 ms)`, master peak -7.6 dB (the meter now sees the talk-duck, which used to sit after it), `[audible] AUDIBLE: the record is making sound`.
 - Against the before entry: late events 6 and 8 to 0, 0 and 0; the ten-move block 114 to 120 ms to none at all; the untouched block 444 to 448 ms to 56 ms at worst.
+
+## 2026-09-23: smooth phase 2, the first minute
+- The kit, the seed's clips and the voice route warm while the landing is up (`warmFor` and a speechless `GET /api/speak` on mount), so the press has nothing left to render.
+- The greeting goes first and the record joins underneath it. `boot()` speaks before it starts the engine, and the transport waits for the first word (`producer:voice`, marked by the voice when its first sound is scheduled) or 0.8 s at most, so a cold voice never holds the music past two seconds.
+- The first listen no longer waits 2.5 s. The listen gives the thread back every 6 ms of work since phase 1, so it starts on the ordinary 500 ms settle, and glitch's untouched window proves it costs the first bars nothing.
+- The producer takes initiative after six quiet minutes, not two. The producer we watched worked through six minutes of talk with the loop running.
+- tests/audible.mjs asserts the order: `[audible] greeting before transport: yes|NO (first word, transport)`. A late greeting fails the probe with `GREETING LATE`, and it is no longer reported as SILENT.
+
+### Measured
+| | load average | cold load to first sound | press to first sound | first word | transport | verdict |
+|---|---|---|---|---|---|---|
+| warm server, run 1 | 8.71 | 887 ms | 543 ms | 514 ms | 767 ms | greeting first, AUDIBLE |
+| warm server, run 2 | 10.58 | 817 ms | 528 ms | 448 ms | 699 ms | greeting first, AUDIBLE |
+| warm server, run 3 | 23.88 | 1071 ms | 570 ms | 666 ms | 953 ms | greeting first, AUDIBLE |
+| first press after a server restart | 8.09 | 1520 ms | 1213 ms | 1775 ms | 1353 ms | GREETING LATE, AUDIBLE |
+| first press after a server restart | 10.66 | 1544 ms | 1203 ms | 1853 ms | 1380 ms | GREETING LATE, AUDIBLE |
+
+- Glitch after phase 2, three runs at load 8.56 / 13.69 / 16.59: late events 0 / 0 / 0 untouched and 0 / 0 / 0 across ten moves; longest ten-move block 0 / 0 / 50 ms; graphs alive 1, 1, 2, 1; CLEAN, CLEAN, CLEAN.
+- Screens at 390 and 1440 (landing, stage idle and live, library) render with no overflow and nothing clipped.
+- Open: the very first press after a server restart has the greeting about 0.45 s behind the record. `/api/speak` itself answers cold in 235 ms (warm 160 ms), and warming its key lookup on mount did not move it. The harness starts the stage the moment the page loads, so nothing gets a landing dwell, and the page's first requests to a cold local server queue ahead of the voice. A real press comes after the landing has been up, which is when the warm-ups run. Next measure: the voice request's queue time in the first run, before calling this closed.

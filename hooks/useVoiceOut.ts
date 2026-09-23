@@ -8,6 +8,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 const RATE = 24000;
 type Deps = { duck?: (on: boolean) => void };
 type Job = { id: number; text: string; resolve: () => void };
+// The first word of an utterance is out: the stage lets the record join underneath it, and the probe times it.
+const firstWord = () => { performance.mark("producer:voice"); window.dispatchEvent(new Event("producer:voice")); };
 
 function sentences(text: string): string[] {
   const out: string[] = [];
@@ -54,7 +56,9 @@ export function useVoiceOut(d: Deps = {}) {
         for (let i = 0; i < n; i++) ch[i] = dv.getInt16(i * 2, true) / 32768;
         const src = c.createBufferSource(); src.buffer = buf; src.connect(c.destination);
         const at = Math.max(c.currentTime + (started ? 0 : 0.05), nextAtRef.current);
-        src.start(at); nextAtRef.current = at + buf.duration; lastEnd = nextAtRef.current; started = true;
+        src.start(at); nextAtRef.current = at + buf.duration; lastEnd = nextAtRef.current;
+        if (!started) firstWord();
+        started = true;
         sourcesRef.current.push(src); src.onended = () => { sourcesRef.current = sourcesRef.current.filter((s) => s !== src); };
       };
       for (;;) {
@@ -86,7 +90,7 @@ export function useVoiceOut(d: Deps = {}) {
       const c = ctx();
       const buf = c.createBuffer(1, out.samples.length, out.sampleRate); buf.getChannelData(0).set(out.samples);
       const src = c.createBufferSource(); src.buffer = buf; src.connect(c.destination);
-      const at = Math.max(c.currentTime + 0.02, nextAtRef.current); src.start(at); nextAtRef.current = at + buf.duration;
+      const at = Math.max(c.currentTime + 0.02, nextAtRef.current); src.start(at); nextAtRef.current = at + buf.duration; firstWord();
       sourcesRef.current.push(src); src.onended = () => { sourcesRef.current = sourcesRef.current.filter((s) => s !== src); };
       await new Promise((res) => setTimeout(res, Math.max(0, (nextAtRef.current - c.currentTime) * 1000)));
       return true;
@@ -95,7 +99,7 @@ export function useVoiceOut(d: Deps = {}) {
   const browserSpeak = (text: string) => new Promise<void>((res) => {
     if (typeof speechSynthesis === "undefined") { res(); return; }
     speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text); u.rate = 1.05; u.onend = () => res(); u.onerror = () => res();
+    const u = new SpeechSynthesisUtterance(text); u.rate = 1.05; u.onstart = firstWord; u.onend = () => res(); u.onerror = () => res();
     speechSynthesis.speak(u);
   });
 
