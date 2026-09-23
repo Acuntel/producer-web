@@ -14,8 +14,12 @@ export type Graph = { rig: Rig; schedule: Schedule; analysis: Analysis; voiceByI
 
 type Transport = ReturnType<typeof Tone.getTransport>;
 
-export function buildGraph(song: Song, transport: Transport, clips: Clips = new Map(), kit?: Kit, kitId = ""): Graph {
+/** The same rig, built a step at a time for a render that gives the thread back between steps:
+ *  the desk, then each track's voice, then the schedule. Each step is one synchronous piece. */
+export function* buildGraphInSteps(song: Song, transport: Transport, clips: Clips = new Map(), kit?: Kit, kitId = ""): Generator<void, Graph> {
   const rig = new Rig(transport, undefined, false);
+  yield;
+  for (const tr of song.tracks) { rig.prepareVoice(tr, song, clips, kit, kitId); yield; }
   rig.apply(song, clips, kit, kitId);
   return { rig, schedule: rig.schedule, analysis: rig.analysis, voiceById: rig.voiceById, health: rig.health, dispose: () => rig.dispose() };
 }

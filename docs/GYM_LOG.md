@@ -440,3 +440,28 @@ The brief and its reading: docs/MASTERPROMPT_V11.md. The store contract: docs/DN
 - Raw, run 1: `[glitch] untouched 8 s: events 38, late 4, thinnest margin -245.4 ms, graphs alive 1, long tasks 8 (max 444 ms, total 1182 ms)`; `[glitch] ten moves: events 119, late 2, thinnest margin -245.4 ms, graphs alive 1, long tasks 23 (max 120 ms, total 1865 ms), rebuilds 10 (max 107 ms, mean 30 ms)`; `[glitch] open-then-start: graphs alive before 1, after load 1, after start 2, after stop 1`; `[audible] cold load to first audible sound: 748 ms (navigation start to the first master read above -60 dB, -1.9 dB)`; `[audible] press to first audible sound: 463 ms (the stage started at 285 ms)`.
 - Where the blocks come from, read off a profile of the ten moves (a scratch probe, not committed): the two tempo moves re-lay every part (`update > lay > apply > add`, 122 ms and 105 ms), because every part's content address carries the tempo; everything else over 50 ms is the listen, which renders on the main thread in one-second slices of audio (`_renderClock > emit > _loop > forEachTickBetween > ... triggerAttack`, 98 to 162 ms each) after building its offline rig in one piece (315 ms, `apply > build`, the worklet URLs and the oscillators' inverse FFTs). The first listen starts 2.5 s after the press and runs about ten seconds, so it lands on top of the first bars and on top of the moves.
 - The cold load already sits under the 2.0 s target on this machine with a local server; the press alone is about half a second.
+
+## 2026-09-23: smooth phase 1, the record no longer stutters
+- Same bench as the before entry: a fresh `next build` on branch `smooth`, served on 3111 with the mock brain and no house key. This Mac was shared with other tabs' builds, so every run carries its load average.
+- The seven edges: kit and clips warm before the press (`warmFor`), a latest-wins ticket on `Engine.update` (`Latest` in `lib/engine/steady.ts`), a shortened record wraps to the same place in a bar (`wrapToBar`), a 40 ms master fade before teardown, auditions through the master chain with a 5 ms attack, the talk-duck on a music bus instead of the destination, and each riser with its own synth.
+- What the edges did not reach, and what fixed it:
+  - A tempo move re-laid every part, because the drum hits' content address carried the tempo. The hits are addressed without it now (`hitsAddress`), and note length reads the transport's tempo at the event. Rebuild max 101 to 107 ms went to 42 to 47 ms.
+  - The listen built its offline rig in one block and let Tone's offline clock run a second of audio per slice. It now builds one voice per step and gives the thread back after 6 ms of work (`renderInSteps` in `lib/engine/offline.ts`), with the offline context global only inside a single synchronous step, so no live node can land in the offline graph. Tone.Offline is no longer used.
+  - The root of every block that was left: standardized-audio-context walks every downstream path looking for a cycle on each new connect and stops only at a DelayNode, and every note start is a new connect. One connect into a voice's gate cost 7.1 to 11.9 ms. A zero-delay wall between the gate and the insert chain stops the walk: the same connect now measures 0.00 to 0.10 ms on every voice.
+- The Tone warning about scheduling inside callbacks is Tone's own PolySynth making a voice inside a note callback. It is harmless for timing and stays.
+
+### Measured
+| | run 1 | run 2 | run 3 |
+|---|---|---|---|
+| load average | 9.27 | 13.24 | 18.07 |
+| late note events, untouched 8 s | 0 | 0 | 0 |
+| late note events, ten moves | 0 | 0 | 0 |
+| thinnest scheduling margin | 21.7 ms | 30.7 ms | 30.3 ms |
+| longest main-thread block, untouched 8 s | 50 ms | 56 ms | 0 ms |
+| longest main-thread block, ten moves | 0 ms | 0 ms | 0 ms |
+| rebuild cost of one move | max 43 ms, mean 11 ms | max 47 ms, mean 13 ms | max 44 ms, mean 11 ms |
+| graphs alive: before, after load, after start, after stop | 1, 1, 2, 1 | 1, 1, 2, 1 | 1, 1, 2, 1 |
+| verdict | CLEAN | CLEAN | CLEAN |
+
+- Audible at load 18.41: `[audible] cold load to first audible sound: 791 ms`, `[audible] press to first audible sound: 474 ms (the stage started at 316 ms)`, master peak -7.6 dB (the meter now sees the talk-duck, which used to sit after it), `[audible] AUDIBLE: the record is making sound`.
+- Against the before entry: late events 6 and 8 to 0, 0 and 0; the ten-move block 114 to 120 ms to none at all; the untouched block 444 to 448 ms to 56 ms at worst.

@@ -12,6 +12,7 @@ import { makeVoice, voiceSignature, type Voice } from "./voices";
 import { makeBoard, type Board, type Analysis } from "./board";
 import { clipBuffer } from "./clips";
 import type { Kit } from "./kits";
+import { hitsAddress } from "./steady";
 
 export type Clips = Map<string, AudioBuffer>;
 // The rig's own health: how many note events fired, how many fired late (their time already past when the
@@ -23,15 +24,6 @@ type Entry = { voice: Voice; sig: string; meter: Tone.Meter; grain?: Tone.GrainP
 
 const FADE_SEC = 0.015;   // a swapped instrument crosses over in fifteen milliseconds
 
-// A cheap content address for a set of hits, so an unchanged track keeps the schedule it already has.
-function hashEvents(evs: Ev[]): string {
-  let h = 2166136261;
-  for (const e of evs) {
-    h = Math.imul(h ^ Math.round(e.beat * 960), 16777619);
-    h = Math.imul(h ^ (e.note[0] * 1024 + e.note[3] * 8 + Math.round(e.note[2] * 4)), 16777619);
-  }
-  return `${evs.length}.${(h >>> 0).toString(36)}`;
-}
 function hashBeats(beats: number[]): string {
   let h = 2166136261;
   for (const b of beats) h = Math.imul(h ^ Math.round(b * 960), 16777619);
@@ -80,7 +72,7 @@ export class Rig {
     for (const [id, e] of [...this.entries]) if (!wanted.has(id)) { this.retire(e); this.entries.delete(id); this.board.analysis.tracks.delete(id); }
     for (const tr of song.tracks) {
       const buf = clipBuffer(clips, tr.clip);
-      const sig = `${voiceSignature(tr, { kitId, bpm: song.bpm })}|${buf ? "b" : "-"}`;
+      const sig = this.sigOf(tr, song, buf, kitId);
       const have = this.entries.get(tr.id);
       if (have && have.sig === sig) { have.voice.tune(tr); continue; }
       if (have) this.retire(have);
@@ -92,13 +84,14 @@ export class Rig {
       const e = this.entries.get(tr.id); if (!e) continue;
       const evs = schedule.perTrack.get(tr.id);
       if (evs && evs.length) {
-        lay(`hits:${tr.id}`, `${e.sig}|${song.bpm}|${hashEvents(evs)}`, () => {
+        // The tempo is read where each note plays (a note's length is in beats), so a tempo move keeps this part.
+        lay(`hits:${tr.id}`, hitsAddress(e.sig, evs), () => {
           // Tone sources demand strictly increasing start times per voice: nudge exact collisions by 1 ms.
           let lastTime = -1;
           return new Tone.Part((time, ev: Ev) => {
             const margin = (time - this.transport.context.currentTime) * 1000;
             this.health.events++; if (margin < this.health.minMarginMs) this.health.minMarginMs = margin; if (margin < 0) this.health.late++;
-            const t = time <= lastTime ? lastTime + 0.001 : time; lastTime = t; e.voice.trigger(ev.note, t, song.bpm);
+            const t = time <= lastTime ? lastTime + 0.001 : time; lastTime = t; e.voice.trigger(ev.note, t, this.transport.bpm.getValueAtTime(time));
           }, evs.map((x) => [tick(x.beat), x] as [string, Ev]));
         });
       }
@@ -140,14 +133,17 @@ export class Rig {
       riserEvents.push([tick(s.startBeat + s.beats - lenBeats - (s.fill === "cut" ? 0.5 : 0)), lenBeats]);
     }
     if (riserEvents.length) {
-      const { synth, hp } = this.board.riser;
-      lay("riser", `${song.bpm}|${riserEvents.map((r) => r.join("/")).join(",")}`, () =>
-        new Tone.Part((time, lenBeats: number) => {
-          const len = lenBeats * beatSec;
-          synth.envelope.attack = Math.max(0.1, len - 0.15); synth.envelope.decay = 0.1; synth.envelope.sustain = 0;
+      lay("riser", `${song.bpm}|${riserEvents.map((r) => r.join("/")).join(",")}`, () => {
+        // Each riser its own voice, its envelope set here once rather than mutated inside the callback,
+        // so two risers that overlap never share (or rewrite) one envelope.
+        const lens = riserEvents.map(([, lenBeats]) => lenBeats * beatSec);
+        const voices = lens.map((len, i) => { const v = this.board.riser(i); v.synth.envelope.attack = Math.max(0.1, len - 0.15); v.synth.envelope.decay = 0.1; v.synth.envelope.sustain = 0; return v; });
+        return new Tone.Part((time, i: number) => {
+          const { synth, hp } = voices[i]; const len = lens[i];
           hp.frequency.setValueAtTime(500, time); hp.frequency.exponentialRampToValueAtTime(7000, time + len);
           synth.triggerAttackRelease(len, time, 0.85);
-        }, riserEvents));
+        }, riserEvents.map(([at], i) => [at, i] as [string, number]));
+      });
     }
 
     // The pump: duck the bus at every kick. Depth and release are master params (records: 5-7 dB, 100-120 ms).
@@ -171,6 +167,16 @@ export class Rig {
     else this.transport.bpm.value = song.bpm;
     this.laid = true;
   }
+
+  /** One track's voice, built ahead of `apply` (which then finds it in place and only tunes it), so an
+   *  offline render can build its voices one at a time and give the thread back between them. */
+  prepareVoice(tr: Track, song: Song, clips: Clips = new Map(), kit?: Kit, kitId = "") {
+    if (this.entries.has(tr.id)) return;
+    const buf = clipBuffer(clips, tr.clip);
+    this.entries.set(tr.id, this.build(tr, song, buf, kit, this.sigOf(tr, song, buf, kitId)));
+  }
+
+  private sigOf(tr: Track, song: Song, buf: AudioBuffer | undefined, kitId: string) { return `${voiceSignature(tr, { kitId, bpm: song.bpm })}|${buf ? "b" : "-"}`; }
 
   private build(tr: Track, song: Song, buf: AudioBuffer | undefined, kit: Kit | undefined, sig: string): Entry {
     const voice = makeVoice(tr, this.board.buses, buf, kit, this.live);

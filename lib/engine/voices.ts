@@ -20,7 +20,7 @@ export type Voice = {
   dispose: () => void;
 };
 
-export type Buses = { master: Tone.ToneAudioNode; duck: Tone.ToneAudioNode; reverb: Tone.ToneAudioNode };
+export type Buses = { master: Tone.ToneAudioNode; music: Tone.ToneAudioNode; duck: Tone.ToneAudioNode; reverb: Tone.ToneAudioNode };
 
 const midiToFreq = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 const REV_WET: Partial<Record<Role, number>> = { clap: 0.14, snare: 0.1, stab: 0.2, pad: 0.32, chords: 0.22, lead: 0.16, openhat: 0.07, perc: 0.08, arp: 0.15, pluck: 0.12, fx: 0.3, audio: 0.1 };
@@ -94,7 +94,7 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: 
   const p = track.synth ?? {};
   const fx = track.fx ?? {};
   const disp: { dispose: () => void }[] = [];
-  const dest = track.duck ? buses.duck : buses.master;
+  const dest = track.duck ? buses.duck : buses.music;
   let base = baseOf(track);
 
   // Insert chain (built back to front): filter -> drive -> crush -> eq -> delay -> pan -> width -> volume.
@@ -114,6 +114,9 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: 
   if (drive) { drive.wet.value = base.drive > 0 ? 1 : 0; drive.connect(head); head = drive; disp.push(drive); }
   const filter = new Tone.Filter(base.cutoff, fx.filter?.type ?? "lowpass"); filter.Q.value = base.q;
   filter.connect(head); head = filter; disp.push(filter);
+  // A zero-delay wall: standardized-audio-context walks every downstream path for a cycle on each new connect
+  // and stops only at a DelayNode, so every note start into the gate cost 7 to 12 ms. Behind it, under 0.1 ms.
+  const wall = new Tone.Delay(0, 0.01); wall.connect(head); head = wall; disp.push(wall);
   const gate = new Tone.Gain(1); gate.connect(head); head = gate; disp.push(gate);
 
   // The reverb send always exists at the track's amount, so "more space on the pad" is a ramp.
