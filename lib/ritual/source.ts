@@ -8,7 +8,8 @@ export type SourceMiss = { found: false; name: string };
 export const LOW_CONFIDENCE = 0.6;
 // Priors: a whole-record tempo from one analyzer is usually right within an octave; a key read from a
 // chroma profile is right about two times in three on pop and dance records.
-export const TEMPO_PRIOR = 0.75, KEY_PRIOR = 0.65, OCTAVE_DOUBT = 0.45;
+// Two in three is a doubt worth saying, so the key prior sits under LOW_CONFIDENCE and the key is never said as certain.
+export const TEMPO_PRIOR = 0.75, KEY_PRIOR = 0.55, OCTAVE_DOUBT = 0.45;
 
 // Where each dance family's records actually live. A tempo outside the band whose double or half is inside
 // it is the classic octave error; families with no tight band (pop, hip hop, rock) are not second guessed.

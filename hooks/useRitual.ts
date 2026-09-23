@@ -153,6 +153,10 @@ export function useRitual(d: Deps) {
   // The stream: this record's other lines first (instant, the loop never stops), then the finder's next record, then the libraries.
   const next = useCallback(async (): Promise<string> => {
     const h = heardRef.current;
+    // A finished arrangement with no source and no seed is not in the ritual: a library vocal across every section
+    // would rewrite it. Next one swaps a seed; with none, say how to start one instead.
+    const cur = song();
+    if (!h && !cur.source && !seedOf(cur) && cur.tracks.length > 0) return say("There is no seed on this record to swap yet. Name a record, or say chop, and next one will move through the candidates.");
     const lines = h ? (await phrasesOf(h)).filter((c) => !playedRef.current.has(c.id)) : [];
     if (lines.length) {
       const cut = await place(lines[0], "next");

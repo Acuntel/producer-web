@@ -58,3 +58,11 @@ test("rollout intents are deterministic", async () => {
   assert.equal(rolloutIntent("make the bass darker", true), null);
   assert.equal(rolloutIntent("what do you think of the drop", true), null);
 });
+
+test("next one is the ritual's only on a record in the ritual; on a finished arrangement it goes to the brain", () => {
+  assert.equal(localIntent("next one", s), null);
+  assert.equal(localIntent("go to the next", s), null);
+  const sourced = { ...s, source: { name: "Summer by Calvin Harris", bpm: 128, tempoConfidence: 0.75, from: "store", alt: null } };
+  assert.equal(localIntent("next one", sourced).action.type, "next");
+  assert.equal(localIntent("swap it", sourced).action.type, "next");
+});

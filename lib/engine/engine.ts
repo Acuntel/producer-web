@@ -32,6 +32,7 @@ export class Engine {
   private kitId = "";
   // Latest wins: two quick changes load at once, and only the newer one is ever laid.
   private latest = new Latest<Song>();
+  private stops = 0;
   private talking = false;
   private rebuilds = 0;
   private lastRebuildMs = 0;
@@ -43,10 +44,12 @@ export class Engine {
   private get transport() { return Tone.getTransport(); }
 
   async start(song: Song) {
+    const stops = this.stops;
     this.latest.take(song);
     await Tone.start();
     // A change that arrives while the session is starting is the record that starts.
     const newest = await this.latest.settle((s, ticket) => this.prepare(s, ticket));
+    if (stops !== this.stops) return;   // stopped while it was loading: the stop wins
     // Whatever a load built before the session opened comes down first: two rigs on one
     // transport is the whole record playing twice, a beat apart.
     this.teardown();
@@ -61,6 +64,7 @@ export class Engine {
   /** Stop: no new notes, the desk fades down over 40 ms, and only then does the rig come down, so a
    *  ringing tail is faded rather than cut. The rig leaves the live count at once; nothing new plays on it. */
   stop() {
+    this.stops++;
     this.transport.stop(); this.transport.cancel(); this.playing = false;
     const r = this.detach(); if (!r) return;
     r.board.fadeOut(STOP_FADE_SEC);

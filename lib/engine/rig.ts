@@ -189,7 +189,8 @@ export class Rig {
       const rate = c.warp !== false && c.bpm ? song.bpm / c.bpm : 1;
       grain = new Tone.GrainPlayer({ url: buf, loop: true, playbackRate: rate, detune: (c.semitones ?? 0) * 100, grainSize: 0.12, overlap: 0.05, loopStart: c.startSec ?? 0 });
       grain.volume.value = c.gainDb ?? 0;
-      if (c.lengthBeats) grain.loopEnd = (c.startSec ?? 0) + (c.lengthBeats * (60 / song.bpm)) / rate;
+      // The loop is lengthBeats of the clip's own beats in its buffer (60 / song.bpm * rate = 60 / clip bpm), never past its end.
+      if (c.lengthBeats) grain.loopEnd = Math.min(buf.duration, (c.startSec ?? 0) + c.lengthBeats * (60 / song.bpm) * rate);
       grain.connect(voice.gate);
     }
     return { voice, sig, meter, grain };
