@@ -528,7 +528,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const boot = useCallback(async () => {
     if (starting) return;
     if (!started) {
-      setStarting(true);
+      setStarting(true); performance.mark("producer:boot");   // the press, for the first-sound probe
       try {
         const eng = await getEngine();
         await eng.start(songRef.current);

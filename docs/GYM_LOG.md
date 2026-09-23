@@ -412,3 +412,31 @@ The brief and its reading: docs/MASTERPROMPT_V11.md. The store contract: docs/DN
 - `railway up` restarts the worker, which kills whatever it was separating. Do not deploy the worker while a learning run is in flight.
 - Node buffers a background script's stdout when it is not a terminal: use `stdbuf -oL` or the log stays empty and looks hung.
 - The store's corpus build (`run_all.py`, the rollups, the prints) is a build of a dataset, not something the product does while someone is in the room. It stays a tool, and that is said in the spec rather than left to be discovered.
+
+## 2026-09-22: before smooth (MASTERPROMPT_SMOOTH phase 0)
+- The numbers the smooth build is measured against, on branch `smooth` at c7046a1, a fresh `next build`, served on 3111 with the mock brain and no house key (`ANTHROPIC_API_KEY= PRODUCER_MOCK=1 next start -p 3111`), so nothing a harness does can spend on a model.
+- The audibility probe gained the one number it lacked: a page-side poll of the master meter every 4 ms from before the page exists, keeping the page time of the first read above -60 dB. Page time counts from the start of the navigation on a fresh Chrome profile, so that is the cold load; the stage now marks `producer:boot` when the session starts, which is the press. It also asks with `mock=1`, which only a mock server honours.
+
+### Measured
+| | run 1 | run 2 |
+|---|---|---|
+| late note events, untouched 8 s | 4 | 7 |
+| late note events, ten moves | 2 | 1 |
+| thinnest scheduling margin | -245.4 ms | -291.8 ms |
+| longest main-thread block, untouched 8 s | 444 ms | 448 ms |
+| longest main-thread block, ten moves | 120 ms | 114 ms |
+| rebuild cost of one move | max 107 ms, mean 30 ms | max 101 ms, mean 30 ms |
+| the listen: one render | 10,828 ms (measure 672 ms, off the thread) | 9,982 ms (measure 630 ms) |
+| graphs alive: before, after load, after start, after stop | 1, 1, 2, 1 | 1, 1, 2, 1 |
+| verdict | GLITCHY: 6 late events, leak no | GLITCHY: 8 late events, leak no |
+
+| | run 1 | run 2 | run 3 |
+|---|---|---|---|
+| cold load to first audible sound | 748 ms | 686 ms | 845 ms |
+| press to first audible sound | 463 ms | 415 ms | 492 ms |
+| master peak over 3 s | -3.7 dB | -3.6 dB | -5.4 dB |
+| verdict | AUDIBLE | AUDIBLE | AUDIBLE |
+
+- Raw, run 1: `[glitch] untouched 8 s: events 38, late 4, thinnest margin -245.4 ms, graphs alive 1, long tasks 8 (max 444 ms, total 1182 ms)`; `[glitch] ten moves: events 119, late 2, thinnest margin -245.4 ms, graphs alive 1, long tasks 23 (max 120 ms, total 1865 ms), rebuilds 10 (max 107 ms, mean 30 ms)`; `[glitch] open-then-start: graphs alive before 1, after load 1, after start 2, after stop 1`; `[audible] cold load to first audible sound: 748 ms (navigation start to the first master read above -60 dB, -1.9 dB)`; `[audible] press to first audible sound: 463 ms (the stage started at 285 ms)`.
+- Where the blocks come from, read off a profile of the ten moves (a scratch probe, not committed): the two tempo moves re-lay every part (`update > lay > apply > add`, 122 ms and 105 ms), because every part's content address carries the tempo; everything else over 50 ms is the listen, which renders on the main thread in one-second slices of audio (`_renderClock > emit > _loop > forEachTickBetween > ... triggerAttack`, 98 to 162 ms each) after building its offline rig in one piece (315 ms, `apply > build`, the worklet URLs and the oscillators' inverse FFTs). The first listen starts 2.5 s after the press and runs about ten seconds, so it lands on top of the first bars and on top of the moves.
+- The cold load already sits under the 2.0 s target on this machine with a local server; the press alone is about half a second.
