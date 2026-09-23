@@ -1,7 +1,8 @@
 // Offline: render the arrangement to audio, to WAV, and through the ears.
 import * as Tone from "tone";
 import type { Song } from "../song/types";
-import { buildGraph, type Clips } from "./graph";
+import { buildGraphInSteps, type Clips } from "./graph";
+import { renderInSteps } from "./offline";
 import { scheduleEvents } from "./schedule";
 import { loadClipsFor, clipKeysFor } from "./clips";
 import { getKit } from "./kits";
@@ -18,13 +19,14 @@ async function clipsFor(song: Song): Promise<Clips> {
   return ids.length ? loadClipsFor(ids) : new Map();
 }
 
+// Built and clocked in steps of a few milliseconds (offline.ts), so a listen never holds the thread
+// the live scheduler needs: the record keeps playing while the studio hears itself.
 async function renderOffline(song: Song, secs: number, clips: Clips, sampleRate?: number): Promise<AudioBuffer> {
   const kit = await getKit(song.lane, song.kit, song.bpm);
-  const buffer = await Tone.Offline(({ transport }) => {
-    buildGraph(song, transport as unknown as Transport, clips, kit);
+  return renderInSteps(secs, 2, sampleRate ?? Tone.getContext().sampleRate, function* (transport: Transport) {
+    yield* buildGraphInSteps(song, transport, clips, kit);
     transport.start(0);
-  }, secs, 2, sampleRate);
-  return buffer.get() as AudioBuffer;
+  });
 }
 
 export async function renderSong(song: Song, maxSeconds?: number): Promise<AudioBuffer> {

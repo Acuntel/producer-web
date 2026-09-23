@@ -13,14 +13,14 @@ import { movesFromOps, type LaneMove } from "@/lib/song/moves";
 import { stripWake, quickGate, classify } from "@/lib/brain/attend";
 import type { Engine, Position } from "@/lib/engine";
 import type { MusicFacts } from "@/lib/ears";
-import { logMove, setVerdict, inferVerdictFromUtterance, tasteSummary, logPair } from "@/lib/taste";
+import { logMove, attachWindow, tasteSummary, logPair } from "@/lib/taste";
 import { logMoveScore, referenceDelta, scoreLine } from "@/lib/scorecard";
 import { notesForBrain } from "@/lib/critic";
 import { localIntent, rolloutIntent, rolloutLine } from "@/lib/brain/local";
 import { verifyMove } from "@/lib/brain/verify";
 import { costOf, addCost, costFor, type Usage } from "@/lib/cost";
 import { feelFromFacts } from "@/lib/brain/feel";
-import type { BrainAction, Expectation } from "@/lib/brain/parse";
+import { RITUAL_ACTIONS, type BrainAction, type Expectation, type RitualAction } from "@/lib/brain/parse";
 import type { RolloutKind } from "@/lib/brain/rollouts";
 import { useRollout } from "./useRollout";
 import { useUploads } from "./useUploads";
@@ -47,7 +47,7 @@ const isE2E = () => typeof window !== "undefined" && /[?&](e2e|voice)=1/.test(wi
 
 export type SnapshotMeta = { label?: string; newProject?: boolean; facts?: unknown; chat?: { role: "user" | "assistant"; content: string }[]; blank?: boolean };
 
-export type StudioActions = { analyze?: (input: { url?: string; query?: string; from?: "local" | "web" }) => Promise<void> | void; vocal?: (prompt: string, lyrics?: string, lengthMs?: number) => Promise<void> | void; findSound?: (beats: number) => Promise<void> | void; hear?: (sectionId?: string) => Promise<string | null>; identify?: () => Promise<string | null>; tracklist?: (input: { url?: string; query?: string }) => Promise<void> | void };
+export type StudioActions = { analyze?: (input: { url?: string; query?: string; from?: "local" | "web" }) => Promise<void> | void; vocal?: (prompt: string, lyrics?: string, lengthMs?: number) => Promise<void> | void; findSound?: (beats: number) => Promise<void> | void; hear?: (sectionId?: string) => Promise<string | null>; identify?: () => Promise<string | null>; tracklist?: (input: { url?: string; query?: string }) => Promise<void> | void; ritual?: (a: BrainAction) => Promise<unknown> | void };
 
 export function useStudio(say: (t: string) => void, recordHum: (bpm: number, beats: number) => Promise<{ notes: Note[] } | null>, onSnapshot?: (s: Song, meta: SnapshotMeta) => void, actions?: StudioActions) {
   const onSnapshotRef = useRef(onSnapshot); onSnapshotRef.current = onSnapshot;
@@ -92,6 +92,8 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const busyRef = useRef(false); const pendingRef = useRef<string | null>(null);
   const lastMoveRef = useRef<string | null>(null);
   const hearSeq = useRef(0);
+  const laidRef = useRef<(() => void) | null>(null);
+  const movedRef = useRef<((id: string) => void) | null>(null);   // told after each version is laid on the rig (a listen that is pulled down stays down)
   const setSongRef = useRef<((s: Song, o?: { silent?: boolean; label?: string; noHistory?: boolean }) => Promise<void>) | null>(null);
   const historyRef = useRef(new History(60));
   const abRef = useRef<AB>(null);
@@ -212,7 +214,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     setCanUndo(historyRef.current.canUndo); setCanRedo(historyRef.current.canRedo);
     songRef.current = s; setSongState(s);
     const eng = await getEngine();
-    if (started || engineRef.current) await eng.update(s);
+    if (started || engineRef.current) { await eng.update(s); laidRef.current?.(); }
     autoSave(s);
     // The cloud hears about every save too; a new record (rollout, full song) opens a new project.
     if (!opts?.noSnapshot) { const fresh = newProjectRef.current; if (!isBlank(s)) newProjectRef.current = false; onSnapshotRef.current?.(s, { label: opts?.label, newProject: fresh, chat: messagesRef.current.slice(-40), blank: isBlank(s) }); }
@@ -247,6 +249,8 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     // Where a listen spends its time, so a stutter is traced and not guessed at.
     void import("@/lib/engine").then((m) => { (window as unknown as { __ears?: () => unknown }).__ears = () => m.hearTiming; });
   }, [getLevels]);
+  // The kit, the seed's clips and the voice route all warm while the landing is up, so the press has nothing left to wait for.
+  useEffect(() => { void import("@/lib/engine").then((m) => m.warmFor(songRef.current)).catch(() => {}); void fetch("/api/speak").catch(() => {}); }, []);
   const setVolume = useCallback(async (id: string, db: number, commit: boolean) => {
     const res = applyOps(songRef.current, [{ op: "set", track: id, path: "volume", value: db }]);
     if (!res.applied) return;
@@ -341,6 +345,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       if (a.prompt && actionsRef.current?.vocal) { flash("Rendering the vocal"); await actionsRef.current.vocal(a.prompt, a.lyrics, a.lengthMs); }
       else flash("Tell me what the vocal should be");
     }
+    else if (RITUAL_ACTIONS.includes(a.type as RitualAction)) await actionsRef.current?.ritual?.(a);
     else if (a.type === "recordHum") {
       const beats = a.beats && a.beats > 0 ? Math.min(32, a.beats) : 8;
       const role = (a.track && ["lead", "bass", "chords", "pluck", "arp", "stab", "pad", "sub"].includes(a.track) ? a.track : "lead") as Role;
@@ -408,7 +413,6 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     }
     busyRef.current = true; setBusy(true);
     const t0 = performance.now();
-    if (lastMoveRef.current && !opts?.hidden) { const v = inferVerdictFromUtterance(t); if (v) setVerdict(lastMoveRef.current, v); }
     const nowPlaying: Position | null = engineRef.current?.getPosition() ?? null;
     const next: Msg[] = [...messagesRef.current, { role: "user", content: t }];
     if (!opts?.hidden) setMessages(next); else messagesRef.current = next;
@@ -459,6 +463,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       setListenHint(data.listen ?? null);
       const entry = logMove({ title: (ns ?? cur).title, said: t, move: data.say, listen: data.listen, factsSummary: before ? `${Math.round(before.tempo.bpm)}bpm ${before.key.name} ${before.loudness.integrated.toFixed(1)}LUFS` : undefined });
       lastMoveRef.current = entry.id; setLastMoveId(entry.id); lastMoveAtRef.current = Date.now();
+      if (ns) movedRef.current?.(entry.id);   // a move on the record is judged by what is said in the thirty seconds after it (hooks/useRitual)
       say(data.say);
       await runAction(data.action, ns ?? songRef.current, t);
       // Verify: re-hear the changed sections and hold the brain to its word, once per move.
@@ -509,18 +514,19 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   }, [noteIgnored, say, send, edit]);
   const thatWasForMe = useCallback(() => { const i = ignored; if (!i) return; setIgnored(null); void send(i.text); }, [ignored, send]);
 
-  // Initiative: a producer in the room does not wait forever. After a quiet minute of
-  // playing, once every four minutes at most, it offers one A/B or one call-out.
+  // Initiative: a producer in the room does not wait forever, but quiet is not a cue. The producer we
+  // watched worked through six minutes of talk with the loop running, so after six quiet minutes of
+  // playing, once every six minutes at most, it offers one A/B or one call-out.
   const lastUtteranceRef = useRef(Date.now());
   const lastInitiativeRef = useRef(0);
   useEffect(() => {
     if (!started || paused) return;
     const t = window.setInterval(() => {
       const now = Date.now();
-      if (busyRef.current || rollout || now - lastUtteranceRef.current < 120000 || now - lastInitiativeRef.current < 360000 || songRef.current.tracks.length === 0) return;
+      if (busyRef.current || rollout || now - lastUtteranceRef.current < 360000 || now - lastInitiativeRef.current < 360000 || songRef.current.tracks.length === 0) return;
       lastInitiativeRef.current = now;
       const pos = engineRef.current?.getPosition();
-      void send(`PRODUCER INITIATIVE: the user has been listening quietly for two minutes${pos ? ` (now in the ${pos.section}, bar ${pos.barInSection + 1})` : ""}. Take one initiative a real producer would: EITHER offer an A/B on one specific element (return ops for A and alternative for B, say "A or B?") OR pause and point at one bar with one proposed fix as a question. One sentence, no lecture, nothing else changes.`, { hidden: true });
+      void send(`PRODUCER INITIATIVE: the user has been listening quietly for six minutes${pos ? ` (now in the ${pos.section}, bar ${pos.barInSection + 1})` : ""}. Take one initiative a real producer would: EITHER offer an A/B on one specific element (return ops for A and alternative for B, say "A or B?") OR pause and point at one bar with one proposed fix as a question. One sentence, no lecture, nothing else changes.`, { hidden: true });
     }, 15000);
     return () => window.clearInterval(t);
   }, [started, paused, rollout, send]);
@@ -528,11 +534,8 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const boot = useCallback(async () => {
     if (starting) return;
     if (!started) {
-      setStarting(true);
+      setStarting(true); performance.mark("producer:boot");   // the press, for the first-sound probe
       try {
-        const eng = await getEngine();
-        await eng.start(songRef.current);
-        setStarted(true); setPaused(false);
         const blank = isBlank(songRef.current);
         const greeting = blank
           ? "New record. Who are we chasing tonight? An artist, a song, or a feeling."
@@ -542,10 +545,17 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
         // One greeting per session on screen: earlier boot greetings (a reload, a second start) are replaced, never stacked.
         const isGreeting = (t: string) => /^(New record\. Who are we chasing|We are back\.|We are live\. That is our groove)/.test(t);
         setMessages((m) => { const kept = [...m]; while (kept.length && kept[kept.length - 1].role === "assistant" && isGreeting(kept[kept.length - 1].content)) kept.pop(); return [...kept, { role: "assistant", content: greeting }]; });
+        // The greeting goes first and the record joins underneath it: the transport waits for the first word,
+        // or 0.8 s at most, so a cold voice never holds the music past the two-second mark.
+        const spoke = new Promise<void>((res) => window.addEventListener("producer:voice", () => res(), { once: true }));
         say(greeting);
-        // The record gets a clean start: the first listen waits until the transport has settled,
-        // because building a render while the first bar is being scheduled is what the ear catches.
-        refreshEars(songRef.current, 2500);
+        const eng = await getEngine();
+        void import("@/lib/engine").then((m) => m.warmFor(songRef.current)).catch(() => {});
+        await Promise.race([spoke, new Promise<void>((res) => window.setTimeout(res, 800))]);
+        await eng.start(songRef.current);
+        setStarted(true); setPaused(false);
+        // The listen yields to the scheduler every few ms now, so it no longer has to wait out the first bar.
+        refreshEars(songRef.current);
       } finally { setStarting(false); }
       return;
     }
@@ -565,8 +575,11 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const append = useCallback((role: "user" | "assistant", content: string) => { const m = { role, content }; messagesRef.current = [...messagesRef.current, m]; setMessages((x) => [...x, m]); }, []);
   const getPosition = useCallback((): Position | null => engineRef.current?.getPosition() ?? null, []);
   const duck = useCallback((on: boolean) => { engineRef.current?.duck(on); }, []);
+  const liveEngine = useCallback(() => engineRef.current, []);
+  const onLaid = useCallback((f: (() => void) | null) => { laidRef.current = f; }, []);
+  const onMoveLanded = useCallback((f: ((id: string) => void) | null) => { movedRef.current = f; }, []);
   const jump = useCallback(async (sectionId: string) => { const eng = await getEngine(); if (eng.goto(sectionId)) flash(`Jumped to ${songRef.current.sections.find((s) => s.id === sectionId)?.name ?? sectionId}`); }, [flash, getEngine]);
-  const verdict = useCallback((v: "liked" | "killed") => { if (!lastMoveId) return; setVerdict(lastMoveId, v); flash(v === "liked" ? "Kept" : "Killed"); void send(v === "liked" ? "Yes, keep that." : "No, kill that, go a different direction."); }, [flash, lastMoveId, send]);
+  const verdict = useCallback((v: "liked" | "killed") => { if (!lastMoveId) return; attachWindow(lastMoveId, { landedAt: lastMoveAtRef.current, windowMs: 30000, saidAt: Date.now(), words: v === "liked" ? "pressed keep" : "pressed kill", verdict: v === "liked" ? "liked" : "rejected", closedBy: "verdict" }); flash(v === "liked" ? "Kept" : "Killed"); void send(v === "liked" ? "Yes, keep that." : "No, kill that, go a different direction."); }, [flash, lastMoveId, send]);
   const undo = useCallback(() => void tryLocal("undo"), [tryLocal]); const redo = useCallback(() => void tryLocal("redo"), [tryLocal]);
   const pickAb = useCallback((which: "a" | "b" | "keepA" | "keepB") => void tryLocal(which === "a" ? "play a" : which === "b" ? "play b" : which === "keepA" ? "keep a" : "keep b"), [tryLocal]);
   const { loadSaved, saveNow, download } = useLibraryActions({ autoSave, flash, say, setSong, started, getSong: () => songRef.current, setRendering });
@@ -574,5 +587,5 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
 
   return { song, messages, busy, started, starting, paused, nowSection, library, clips, facts, hearing, reference, deltaText, listenHint, toast, lastMoveId, rendering, ab, score, canUndo, canRedo, rollout, notSaved,
     boot, send, sendVoice, ignored, ignoredCount, thatWasForMe, loadChat, newSession, setReferenceBuffer, moves, previewClip, brainDown, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, getSchedule, getHealth, setVolume, toggleTrack,
-    play, pause, append, tryLocal, spend, cost, getPosition, duck };
+    play, pause, append, tryLocal, spend, cost, getPosition, duck, liveEngine, onLaid, onMoveLanded };
 }

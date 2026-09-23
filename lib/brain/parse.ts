@@ -4,7 +4,11 @@ import type { Song } from "../song/types";
 import { migrateSong } from "../song/migrate";
 import { laneId } from "./laneNames";
 
-export type BrainAction = { type: "play" | "pause" | "goto" | "loop" | "unloop" | "recordHum" | "rollout" | "hear" | "analyze" | "identify" | "tracklist" | "vocal" | "findSound" | "none"; section?: string; bar?: number; beats?: number; track?: string; kind?: string; lane?: string; url?: string; query?: string; prompt?: string; lyrics?: string; lengthMs?: number; from?: "local" | "web" };
+// The ritual's six (lib/song/ritual.ts) ride here too, so a local word or the Hands can start one: "source" carries the
+// record in `query`, "chop" a time in `at`, "alone" and "down" the kept track in `track`.
+export const RITUAL_ACTIONS = ["source", "chop", "alone", "beat", "next", "down"] as const;
+export type RitualAction = (typeof RITUAL_ACTIONS)[number];
+export type BrainAction = { type: "play" | "pause" | "goto" | "loop" | "unloop" | "recordHum" | "rollout" | "hear" | "analyze" | "identify" | "tracklist" | "vocal" | "findSound" | RitualAction | "none"; section?: string; bar?: number; beats?: number; at?: number; track?: string; kind?: string; lane?: string; url?: string; query?: string; prompt?: string; lyrics?: string; lengthMs?: number; from?: "local" | "web" };
 export type Expectation = { section?: string; metric: string; dir: "up" | "down" };
 export type BrainReply = { say: string; ops: unknown[] | null; song: Song | null; action: BrainAction | null; listen: string | null; expect: Expectation[] | null; alternative: unknown[] | null; raw?: string };
 
@@ -43,12 +47,13 @@ export function normalizeAction(a: unknown): BrainAction | null {
   if (typeof a !== "object") return null;
   const o = a as Record<string, unknown>;
   const type = typeof o.type === "string" ? o.type : "";
-  if (!["play", "pause", "goto", "loop", "unloop", "recordHum", "rollout", "hear", "analyze", "vocal", "findSound", "none"].includes(type)) return null;
+  if (!["play", "pause", "goto", "loop", "unloop", "recordHum", "rollout", "hear", "analyze", "vocal", "findSound", ...RITUAL_ACTIONS, "none"].includes(type)) return null;
   return {
     type: type as BrainAction["type"],
     section: typeof o.section === "string" ? o.section : undefined,
     bar: typeof o.bar === "number" ? o.bar : undefined,
     beats: typeof o.beats === "number" ? o.beats : undefined,
+    ...(typeof o.at === "number" && Number.isFinite(o.at) && o.at >= 0 ? { at: o.at } : {}),
     track: typeof o.track === "string" ? o.track : undefined,
     kind: typeof o.kind === "string" ? o.kind : undefined,
     ...(laneId(o.lane) ? { lane: laneId(o.lane) as string } : {}),

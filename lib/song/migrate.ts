@@ -39,6 +39,7 @@ export function migrateSong(input: unknown): Song | null {
     master: (s.master as Song["master"]) ?? undefined,
     loop: (s.loop as Song["loop"]) ?? null,
     notes: typeof s.notes === "string" ? s.notes : undefined,
+    source: s.source && typeof (s.source as Loose).bpm === "number" ? (s.source as Song["source"]) : undefined,
   };
 }
 

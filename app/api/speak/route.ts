@@ -8,6 +8,14 @@ export const maxDuration = 30;
 
 const VOICE = () => process.env.ELEVENLABS_VOICE_ID || "CwhRBWXzGAHq8TQ4Fs17";
 
+// A warm-up with no speech: the landing calls it so the first greeting pays for neither a cold key lookup nor a
+// cold connection upstream. The voice's metadata costs no characters and opens the connection the greeting reuses.
+export async function GET(req: Request) {
+  const key = (await userElevenLabsKey(req).catch(() => null)) ?? process.env.ELEVENLABS_API_KEY;
+  if (key) await fetch(`https://api.elevenlabs.io/v1/voices/${VOICE()}`, { headers: { "xi-api-key": key }, signal: AbortSignal.timeout(3000) }).then((r) => r.body?.cancel()).catch(() => {});
+  return new Response(null, { status: 204 });
+}
+
 export async function POST(req: Request) {
   const key = (await userElevenLabsKey(req).catch(() => null)) ?? process.env.ELEVENLABS_API_KEY;
   if (!key) return new Response("no voice configured", { status: 503 });

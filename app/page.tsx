@@ -15,6 +15,7 @@ import { useVoiceOut } from "@/hooks/useVoiceOut";
 import { useSpeak } from "@/hooks/useSpeak";
 import { useStopWords } from "@/hooks/useStopWords";
 import { useConversation } from "@/hooks/useConversation";
+import { useRitual } from "@/hooks/useRitual";
 import { Glow, type GlowState } from "@/components/Glow";
 import { Landing } from "@/components/Landing";
 import { Library } from "@/components/Library";
@@ -27,9 +28,10 @@ import { AccountSheet } from "@/components/AccountSheet";
 import { AnalyzeSheet } from "@/components/AnalyzeSheet";
 import { Icon } from "@/components/Icon";
 import type { Song } from "@/lib/song/types";
+import type { BrainAction } from "@/lib/brain/parse";
 
 const harnessMode = () => typeof window !== "undefined" && /[?&](e2e|typed)=1/.test(window.location.search);
-type Actions = { analyze: (i: { url?: string; query?: string; from?: "local" | "web" }) => Promise<void>; vocal: (p: string, l?: string, ms?: number) => Promise<void>; findSound: (beats: number) => Promise<void>; hear: (sectionId?: string) => Promise<string | null>; identify: () => Promise<string | null>; tracklist: (i: { url?: string; query?: string }) => Promise<void> };
+type Actions = { analyze: (i: { url?: string; query?: string; from?: "local" | "web" }) => Promise<void>; vocal: (p: string, l?: string, ms?: number) => Promise<void>; findSound: (beats: number) => Promise<void>; hear: (sectionId?: string) => Promise<string | null>; identify: () => Promise<string | null>; tracklist: (i: { url?: string; query?: string }) => Promise<void>; ritual: (a: BrainAction) => Promise<unknown> };
 
 export default function App() {
   // Server and client must render the same first frame: the harness flag is read after mount.
@@ -41,7 +43,7 @@ export default function App() {
   const [showAccount, setShowAccount] = useState(false);
   const [showAnalyze, setShowAnalyze] = useState(false);
   const snapshotRef = useRef<(s: Song, m: SnapshotMeta) => void>(() => {});
-  const actionsRef = useRef<Actions>({ analyze: async () => {}, vocal: async () => {}, findSound: async () => {}, hear: async () => null, identify: async () => null, tracklist: async () => {} });
+  const actionsRef = useRef<Actions>({ analyze: async () => {}, vocal: async () => {}, findSound: async () => {}, hear: async () => null, identify: async () => null, tracklist: async () => {}, ritual: async () => null });
   const duckRef = useRef<(on: boolean) => void>(() => {});
   const landingRef = useRef<(c: { open?: string; new?: boolean; library?: boolean; account?: boolean }) => void>(() => {});
 
@@ -50,7 +52,7 @@ export default function App() {
   const account = useAccount();
   const studio = useStudio(voiceOut.speak, (bpm, beats) => hum.record(bpm, beats), (s, m) => snapshotRef.current(s, m), {
     analyze: (i) => actionsRef.current.analyze(i), vocal: (p, l, ms) => actionsRef.current.vocal(p, l, ms), findSound: (b) => actionsRef.current.findSound(b),
-    hear: (sec) => actionsRef.current.hear(sec), identify: () => actionsRef.current.identify(), tracklist: (i) => actionsRef.current.tracklist(i),
+    hear: (sec) => actionsRef.current.hear(sec), identify: () => actionsRef.current.identify(), tracklist: (i) => actionsRef.current.tracklist(i), ritual: (a) => actionsRef.current.ritual(a),
   });
   duckRef.current = studio.duck;
   const projects = useProjects({ user: account.user, loadSong: studio.loadSong, loadChat: studio.loadChat, getSong: studio.getSong, localLibrary: studio.library, flash: studio.flash });
@@ -61,6 +63,7 @@ export default function App() {
   // whatever is missing is fetched back from the account before anyone notices silence.
   const clipKeys = useMemo(() => vaultKeysOf(studio.song).join("|"), [studio.song]);
   useEffect(() => { if (clipKeys) void vault.restore(studio.getSong()); }, [clipKeys, account.user, vault, studio]);
+  const ritual = useRitual({ studio, stems, speak: voiceOut.speak, speaking: voiceOut.speaking, signedIn: !!account.user });
   actionsRef.current = {
     analyze: async (i) => { setShowAnalyze(true); if (i.url) await stems.start({ url: i.url }); else await stems.findAndAnalyze(i.query ?? "", i.from ?? null); },
     vocal: async (p, l, ms) => { setShowAnalyze(true); await stems.renderVocal(p, l, ms); },
@@ -68,13 +71,14 @@ export default function App() {
     hear: async (sec) => stems.hearOurRender(sec),
     identify: async () => { setShowAnalyze(true); return stems.identifyPlaying(); },
     tracklist: async (i) => { setShowAnalyze(true); await stems.startTracklist(i); },
+    ritual: (a) => ritual.act(a),
   };
   useCritic({ song: studio.song, facts: studio.facts, reference: studio.reference, paused: !!studio.rollout, send: studio.send, started: studio.started });
   // The harness can hand the studio a vocal stem it made itself and watch where the phrase lands.
   useEffect(() => { if (harnessMode()) (window as unknown as { __vocal?: unknown }).__vocal = (said: string | null, where: string | null, job: unknown) => stems.dropVocal(said, where, job as never); }, [stems]);
 
   const titles = useMemo(() => [...projects.projects.map((p) => p.title), ...studio.library.map((s) => s.song.title)], [projects.projects, studio.library]);
-  const convo = useConversation({ studio, voice: voiceOut, screen: view === "stage" ? "stage" : view, projects: titles, onLanding: (c) => landingRef.current(c), grab: stems.grab, vocal: stems.vocalFrom });
+  const convo = useConversation({ studio, voice: voiceOut, screen: view === "stage" ? "stage" : view, projects: titles, onLanding: (c) => landingRef.current(c), grab: stems.grab, vocal: stems.vocalFrom, ritual });
   const speak = useSpeak({ onFinal: (t, ms) => void convo.hear(t, ms), onPress: () => convo.interrupt() });
   useStopWords(convo.auditioning, () => convo.interrupt(true));
 

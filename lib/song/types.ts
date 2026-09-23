@@ -152,6 +152,10 @@ export type Humanize = {
 // Any lane id: the shipped "tech-house" and "hard-house", the researched lanes in knowledge/lanes/lanes.json, or "custom".
 export type Lane = string;
 
+// The record the grid came from (the first law: decide the grid before a sound). Every estimate carries
+// its confidence, and `alt` is the other octave when the tempo could be read either way.
+export type Source = { name: string; bpm: number; key?: string; tempoConfidence: number; keyConfidence?: number; from: "heard" | "store" | "ears" | "said"; alt?: number | null };
+
 export type Song = {
   version: 3;
   id?: string;         // this record's own name for itself; two records called Untitled are still two records
@@ -168,6 +172,7 @@ export type Song = {
   master?: Master;
   loop?: LoopRegion;
   notes?: string;      // the producer's running notes on this song
+  source?: Source;     // the record whose tempo and key the grid was set from
 };
 
 export const MELODIC_ROLES: Role[] = ["bass", "sub", "chords", "stab", "pad", "lead", "pluck", "arp"];

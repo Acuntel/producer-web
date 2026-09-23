@@ -1,4 +1,5 @@
-// The scorecard: is the producer getting faster, more accurate, closer to the reference?
+// The scorecard: is the producer getting faster, more accurate, closer to the reference, and are its moves being judged?
+import { loadLedger } from "./taste";
 export type Move = {
   at: number; ask: string; kind: "local" | "brain" | "rollout" | "verify";
   latencyMs: number; opsApplied: number; skipped: number;
@@ -31,10 +32,26 @@ export function scoreSummary(): { moves: number; p50Local: number; p50Brain: num
   };
 }
 
+/** How the moves were judged: a verdict inside the thirty seconds after they landed, none, or dead after three passes. */
+export function verdictSummary(): { windows: number; liked: number; rejected: number; none: number; dead: number; medianMs: number | null } {
+  const all = loadLedger().filter((e) => e.window || e.dead);
+  const said = all.filter((e) => e.window && e.window.verdict !== "none" && e.window.saidAt !== null).map((e) => (e.window!.saidAt as number) - e.window!.landedAt).sort((a, b) => a - b);
+  return {
+    windows: all.length,
+    liked: all.filter((e) => e.window?.verdict === "liked").length,
+    rejected: all.filter((e) => e.window?.verdict === "rejected").length,
+    none: all.filter((e) => e.window?.verdict === "none" && !e.dead).length,
+    dead: all.filter((e) => e.dead).length,
+    medianMs: said.length ? said[Math.floor(said.length / 2)] : null,
+  };
+}
+
 export function scoreLine(): string {
   const s = scoreSummary();
   if (!s.moves) return "";
   const parts = [`${s.moves} moves`];
+  const v = verdictSummary();
+  if (v.windows) parts.push(`judged ${v.liked + v.rejected} of ${v.windows} inside 30 s${v.medianMs !== null ? ` (median ${(v.medianMs / 1000).toFixed(0)} s)` : ""}${v.dead ? `, ${v.dead} dead` : ""}`);
   if (s.p50Local) parts.push(`instant ${s.p50Local}ms`);
   if (s.p50Brain) parts.push(`brain ${(s.p50Brain / 1000).toFixed(1)}s`);
   if (s.verifiedPass + s.verifiedFail) parts.push(`verified ${s.verifiedPass}/${s.verifiedPass + s.verifiedFail}`);

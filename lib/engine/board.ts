@@ -6,19 +6,25 @@ import * as Tone from "tone";
 import type { Master, AutoParam } from "../song/types";
 
 export type Analysis = { fft: Tone.FFT; meter: Tone.Meter; tracks: Map<string, Tone.Meter> };
-export type Buses = { master: Tone.ToneAudioNode; duck: Tone.ToneAudioNode; reverb: Tone.ToneAudioNode };
+// `music` is where the record's voices, reverb and riser meet; the producer's talk-duck rides it, so an
+// audition entering `master` goes through the whole master chain without being ducked with the record.
+export type Buses = { master: Tone.ToneAudioNode; music: Tone.ToneAudioNode; duck: Tone.ToneAudioNode; reverb: Tone.ToneAudioNode };
+export type Riser = { synth: Tone.NoiseSynth; hp: Tone.Filter };
 
 export type Board = {
   buses: Buses;
   duck: Tone.Gain;
   analysis: Analysis;
-  riser: { synth: Tone.NoiseSynth; hp: Tone.Filter };
+  riser: (i: number) => Riser;
+  talk: (on: boolean, now?: boolean) => void;
+  fadeOut: (seconds: number) => void;
   applyMaster: (m: Master, ramp: boolean) => void;
   automate: (param: AutoParam, from: number, to: number, t0: number, t1: number, curve?: "linear" | "exp") => void;
   dispose: () => void;
 };
 
 const RAMP = 0.05;
+const TALK_DB = -7;   // how far the record steps back while the producer speaks
 
 /** The desk, wired into `destination`. One per playing context (the live transport, or one offline render).
  *  An offline render has no eye on it, so it carries no analyser: those cost real time per block. */
@@ -31,8 +37,10 @@ export function makeBoard(destination?: Tone.ToneAudioNode, live = true): Board 
   const limiter = new Tone.Limiter(-1);
   // Final soft clipper: club-master glue, and a hard guarantee that nothing leaves above 0 dBFS.
   const clipper = new Tone.WaveShaper((x) => Math.tanh(x * 1.25) / Math.tanh(1.25), 4096);
-  masterVol.connect(masterEq); masterEq.connect(masterFilter); masterFilter.connect(comp); comp.connect(makeup); makeup.connect(limiter); limiter.connect(clipper);
-  if (destination) clipper.connect(destination); else clipper.toDestination();
+  // The last gain on the desk: stop fades it down before the rig is torn down, so a tail is faded, not cut.
+  const out = new Tone.Gain(1);
+  masterVol.connect(masterEq); masterEq.connect(masterFilter); masterFilter.connect(comp); comp.connect(makeup); makeup.connect(limiter); limiter.connect(clipper); clipper.connect(out);
+  if (destination) out.connect(destination); else out.toDestination();
 
   // The visible proof: a spectrum fine enough to draw on a log axis, and a stereo meter.
   const fft = new Tone.FFT({ size: live ? 1024 : 32, smoothing: 0.5 });
@@ -40,15 +48,23 @@ export function makeBoard(destination?: Tone.ToneAudioNode, live = true): Board 
   if (live) { clipper.connect(fft); clipper.connect(meter); }
 
   const master: Tone.ToneAudioNode = masterVol;
-  const duck = new Tone.Gain(1).connect(master);
+  const music = new Tone.Volume(0).connect(master);
+  const duck = new Tone.Gain(1).connect(music);
   const reverb = new Tone.Freeverb({ roomSize: 0.82, dampening: 2800 });
-  reverb.wet.value = 1; reverb.connect(master);
+  reverb.wet.value = 1; reverb.connect(music);
 
-  // Drop craft: one riser for the whole desk, swept by the schedule's riser part.
-  const riserSynth = new Tone.NoiseSynth({ noise: { type: "white" } });
-  const riserHp = new Tone.Filter(500, "highpass");
-  const riserGain = new Tone.Gain(0.33);
-  riserSynth.connect(riserHp); riserHp.connect(riserGain); riserGain.connect(master);
+  // Drop craft: every riser in the record gets its own noise voice and its own sweep, so two that
+  // overlap never fight over one envelope. Built when the schedule is laid, never in the audio callback.
+  const riserGain = new Tone.Gain(0.33).connect(music);
+  const risers: Riser[] = [];
+  const riser = (i: number): Riser => {
+    while (risers.length <= i) {
+      const synth = new Tone.NoiseSynth({ noise: { type: "white" } });
+      const hp = new Tone.Filter(500, "highpass");
+      synth.connect(hp); hp.connect(riserGain); risers.push({ synth, hp });
+    }
+    return risers[i];
+  };
 
   const applyMaster = (m: Master, ramp: boolean) => {
     const set = (param: { value: number; rampTo: (v: number, t: number) => unknown }, v: number) => { if (ramp) param.rampTo(v, RAMP); else param.value = v; };
@@ -71,14 +87,22 @@ export function makeBoard(destination?: Tone.ToneAudioNode, live = true): Board 
     else if (param === "filter.q") ramp(masterFilter.Q, false);
   };
 
-  const nodes: { dispose: () => void }[] = [masterVol, masterEq, masterFilter, comp, makeup, limiter, clipper, duck, reverb, riserSynth, riserHp, riserGain, fft, meter];
+  const talk = (on: boolean, now = false) => {
+    const db = on ? TALK_DB : 0;
+    if (now) music.volume.value = db; else music.volume.rampTo(db, on ? 0.12 : 0.35);
+  };
+  const fadeOut = (seconds: number) => { const g = out.gain; const t = out.immediate(); g.cancelScheduledValues(t); g.setValueAtTime(g.getValueAtTime(t), t); g.linearRampToValueAtTime(0, t + seconds); };
+
+  const nodes: { dispose: () => void }[] = [masterVol, masterEq, masterFilter, comp, makeup, limiter, clipper, out, music, duck, reverb, riserGain, fft, meter];
   return {
-    buses: { master, duck, reverb },
+    buses: { master, music, duck, reverb },
     duck,
     analysis: { fft, meter, tracks: new Map() },
-    riser: { synth: riserSynth, hp: riserHp },
+    riser,
+    talk,
+    fadeOut,
     applyMaster,
     automate,
-    dispose: () => { for (const n of nodes) { try { n.dispose(); } catch { /* already gone */ } } },
+    dispose: () => { for (const n of [...nodes, ...risers.flatMap((r) => [r.synth, r.hp])]) { try { n.dispose(); } catch { /* already gone */ } } },
   };
 }

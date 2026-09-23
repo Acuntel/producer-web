@@ -412,3 +412,126 @@ The brief and its reading: docs/MASTERPROMPT_V11.md. The store contract: docs/DN
 - `railway up` restarts the worker, which kills whatever it was separating. Do not deploy the worker while a learning run is in flight.
 - Node buffers a background script's stdout when it is not a terminal: use `stdbuf -oL` or the log stays empty and looks hung.
 - The store's corpus build (`run_all.py`, the rollups, the prints) is a build of a dataset, not something the product does while someone is in the room. It stays a tool, and that is said in the spec rather than left to be discovered.
+
+## 2026-09-22: before smooth (MASTERPROMPT_SMOOTH phase 0)
+- The numbers the smooth build is measured against, on branch `smooth` at c7046a1, a fresh `next build`, served on 3111 with the mock brain and no house key (`ANTHROPIC_API_KEY= PRODUCER_MOCK=1 next start -p 3111`), so nothing a harness does can spend on a model.
+- The audibility probe gained the one number it lacked: a page-side poll of the master meter every 4 ms from before the page exists, keeping the page time of the first read above -60 dB. Page time counts from the start of the navigation on a fresh Chrome profile, so that is the cold load; the stage now marks `producer:boot` when the session starts, which is the press. It also asks with `mock=1`, which only a mock server honours.
+
+### Measured
+| | run 1 | run 2 |
+|---|---|---|
+| late note events, untouched 8 s | 4 | 7 |
+| late note events, ten moves | 2 | 1 |
+| thinnest scheduling margin | -245.4 ms | -291.8 ms |
+| longest main-thread block, untouched 8 s | 444 ms | 448 ms |
+| longest main-thread block, ten moves | 120 ms | 114 ms |
+| rebuild cost of one move | max 107 ms, mean 30 ms | max 101 ms, mean 30 ms |
+| the listen: one render | 10,828 ms (measure 672 ms, off the thread) | 9,982 ms (measure 630 ms) |
+| graphs alive: before, after load, after start, after stop | 1, 1, 2, 1 | 1, 1, 2, 1 |
+| verdict | GLITCHY: 6 late events, leak no | GLITCHY: 8 late events, leak no |
+
+| | run 1 | run 2 | run 3 |
+|---|---|---|---|
+| cold load to first audible sound | 748 ms | 686 ms | 845 ms |
+| press to first audible sound | 463 ms | 415 ms | 492 ms |
+| master peak over 3 s | -3.7 dB | -3.6 dB | -5.4 dB |
+| verdict | AUDIBLE | AUDIBLE | AUDIBLE |
+
+- Raw, run 1: `[glitch] untouched 8 s: events 38, late 4, thinnest margin -245.4 ms, graphs alive 1, long tasks 8 (max 444 ms, total 1182 ms)`; `[glitch] ten moves: events 119, late 2, thinnest margin -245.4 ms, graphs alive 1, long tasks 23 (max 120 ms, total 1865 ms), rebuilds 10 (max 107 ms, mean 30 ms)`; `[glitch] open-then-start: graphs alive before 1, after load 1, after start 2, after stop 1`; `[audible] cold load to first audible sound: 748 ms (navigation start to the first master read above -60 dB, -1.9 dB)`; `[audible] press to first audible sound: 463 ms (the stage started at 285 ms)`.
+- Where the blocks come from, read off a profile of the ten moves (a scratch probe, not committed): the two tempo moves re-lay every part (`update > lay > apply > add`, 122 ms and 105 ms), because every part's content address carries the tempo; everything else over 50 ms is the listen, which renders on the main thread in one-second slices of audio (`_renderClock > emit > _loop > forEachTickBetween > ... triggerAttack`, 98 to 162 ms each) after building its offline rig in one piece (315 ms, `apply > build`, the worklet URLs and the oscillators' inverse FFTs). The first listen starts 2.5 s after the press and runs about ten seconds, so it lands on top of the first bars and on top of the moves.
+- The cold load already sits under the 2.0 s target on this machine with a local server; the press alone is about half a second.
+
+## 2026-09-23: smooth phase 1, the record no longer stutters
+- Same bench as the before entry: a fresh `next build` on branch `smooth`, served on 3111 with the mock brain and no house key. This Mac was shared with other tabs' builds, so every run carries its load average.
+- The seven edges: kit and clips warm before the press (`warmFor`), a latest-wins ticket on `Engine.update` (`Latest` in `lib/engine/steady.ts`), a shortened record wraps to the same place in a bar (`wrapToBar`), a 40 ms master fade before teardown, auditions through the master chain with a 5 ms attack, the talk-duck on a music bus instead of the destination, and each riser with its own synth.
+- What the edges did not reach, and what fixed it:
+  - A tempo move re-laid every part, because the drum hits' content address carried the tempo. The hits are addressed without it now (`hitsAddress`), and note length reads the transport's tempo at the event. Rebuild max 101 to 107 ms went to 42 to 47 ms.
+  - The listen built its offline rig in one block and let Tone's offline clock run a second of audio per slice. It now builds one voice per step and gives the thread back after 6 ms of work (`renderInSteps` in `lib/engine/offline.ts`), with the offline context global only inside a single synchronous step, so no live node can land in the offline graph. Tone.Offline is no longer used.
+  - The root of every block that was left: standardized-audio-context walks every downstream path looking for a cycle on each new connect and stops only at a DelayNode, and every note start is a new connect. One connect into a voice's gate cost 7.1 to 11.9 ms. A zero-delay wall between the gate and the insert chain stops the walk: the same connect now measures 0.00 to 0.10 ms on every voice.
+- The Tone warning about scheduling inside callbacks is Tone's own PolySynth making a voice inside a note callback. It is harmless for timing and stays.
+
+### Measured
+| | run 1 | run 2 | run 3 |
+|---|---|---|---|
+| load average | 9.27 | 13.24 | 18.07 |
+| late note events, untouched 8 s | 0 | 0 | 0 |
+| late note events, ten moves | 0 | 0 | 0 |
+| thinnest scheduling margin | 21.7 ms | 30.7 ms | 30.3 ms |
+| longest main-thread block, untouched 8 s | 50 ms | 56 ms | 0 ms |
+| longest main-thread block, ten moves | 0 ms | 0 ms | 0 ms |
+| rebuild cost of one move | max 43 ms, mean 11 ms | max 47 ms, mean 13 ms | max 44 ms, mean 11 ms |
+| graphs alive: before, after load, after start, after stop | 1, 1, 2, 1 | 1, 1, 2, 1 | 1, 1, 2, 1 |
+| verdict | CLEAN | CLEAN | CLEAN |
+
+- Audible at load 18.41: `[audible] cold load to first audible sound: 791 ms`, `[audible] press to first audible sound: 474 ms (the stage started at 316 ms)`, master peak -7.6 dB (the meter now sees the talk-duck, which used to sit after it), `[audible] AUDIBLE: the record is making sound`.
+- Against the before entry: late events 6 and 8 to 0, 0 and 0; the ten-move block 114 to 120 ms to none at all; the untouched block 444 to 448 ms to 56 ms at worst.
+
+## 2026-09-23: smooth phase 2, the first minute
+- The kit, the seed's clips and the voice route warm while the landing is up (`warmFor` and a speechless `GET /api/speak` on mount), so the press has nothing left to render.
+- The greeting goes first and the record joins underneath it. `boot()` speaks before it starts the engine, and the transport waits for the first word (`producer:voice`, marked by the voice when its first sound is scheduled) or 0.8 s at most, so a cold voice never holds the music past two seconds.
+- The first listen no longer waits 2.5 s. The listen gives the thread back every 6 ms of work since phase 1, so it starts on the ordinary 500 ms settle, and glitch's untouched window proves it costs the first bars nothing.
+- The producer takes initiative after six quiet minutes, not two. The producer we watched worked through six minutes of talk with the loop running.
+- tests/audible.mjs asserts the order: `[audible] greeting before transport: yes|NO (first word, transport)`. A late greeting fails the probe with `GREETING LATE`, and it is no longer reported as SILENT.
+
+### Measured
+| | load average | cold load to first sound | press to first sound | first word | transport | verdict |
+|---|---|---|---|---|---|---|
+| warm server, run 1 | 8.71 | 887 ms | 543 ms | 514 ms | 767 ms | greeting first, AUDIBLE |
+| warm server, run 2 | 10.58 | 817 ms | 528 ms | 448 ms | 699 ms | greeting first, AUDIBLE |
+| warm server, run 3 | 23.88 | 1071 ms | 570 ms | 666 ms | 953 ms | greeting first, AUDIBLE |
+| first press after a server restart | 8.09 | 1520 ms | 1213 ms | 1775 ms | 1353 ms | GREETING LATE, AUDIBLE |
+| first press after a server restart | 10.66 | 1544 ms | 1203 ms | 1853 ms | 1380 ms | GREETING LATE, AUDIBLE |
+
+- Glitch after phase 2, three runs at load 8.56 / 13.69 / 16.59: late events 0 / 0 / 0 untouched and 0 / 0 / 0 across ten moves; longest ten-move block 0 / 0 / 50 ms; graphs alive 1, 1, 2, 1; CLEAN, CLEAN, CLEAN.
+- Screens at 390 and 1440 (landing, stage idle and live, library) render with no overflow and nothing clipped.
+- Open: the very first press after a server restart has the greeting about 0.45 s behind the record. `/api/speak` itself answers cold in 235 ms (warm 160 ms), and warming its key lookup on mount did not move it. The harness starts the stage the moment the page loads, so nothing gets a landing dwell, and the page's first requests to a cold local server queue ahead of the voice. A real press comes after the landing has been up, which is when the warm-ups run. Next measure: the voice request's queue time in the first run, before calling this closed.
+
+## 2026-09-23: smooth phase 3, the order of work as real ops
+- Six new ops, each a voice control, a brain action and a reducer (`lib/song/ritual.ts`, resolved in the browser by `hooks/useRitual.ts`, the way `slice` is): `source` sets the grid from a named record's tempo and key before anything exists (the records the studio's ears have heard, then the in-process prints, then the song table, through `/api/source`; every tempo and key carries a confidence, and a low one is said out loud), `chop` cuts a phrase off the record's vocal on its own beat grid to one, two or four whole bars (`phraseOnGrid` and `cutGridPhrase` in `lib/engine/slice.ts`) and loops exactly those bars, `alone` solos it for the sing back, `beat` builds drums and bass at the source tempo and refuses when there is no source, `next` swaps the seed to the next ranked candidate (the heard record's other lines, then the finder's records in `useStems.candidates`) without stopping the loop, and `down` pulls every fader but the seed's 10 dB on the rig (fader ramps, no rebuild, nothing saved) until the next word.
+- "Pull it down" used to nudge the master 2 dB; it and "next one" are instant local moves now.
+- The patience watch (`lib/ritual/patience.ts`): a verdict prompt at the first pass of the loop after 8 s and never later than 20 s, so the answer can still land inside the 30 s window; a swap offered after three passes with no verdict, and never before the window is over. A pass is one trip of the transport around its loop region, counted from Tone's `loop` event (`lib/ritual/passes.ts`); the trip an element lands in counts only if it landed in the first half of it.
+- The worker counts tempo the way the local ears do (`tempo_from_drums` in `worker/analysis.py`, ported from `~/.dictation/producer/learning_read.py`): onset autocorrelation at hop 128, the lag with support at twice itself, a parabolic peak, octaves folded into 95 to 185, the beat phase (48 steps a beat on a 23 ms onset window), a confidence, and a refusal below 0.25. A folded octave names the octave it was read at and carries at most 0.55. After separation the drums stem is counted again and replaces the mix's read when it is at least as sure. Not deployed: the worker needs `railway up`.
+
+### Measured
+- `worker/tempo_check.py` (local venv, librosa 1.0.0): synthetic 128 (phase 0.110 -> 0.098), 124, 122.5 right to 0.1 BPM with the phase inside 25 ms; a hip hop pocket at 90 reads 180 folded from 90 and a drum and bass break reads 173.9 folded from 87.0, both capped at 0.55; silence and white noise refused; all 14 DJ-tagged fixtures within 1 BPM of their tags (confidence 0.42 to 0.83), the two Anyma records at 172.
+- `tests/ritual.e2e.mjs` session 2, load 66: `[ritual] O1. source: Summer by Calvin Harris sits at 128. The grid is set. It is in G major. | song 128 BPM G major, transport 128 BPM, tempo confidence 0.75 from the store, tracks 0`; `[ritual] O5. verdict prompt 8.1 s after the beat landed (2 passes of the loop)`; `[ritual] O6. next: chop_ritualjob_7470 -> chop_ritualjob_14950`; `[ritual] O7. pull it down: faders {"chop":0,"kick":-2.5,"clap":-2,"hat":-4,"bass":0} -> {"chop":0,"kick":-12.5,"clap":-12,"hat":-14,"bass":-10}`; `[ritual] ALL PASSED`.
+- Glitch after phase 3, three runs at load 102.54 / 103.89 / 112.91: late events 0 / 0 / 0 across ten moves, thinnest margin 15.9 / 15.9 / 17.0 ms, longest ten-move block 0 / 53 / 87 ms (the last two at a load six times the phase 1 bench), graphs alive 1, 1, 2, 1; CLEAN, CLEAN, CLEAN.
+
+## 2026-09-23: smooth phase 5, the ledger learns from verdicts
+- A move is judged by what is said in the thirty seconds after it lands. Every move that changes the record (a brain move, a chop, the beat, the next candidate) opens the patience watch from phase 3, and its window goes on the move in the taste ledger (`lib/taste.ts`): when it landed, when the judging words came and what they were, and liked, rejected or none. A window closes on a verdict, at thirty seconds, or early when a newer move lands and takes the room. Words after the window judge nothing; the old rule attached a verdict from the next sentence however late it came, and that line in `useStudio.send` is gone.
+- Three passes of the loop with no verdict mark the idea dead (`markDead`), never inside its own thirty seconds, and the producer offers the next one. A pass is one trip of the transport around its loop region, counted from Tone's `loop` event, so a paused record makes no passes; the trip an element lands in counts only when it landed in the first half of it. Dead ideas print as DEAD in the taste summary the brain reads, and reach the account as the verdict "dead" (`lib/tasteSync.ts`); the window itself stays in this browser until `taste_moves` has a column for it.
+- Verdict words (`judgeWords`): "I kinda like that" is a yes now, "I don't like that" is read as a no before the like in it, and "sounds like that record" is a reference, not a call.
+- The scorecard line the brain reads says how its moves were judged: "judged N of M inside 30 s (median S s), K dead".
+- Found on the way: a one bar chop set a one bar loop region, which `loopBounds` ignores (a region needs its end bar after its start bar), so the transport looped the whole eight bar section and a pass took fifteen seconds. The chop's loop region is two bars at the least now.
+
+### Measured
+- `tests/ritual.e2e.mjs` at load 56: `[ritual] O9. taste: chop "I'm making a chop" -> {"windowMs":30000,"words":"loop it alone","verdict":"none","closedBy":"next move"}`; `[ritual] O9. taste: next "next one" -> {"landedAt":1790152526030,"windowMs":30000,"saidAt":1790152532419,"words":"I kinda like that","verdict":"liked","closedBy":"verdict"}` (said 6.4 s after it landed); `[ritual] O10. silence over chop_ritualjob_1860: swap offered 30.9 s after it landed, 8 loop wraps; ledger {"window":{"verdict":"none","closedBy":"time"},"dead":{"passes":8},"verdict":null}`; `[ritual] ALL PASSED`.
+- `tests/taste.test.mjs`: a scripted two bar loop at 128 with nobody talking goes prompt, close at 30 s, dead; a sixteen bar loop is not dead until its third pass at 87 s.
+- Glitch after phase 5, load 42.73 / 46.54 / 55.24: late 0 / 0 / 0, ten-move block 0 / 51 / 112 ms, CLEAN, CLEAN, CLEAN. Audible at load 60.94: greeting before transport, first word 706 ms, transport 1024 ms, press to first sound 670 ms.
+
+## 2026-09-23: smooth phase 4, where the sounds come from
+- A lane interface for the ritual's "next" (`lib/sources/`): every lane ranks candidates on what its catalog already says and never fetches audio to rank. "Next one" draws from the lanes once the heard record's lines and the finder's records are used up, or at once when nobody is signed in.
+- The owned lane is built: the starter library's vocals, stretched onto the grid at their own tempo or at double or half time (whichever bends them least, at most 12 percent) and moved at most three semitones into the grid's key. A tempo the pack only inferred from a loop's length carries 0.5 and is said out loud. The line it speaks says where the sound came from, how far it was bent, and that it is ours to use under CC0.
+- Every sound the product ships is listed with its license, source page, author and sha256 in `docs/SOURCES_MANIFEST.json`, and `tests/sources.test.mjs` holds that list, the pack manifest and `lib/samples-attribution.ts` to each other. A commissioned buyout is an owned license now, with its contract named.
+- Splice is a stub behind `NEXT_PUBLIC_SOURCES_SPLICE`, off unless it is exactly 1, with nothing to offer even when on. The hard line is code that runs today: a `splice:` clip key space, the clip vault refuses it (`needsVault`), and `spliceMayGo` allows the user's own device and nowhere else. The probe and the lane design are in `docs/SOURCES_SPLICE.md`: open dynamic client registration, PKCE, no CORS on `/mcp` or `/oauth/token`, so the client has to run on the user's own machine. Tracklib has no public API.
+- The audit (`npm run audit:audio`, `docs/SOURCES_AUDIT.md`) is not zero. Training data holds no audio. Storage holds 345 objects (580.7 MB) of stems separated from 11 records, 189 of them from the learning lane and 135 in the shared cache every signed-in user can read; the repository holds 16 files that are not ours (14 local fixture records, the voice harness WAV, a stray WAV in the Lakh dataset). Nothing was deleted.
+
+### Measured
+- `npm test` at load 17.48: `ℹ tests 118`, `ℹ pass 118`, `ℹ fail 0` (8 new in `tests/sources.test.mjs`). `npx tsc --noEmit`: exit 0. `next build`: green.
+- `[audit] audio files by their bytes or their names: 56; owned and listed in docs/SOURCES_MANIFEST.json: 40; not listed: 16 (188.9 MB)`, `[audit] NOT ZERO: audio that is not listed as ours is still in this repository.`
+- Supabase, read only: `clips | <owner>/stems | 210 | 292.3`, `clips | shared/records | 135 | 288.4`, `clips | <owner>/uploads | 1 | 2.8`, `clips | <owner>/queries | 1 | 0.4`.
+- Splice: `GET /mcp` gives `HTTP/2 401` with `www-authenticate: Bearer resource_metadata=https://mcp.splice.com/.well-known/oauth-protected-resource`; `POST /oauth/register` for a public client gives `201`; `OPTIONS /oauth/token` gives `405` with no `access-control-allow-origin`.
+
+## 2026-09-23: smooth, the skeptic's pass and the fixes
+- Phases 3 and 5 were built by one agent (45669f7, 656d3d7) and phase 4 by another (2638093, 2bc1c49). A skeptic rebuilt from clean and re-ran every gate. Phase 3 CONFIRMED (the ritual order by voice, ALL PASSED). Phase 5 CONFIRMED (verdict windows on moves, three passes with no verdict marks the idea dead). Phase 4 BLOCKED on decisions only Brady can make (docs/SOURCES_AUDIT.md, docs/SOURCES_SPLICE.md).
+- Fixed after the skeptic, all on `smooth`:
+  - A warped loop could end past its own audio. `rig.ts` divided the loop length by the playback rate twice, so a clip slower than the grid threw `RangeError ... at set loopEnd` inside the rig, and every later move stopped reaching the audio. The loop is now the clip's own beats in its buffer, clamped to the buffer. Proven live: a 128 BPM library vocal placed on a 126 BPM record lands, and the next three moves rebuild (4 -> 5 -> 6 -> 7).
+  - "Next one" rewrote finished arrangements. On a record with no source and no seed it now says how to start one, and the local shortcut only claims "next one" when the record is in the ritual. On GLOW with no source: nothing added. Unit test in tests/local.test.mjs.
+  - A catalog key was said as certain although it is right about two times in three. The key prior (0.55) now sits under the line, so the producer says the key with its doubt.
+  - A stop during a loading start was lost. `Engine.start` now yields to any stop that lands while it loads.
+  - The landing warm-up also opens the upstream voice connection (voice metadata, no characters spent).
+- Checks after the fixes: unit tests 119 of 119, tsc clean, ritual ALL PASSED. Glitch at loads 49, 52 and 53: late 0, 0 and 0, CLEAN three times, ten-move longest block 59, 0 and 51 ms.
+- Open, measured and not closed:
+  - The ten-move block goes past 50 ms once the load average passes about 18, and the end-of-phase-2 build does the same (0, 61 and 52 ms at loads 7, 18 and 36), so this is load, not a regression. `glitch.probe.mjs` prints CLEAN on late notes and leaks only, and does not enforce the 50 ms bound. Rerun on a quiet machine.
+  - On a freshly restarted local server the greeting arrives 2 to 3.5 s after the record starts: first word at 3488 ms on the landing path and 5033 ms on stage-on-load, with the transport at about 1.7 s, at load 30 to 41. On a warm server the greeting leads by about 0.3 s. The music never waits more than 0.8 s, so the cold case is music first, never silence. The case that matters is a cold function on the deployed site, and it has to be measured there.
+  - The worker's drum re-read sets the tempo but leaves bars, blocks and best bars on the mix's grid. The Splice exits (hear, identify, analyze uploads) are listed but not closed in code. Findphrases runs on the main thread (44 to 57 ms on a 4-minute stem). The Keep and Kill buttons ignore the 30-second window. The patience rule needs both 3 passes and 30 s, which is 8 passes on a 2-bar loop.

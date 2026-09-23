@@ -5,6 +5,7 @@ import type { Song, Track, Section, Note, Automation, LoopRegion, Role } from ".
 import { isNote, cleanNote, cleanClip } from "./migrate";
 import { applyDawOp, findTrack, findSection, setChance, type DawOp } from "./ops-daw";
 import { swingToAmount } from "./groove";
+import { applyRitualOp, type RitualOp } from "./ritual";
 
 export type Op =
   | { op: "set"; track: string; path: string; value: unknown }               // track id | "master" | "song"
@@ -31,7 +32,8 @@ export type Op =
   | { op: "note"; note: string }
   | { op: "euclid"; track: string; hits: number; steps?: number; rotate?: number; midi?: number; role?: string; name?: string; vel?: number; stepBeats?: number }   // E(k, n) as a grid
   | { op: "transition"; from: string; bars?: number; gap?: boolean; lift?: number }   // the last bars of a section lean into the next: a filter move, an optional gap, an energy nudge
-  | DawOp;
+  | DawOp
+  | Exclude<RitualOp, { op: "down" }>;   // the ritual (lib/song/ritual.ts); "down" is a listen on the graph, resolved before ops apply
 
 export type ApplyResult = { song: Song; applied: number; skipped: string[] };
 
@@ -255,6 +257,7 @@ function applyOne(s: Song, o: Op): boolean {
       return applyOne(s, { op: "grid", track: o.track, steps: grid, midi: o.midi, role: o.role, name: o.name, stepBeats: o.stepBeats ?? 4 / steps, vel: o.vel !== undefined ? { X: o.vel } : undefined } as never);
     }
     case "groove": case "variant": case "fill": case "chance": case "velDev": return applyDawOp(s, o);
+    case "source": case "chop": case "alone": case "beat": case "next": return applyRitualOp(s, o);
     case "humanize": {
       const h = s.humanize;
       if (typeof o.swing === "number") {

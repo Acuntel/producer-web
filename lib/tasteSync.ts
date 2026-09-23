@@ -4,8 +4,11 @@ import { supabaseBrowser } from "@/lib/account/supabase";
 import { loadLedger, mergeLedger, setTasteSink, type LedgerEntry, type Pair } from "./taste";
 
 type Row = { id: string; user_id: string; at: number; title: string | null; said: string | null; move: string | null; listen: string | null; facts_summary: string | null; verdict: string | null };
-const toRow = (uid: string, e: LedgerEntry): Row => ({ id: e.id, user_id: uid, at: e.at, title: e.title ?? null, said: e.said ?? null, move: e.move ?? null, listen: e.listen ?? null, facts_summary: e.factsSummary ?? null, verdict: e.verdict });
-const toEntry = (r: Row): LedgerEntry => ({ id: r.id, at: Number(r.at), title: r.title ?? "", said: r.said ?? "", move: r.move ?? "", listen: r.listen, factsSummary: r.facts_summary ?? undefined, verdict: r.verdict === "liked" || r.verdict === "killed" ? r.verdict : null });
+// A dead idea (three passes, no verdict) rides in the verdict column as "dead"; the thirty second window itself stays in
+// this browser's ledger until the table has a column for it.
+const toRow = (uid: string, e: LedgerEntry): Row => ({ id: e.id, user_id: uid, at: e.at, title: e.title ?? null, said: e.said ?? null, move: e.move ?? null, listen: e.listen ?? null, facts_summary: e.factsSummary ?? null, verdict: e.verdict ?? (e.dead ? "dead" : null) });
+const toEntry = (r: Row): LedgerEntry => ({ id: r.id, at: Number(r.at), title: r.title ?? "", said: r.said ?? "", move: r.move ?? "", listen: r.listen, factsSummary: r.facts_summary ?? undefined, verdict: r.verdict === "liked" || r.verdict === "killed" ? r.verdict : null,
+  ...(r.verdict === "dead" ? { dead: { passes: 3, at: Number(r.at) } } : {}) });
 
 let current: string | null = null;
 

@@ -5,6 +5,7 @@ import { isDrum } from "../song/types";
 import type { Op } from "../song/ops";
 import type { BrainAction } from "./parse";
 import { laneNamed, laneInfo, ALIAS_ALTERNATION as A } from "./laneNames";
+import { seedOf } from "../song/ritual";
 
 export type LocalIntent = { ops?: Op[]; action?: BrainAction; say: string; note: string; kind: string; history?: "undo" | "redo"; ab?: "a" | "b" | "keepA" | "keepB"; rollout?: "newSong" | "emulate" | "finish" | "fixSection" };
 
@@ -126,6 +127,10 @@ export function localIntent(text: string, song: Song): LocalIntent | null {
   if (/^(keep|go with|i like|take) (version )?b$/.test(t)) return { ab: "keepB", say: "B it is.", note: "user chose B", kind: "ab" };
   const kit = kitIntent(t, song);
   if (kit) return kit;
+  // The ritual's two instant listens (hooks/useRitual): everything but the seed pulled down, and the next candidate.
+  // "Pull it down" used to nudge the master; said over a loop it means mute to listen.
+  if (/^(pull (it|everything|it all|all of it|the rest)( all)? down|mute to listen|everything down)$/.test(t)) return { action: { type: "down" }, say: "", note: "everything but the seed pulled down for a listen", kind: "ritual" };
+  if ((song.source || seedOf(song)) && /^((ok |okay |alright |right )?((i'?m (going to|gonna)|let'?s) )?(go to |try |play |give me )?the next( one)?|next( one)?|swap it)$/.test(t)) return { action: { type: "next" }, say: "", note: "went to the next candidate", kind: "ritual" };
 
   const bpm = t.match(/\b(\d{2,3}) ?bpm\b/) ?? (/^(make it|set it to|go to|tempo) (\d{2,3})$/.test(t) ? t.match(/(\d{2,3})$/) : null);
   if (bpm) { const v = Number(bpm[1]); if (v >= 60 && v <= 200) return { ops: [{ op: "tempo", bpm: v }], say: `${v}.`, note: `tempo set to ${v}`, kind: "tempo" }; }
