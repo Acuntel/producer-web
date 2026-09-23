@@ -70,12 +70,14 @@ function placeSeed(s: Song, clip: AudioClip, beats: number, trackId?: string): b
   return true;
 }
 
-// The seed's own bars, from the top of the first section it plays in (bar numbers count from 1 across the arrangement).
+// The seed's own bars, from the top of the first section it plays in (bar numbers count from 1 across the arrangement,
+// both ends included). A loop region is two bars at the least (lib/engine/schedule.ts loopBounds), so a one bar chop
+// goes round twice in it.
 function loopOn(s: Song, t: Track): Song["loop"] {
   let bar = 1;
   for (const id of s.arrangement) {
     const sec = s.sections.find((x) => x.id === id); if (!sec) continue;
-    if (sec.active.includes(t.id)) return { startBar: bar, endBar: bar + Math.max(1, Math.min(sec.bars, Math.round(t.loopBeats / 4))) - 1 };
+    if (sec.active.includes(t.id)) return { startBar: bar, endBar: bar + Math.max(2, Math.min(sec.bars, Math.round(t.loopBeats / 4))) - 1 };
     bar += sec.bars;
   }
   return null;

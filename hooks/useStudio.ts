@@ -13,7 +13,7 @@ import { movesFromOps, type LaneMove } from "@/lib/song/moves";
 import { stripWake, quickGate, classify } from "@/lib/brain/attend";
 import type { Engine, Position } from "@/lib/engine";
 import type { MusicFacts } from "@/lib/ears";
-import { logMove, setVerdict, inferVerdictFromUtterance, tasteSummary, logPair } from "@/lib/taste";
+import { logMove, attachWindow, tasteSummary, logPair } from "@/lib/taste";
 import { logMoveScore, referenceDelta, scoreLine } from "@/lib/scorecard";
 import { notesForBrain } from "@/lib/critic";
 import { localIntent, rolloutIntent, rolloutLine } from "@/lib/brain/local";
@@ -92,7 +92,8 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const busyRef = useRef(false); const pendingRef = useRef<string | null>(null);
   const lastMoveRef = useRef<string | null>(null);
   const hearSeq = useRef(0);
-  const laidRef = useRef<(() => void) | null>(null);   // told after each version is laid on the rig (a listen that is pulled down stays down)
+  const laidRef = useRef<(() => void) | null>(null);
+  const movedRef = useRef<((id: string) => void) | null>(null);   // told after each version is laid on the rig (a listen that is pulled down stays down)
   const setSongRef = useRef<((s: Song, o?: { silent?: boolean; label?: string; noHistory?: boolean }) => Promise<void>) | null>(null);
   const historyRef = useRef(new History(60));
   const abRef = useRef<AB>(null);
@@ -412,7 +413,6 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     }
     busyRef.current = true; setBusy(true);
     const t0 = performance.now();
-    if (lastMoveRef.current && !opts?.hidden) { const v = inferVerdictFromUtterance(t); if (v) setVerdict(lastMoveRef.current, v); }
     const nowPlaying: Position | null = engineRef.current?.getPosition() ?? null;
     const next: Msg[] = [...messagesRef.current, { role: "user", content: t }];
     if (!opts?.hidden) setMessages(next); else messagesRef.current = next;
@@ -463,6 +463,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       setListenHint(data.listen ?? null);
       const entry = logMove({ title: (ns ?? cur).title, said: t, move: data.say, listen: data.listen, factsSummary: before ? `${Math.round(before.tempo.bpm)}bpm ${before.key.name} ${before.loudness.integrated.toFixed(1)}LUFS` : undefined });
       lastMoveRef.current = entry.id; setLastMoveId(entry.id); lastMoveAtRef.current = Date.now();
+      if (ns) movedRef.current?.(entry.id);   // a move on the record is judged by what is said in the thirty seconds after it (hooks/useRitual)
       say(data.say);
       await runAction(data.action, ns ?? songRef.current, t);
       // Verify: re-hear the changed sections and hold the brain to its word, once per move.
@@ -576,8 +577,9 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const duck = useCallback((on: boolean) => { engineRef.current?.duck(on); }, []);
   const liveEngine = useCallback(() => engineRef.current, []);
   const onLaid = useCallback((f: (() => void) | null) => { laidRef.current = f; }, []);
+  const onMoveLanded = useCallback((f: ((id: string) => void) | null) => { movedRef.current = f; }, []);
   const jump = useCallback(async (sectionId: string) => { const eng = await getEngine(); if (eng.goto(sectionId)) flash(`Jumped to ${songRef.current.sections.find((s) => s.id === sectionId)?.name ?? sectionId}`); }, [flash, getEngine]);
-  const verdict = useCallback((v: "liked" | "killed") => { if (!lastMoveId) return; setVerdict(lastMoveId, v); flash(v === "liked" ? "Kept" : "Killed"); void send(v === "liked" ? "Yes, keep that." : "No, kill that, go a different direction."); }, [flash, lastMoveId, send]);
+  const verdict = useCallback((v: "liked" | "killed") => { if (!lastMoveId) return; attachWindow(lastMoveId, { landedAt: lastMoveAtRef.current, windowMs: 30000, saidAt: Date.now(), words: v === "liked" ? "pressed keep" : "pressed kill", verdict: v === "liked" ? "liked" : "rejected", closedBy: "verdict" }); flash(v === "liked" ? "Kept" : "Killed"); void send(v === "liked" ? "Yes, keep that." : "No, kill that, go a different direction."); }, [flash, lastMoveId, send]);
   const undo = useCallback(() => void tryLocal("undo"), [tryLocal]); const redo = useCallback(() => void tryLocal("redo"), [tryLocal]);
   const pickAb = useCallback((which: "a" | "b" | "keepA" | "keepB") => void tryLocal(which === "a" ? "play a" : which === "b" ? "play b" : which === "keepA" ? "keep a" : "keep b"), [tryLocal]);
   const { loadSaved, saveNow, download } = useLibraryActions({ autoSave, flash, say, setSong, started, getSong: () => songRef.current, setRendering });
@@ -585,5 +587,5 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
 
   return { song, messages, busy, started, starting, paused, nowSection, library, clips, facts, hearing, reference, deltaText, listenHint, toast, lastMoveId, rendering, ab, score, canUndo, canRedo, rollout, notSaved,
     boot, send, sendVoice, ignored, ignoredCount, thatWasForMe, loadChat, newSession, setReferenceBuffer, moves, previewClip, brainDown, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, getSchedule, getHealth, setVolume, toggleTrack,
-    play, pause, append, tryLocal, spend, cost, getPosition, duck, liveEngine, onLaid };
+    play, pause, append, tryLocal, spend, cost, getPosition, duck, liveEngine, onLaid, onMoveLanded };
 }

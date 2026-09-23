@@ -43,7 +43,9 @@ test("chop puts a phrase on its own audio track as a loop on the grid; next swap
   assert.equal(s.clip.clipId, "chop_b", "a different candidate plays");
   assert.equal(s.loopBeats, 4);
   assert.equal(s.volume, -7, "the fader stays where it was");
-  assert.deepEqual(swapped.loop, { startBar: 1, endBar: 1 }, "the loop follows the new phrase's length");
+  assert.deepEqual(swapped.loop, { startBar: 1, endBar: 2 }, "a one bar phrase goes round twice in the smallest loop region, two bars");
+  const long = applyOps(swapped, [{ op: "next", clip: clip("chop_c"), beats: 16 }]).song;
+  assert.deepEqual(long.loop, { startBar: 1, endBar: 4 }, "the loop follows the new phrase's length");
   assert.equal(applyOps(blank(), [{ op: "chop", clip: { name: "no id" }, beats: 8 }]).applied, 0);
 });
 

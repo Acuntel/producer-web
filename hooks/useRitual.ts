@@ -11,9 +11,9 @@ import type { VoiceControl } from "@/lib/brain/voice";
 import type { BrainAction } from "@/lib/brain/parse";
 import type { Phrase } from "@/lib/song/vocal";
 import { seedOf, downLevels, upLevels } from "@/lib/song/ritual";
-import { watchFor, due, hearWords, promptLine, SWAP_LINE, PROMPT_CAP_MS, type Watch } from "@/lib/ritual/patience";
+import { watchFor, step, hearWords, judged, superseded, type Watch, type Judgement } from "@/lib/ritual/patience";
 import { sourceLine, earsConfidence, LOW_CONFIDENCE, type SourceHit } from "@/lib/ritual/source";
-import { inferVerdictFromUtterance } from "@/lib/taste";
+import { judgeWords, logMove, recordJudgement } from "@/lib/taste";
 
 type Studio = ReturnType<typeof useStudio>;
 type Stems = ReturnType<typeof useStems>;
@@ -43,18 +43,24 @@ export function useRitual(d: Deps) {
   const pendingRef = useRef<Pending>(null);
   const downRef = useRef<{ keep: string | null; levels: Record<string, number> } | null>(null);
   const watchRef = useRef<Watch | null>(null);
-  const promptsRef = useRef<{ element: string; kind: "prompt" | "swap"; landedAt: number; at: number }[]>([]);
+  const promptsRef = useRef<{ element: string; kind: "prompt" | "swap" | "close"; landedAt: number; at: number }[]>([]);
+  const wordsRef = useRef("");   // the last thing said in the room: what a ritual move was asked with
   const passesRef = useRef<Passes | null>(null);
 
   const say = useCallback(async (line: string) => { dRef.current.studio.append("assistant", line); await dRef.current.speak(line); return line; }, []);
   const song = () => dRef.current.studio.getSong();
   const passes = useCallback(async () => (passesRef.current ??= await import("@/lib/ritual/passes")), []);
 
-  // A new element is in the room: the patience watch starts from where the loop is right now.
-  const land = useCallback(async (element: string, moveId: string | null = null) => {
+  // What the watch decided goes on the move in the ledger (lib/taste): its verdict window, or that it died.
+  const judge = useCallback((j: Judgement | null) => { if (j) recordJudgement(j); }, []);
+  // A new element is in the room: the one before it stops being judged, and the watch starts from where the loop is now.
+  // A ritual element is a move of its own in the ledger; a brain move arrives with the id the studio logged it under.
+  const land = useCallback(async (element: string, move: string | { id: string }) => {
+    const id = typeof move === "string" ? logMove({ title: song().title, said: wordsRef.current || element, move }).id : move.id;
     const p = await passes(); p.armPasses();
-    watchRef.current = watchFor(element, moveId, Date.now(), p.loopCount(), p.loopProgress());
-  }, [passes]);
+    judge(superseded(watchRef.current));
+    watchRef.current = watchFor(element, id, Date.now(), p.loopCount(), p.loopProgress());
+  }, [judge, passes]);
 
   // The separated vocal, once the clip store has it (a job's stems land in the store a moment after the job does).
   const vocalOf = useCallback(async (h: Heard): Promise<AudioBuffer | null> => {
@@ -86,7 +92,7 @@ export function useRitual(d: Deps) {
     const ok = await dRef.current.studio.edit([{ op, clip: { clipId: c.id, name, bpm, startSec: 0, gainDb: 0, durationSec: cut.durationSec }, beats: cut.beats }], `${op === "chop" ? "chopped" : "swapped to"} ${name}`);
     if (!ok) return null;
     playedRef.current.add(c.id); playingRef.current = c.id;
-    await land(op);
+    await land(op, `${op === "chop" ? "chopped" : "went to the next line"}: ${cut.bars} bars of ${name}`);
     return { bars: cut.bars };
   }, [land, vocalOf]);
 
@@ -129,7 +135,7 @@ export function useRitual(d: Deps) {
     if (!src) return say("Name the record first, so the beat sits on its grid. I will not guess a tempo.");
     const ok = await dRef.current.studio.edit([{ op: "beat" }], `drums and bass at ${src.bpm}`);
     if (!ok) return say("The beat did not land. Say it again.");
-    await land("beat");
+    await land("beat", `drums and bass under the chop at ${src.bpm}`);
     return say(`Drums and bass are in at ${src.bpm}, on ${src.name}'s own grid.${src.tempoConfidence < LOW_CONFIDENCE ? " I was not sure of that tempo, so tell me if it drags." : ""}`);
   }, [land, say]);
 
@@ -175,10 +181,15 @@ export function useRitual(d: Deps) {
   /** Every word said in the room: the faders come back, and words inside the window judge the newest element. */
   const heard = useCallback((words: string) => {
     up();
+    wordsRef.current = words;
     const w = watchRef.current; if (!w) return;
-    const v = inferVerdictFromUtterance(words);
-    watchRef.current = hearWords(w, words, v === "liked" ? "liked" : v === "killed" ? "rejected" : null, Date.now());
-  }, [up]);
+    const after = hearWords(w, words, judgeWords(words), Date.now());
+    watchRef.current = after;
+    judge(judged(w, after));
+  }, [judge, up]);
+  // A move the brain landed on the record is judged like any other new element.
+  const onMove = d.studio.onMoveLanded;
+  useEffect(() => { onMove((id) => { void land("move", { id }); }); return () => onMove(null); }, [onMove, land]);
 
   const control = useCallback(async (c: VoiceControl): Promise<string | null> => {
     if (c.source?.name) return source(c.source.name);
@@ -219,17 +230,17 @@ export function useRitual(d: Deps) {
     const id = window.setInterval(() => {
       const w = watchRef.current, p = passesRef.current;
       if (!w || !p || !p.transportRunning()) return;
-      const now = Date.now(), what = due(w, now, p.loopCount());
-      if (!what) return;
-      // Never over the producer's own words or a move in flight, except that the prompt is never later than its cap:
-      // then it joins the voice's queue (which plays in order) and is on screen at once, inside the window.
-      if ((dRef.current.speaking || dRef.current.studio.busy) && !(what === "prompt" && now - w.landedAt >= PROMPT_CAP_MS)) return;
-      watchRef.current = what === "prompt" ? { ...w, promptedAt: now } : { ...w, swapAt: now };
-      promptsRef.current.push({ element: w.element, kind: what, landedAt: w.landedAt, at: now });
-      void say(what === "prompt" ? promptLine(w.element) : SWAP_LINE);
+      // Never over the producer's own words or a move in flight, except a prompt at its cap: it then joins the voice's
+      // queue (which plays in order) and is on screen at once, inside the window.
+      const now = Date.now(), r = step(w, now, p.loopCount(), dRef.current.speaking || dRef.current.studio.busy);
+      if (!r.what) return;
+      watchRef.current = r.watch;
+      promptsRef.current.push({ element: w.element, kind: r.what, landedAt: w.landedAt, at: now });
+      judge(r.judge);
+      if (r.say) void say(r.say);
     }, 500);
     return () => window.clearInterval(id);
-  }, [d.studio.started, passes, say]);
+  }, [d.studio.started, judge, passes, say]);
 
   // Harness only: what the ritual holds, read from the page, and a heard record handed in as if the worker made it.
   useEffect(() => {

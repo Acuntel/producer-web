@@ -204,6 +204,28 @@ async function orderOfWork({ call, js, waitFor, type, status }) {
   const back = await faders();
   console.log(`[ritual] O8. the next word brings them back: ${JSON.stringify(back)}`);
   for (const id of Object.keys(before)) assert.ok(Math.abs(back[id] - before[id]) <= 0.5, `${id} is back: ${back[id]} vs ${before[id]}`);
+
+  // 9. The ledger learned from it: every element is a move carrying its thirty second window, and the verdict said
+  // inside it rides on the move it was said about.
+  const ledger = async () => JSON.parse(await js(`localStorage.getItem('producer.taste.v1') ?? '[]'`));
+  const t9 = await ledger();
+  const byMove = (re) => t9.find((e) => re.test(e.move));
+  const [chopMove, beatMove, nextMove] = [byMove(/^chopped:/), byMove(/^drums and bass/), byMove(/^went to the next line:/)];
+  for (const [name, e] of [["chop", chopMove], ["beat", beatMove], ["next", nextMove]]) console.log(`[ritual] O9. taste: ${name} "${e?.said}" -> ${JSON.stringify(e?.window)}`);
+  assert.ok(chopMove?.window && beatMove?.window && nextMove?.window, "each element carries its window");
+  assert.equal(chopMove.window.closedBy, "next move", "the beat landing closed the chop's window"); assert.equal(chopMove.window.verdict, "none");
+  assert.equal(nextMove.window.verdict, "liked"); assert.equal(nextMove.window.words, "I kinda like that"); assert.equal(nextMove.verdict, "liked");
+  assert.ok(nextMove.window.saidAt - nextMove.window.landedAt < 30000, "said inside the thirty seconds");
+
+  // 10. Three passes and nothing said: the next candidate is offered a swap, and the idea is marked dead in the ledger.
+  await say("next one");
+  const r10 = await waitFor(`(() => { const r = window.__ritual(); return r.played.length === 3 ? JSON.stringify(r) : ''; })()`, 30000, "a third candidate").then(JSON.parse);
+  const swap = await waitFor(`(() => { const p = window.__ritual().prompts.find((x) => x.kind === 'swap' && x.landedAt === ${r10.watch.landedAt}); return p ? JSON.stringify(p) : ''; })()`, 50000, "the swap offer").then(JSON.parse);
+  const r10b = await ritual();
+  const dead = (await ledger()).find((e) => e.id === r10.watch.moveId);
+  console.log(`[ritual] O10. silence over ${r10.playing}: swap offered ${((swap.at - swap.landedAt) / 1000).toFixed(1)} s after it landed, ${r10b.loops - r10.watch.loopsAt} loop wraps; ledger ${JSON.stringify({ window: dead?.window, dead: dead?.dead, verdict: dead?.verdict })}`);
+  assert.ok(dead?.dead?.passes >= 3, "three passes with no verdict: dead"); assert.equal(dead.window.verdict, "none"); assert.equal(dead.window.closedBy, "time");
+  assert.ok(swap.at - swap.landedAt >= 30000, "never dead inside its own window");
 }
 
 main().catch((e) => { console.error("[ritual] FAILED:", e.message); process.exit(1); });
