@@ -84,16 +84,19 @@ export function Board({ song, playing, facts, moves = [], ...reads }: { song: So
       const pos = on ? r.getPosition?.() ?? null : null;
       const sched = r.getSchedule?.() ?? null;
       const master: [number, number] = lv ? [lv.master[0], lv.master[1]] : [-100, -100];
+      // The hold is on the real sample peak, so PEAK says what the loudest sample did, not a smoothed level.
+      const sample: [number, number] = lv ? [lv.peak[0], lv.peak[1]] : [-100, -100];
       for (let i = 0; i < 2; i++) {
-        if (master[i] >= hold.master[i] || now - hold.at[i] > HOLD_MS) { hold.master[i] = master[i]; hold.at[i] = now; }
+        if (sample[i] >= hold.master[i] || now - hold.at[i] > HOLD_MS) { hold.master[i] = sample[i]; hold.at[i] = now; }
       }
       const tracks = lv?.tracks ?? {};
       for (const [id, db] of Object.entries(tracks)) {
         if (db >= (hold.tracks[id] ?? -100) || now - (hold.trackAt[id] ?? 0) > HOLD_MS) { hold.tracks[id] = db; hold.trackAt[id] = now; }
       }
-      const peak = Math.max(master[0], master[1]);
-      if (Number.isFinite(peak)) { rms.push(peak); if (rms.length > 180) rms.shift(); }
-      const mean = rms.length ? rms.reduce((a, b) => a + b, 0) / rms.length : -100;
+      // Three seconds of level, averaged as power (decibels do not average), so a quiet bar does not drag it down.
+      const lvl = Math.max(master[0], master[1]);
+      if (Number.isFinite(lvl)) { rms.push(Math.pow(10, lvl / 10)); if (rms.length > 180) rms.shift(); }
+      const mean = rms.length ? 10 * Math.log10(rms.reduce((a, b) => a + b, 0) / rms.length + 1e-12) : -100;
 
       const fr: Frame = {
         lanes: m.lanes, sections: m.sections, totalBeats: m.totalBeats,

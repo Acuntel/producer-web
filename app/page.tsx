@@ -47,7 +47,8 @@ export default function App() {
   const duckRef = useRef<(on: boolean) => void>(() => {});
   const landingRef = useRef<(c: { open?: string; new?: boolean; library?: boolean; account?: boolean }) => void>(() => {});
 
-  const voiceOut = useVoiceOut({ duck: (on) => duckRef.current(on) });
+  const playingRef = useRef<() => boolean>(() => false);
+  const voiceOut = useVoiceOut({ duck: (on) => duckRef.current(on), playing: () => playingRef.current() });
   const hum = useHum();
   const account = useAccount();
   const studio = useStudio(voiceOut.speak, (bpm, beats) => hum.record(bpm, beats), (s, m) => snapshotRef.current(s, m), {
@@ -55,6 +56,7 @@ export default function App() {
     hear: (sec) => actionsRef.current.hear(sec), identify: () => actionsRef.current.identify(), tracklist: (i) => actionsRef.current.tracklist(i), ritual: (a) => actionsRef.current.ritual(a),
   });
   duckRef.current = studio.duck;
+  playingRef.current = () => (studio.started && !studio.paused) || studio.starting;   // the greeting runs while the record starts
   const projects = useProjects({ user: account.user, loadSong: studio.loadSong, loadChat: studio.loadChat, getSong: studio.getSong, localLibrary: studio.library, flash: studio.flash });
   snapshotRef.current = projects.snapshot;
   const vault = useVault({ user: account.user, projectId: projects.current?.id ?? null, flash: studio.flash });

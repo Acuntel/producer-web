@@ -64,6 +64,7 @@ export function voiceSignature(track: Track, ctx?: { kitId?: string; bpm?: numbe
     sampled ? { wave: p.wave, octave: p.octave } : p,
     c ? [c.clipId, c.sampleId, c.semitones, c.reverse, c.startSec, c.oneShot, c.warp, c.bpm, c.lengthBeats, c.warp !== false && c.bpm ? ctx?.bpm : 0] : null,
     !!track.duck,
+    (fx.crush ?? 0) > 0,   // the crusher is built only when used, so switching it on or off is a new voice
     fx.filter?.type ?? null,
     fx.eq ?? null,
     fx.comp ?? null,
@@ -108,7 +109,8 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: 
   if (delay) { delay.wet.value = base.delayWet; delay.connect(head); head = delay; disp.push(delay); }
   if (fx.eq) { const eq = new Tone.EQ3(fx.eq.low, fx.eq.mid, fx.eq.high); eq.connect(head); head = eq; disp.push(eq); }
   if (fx.comp) { const c = new Tone.Compressor(fx.comp.threshold, fx.comp.ratio); c.connect(head); head = c; disp.push(c); }
-  const crush = live || base.crush > 0 ? new Tone.BitCrusher(Math.max(4, Math.min(12, base.crush || 8))) : null;
+  // The crusher is an AudioWorklet (JavaScript on the audio thread), so it exists only on a track that crushes.
+  const crush = base.crush > 0 ? new Tone.BitCrusher(Math.max(4, Math.min(12, base.crush))) : null;
   if (crush) { crush.wet.value = base.crush > 0 ? 1 : 0; crush.connect(head); head = crush; disp.push(crush); }
   const drive = live || base.drive > 0 ? new Tone.Distortion(Math.min(1, Math.max(0.001, base.drive))) : null;
   if (drive) { drive.wet.value = base.drive > 0 ? 1 : 0; drive.connect(head); head = drive; disp.push(drive); }

@@ -11,6 +11,7 @@ import { hearOffThread, workerAlive } from "../ears/offthread";
 import { parseKey, keyName, chordsForSection, condense } from "../song/harmony";
 import { audibleTracks } from "./schedule";
 import { songSwing } from "../song/groove";
+import { ensureStudioContext } from "./context";
 
 type Transport = ReturnType<typeof Tone.getTransport>;
 
@@ -23,6 +24,7 @@ async function clipsFor(song: Song): Promise<Clips> {
 // the live scheduler needs: the record keeps playing while the studio hears itself.
 async function renderOffline(song: Song, secs: number, clips: Clips, sampleRate?: number): Promise<AudioBuffer> {
   const kit = await getKit(song.lane, song.kit, song.bpm);
+  ensureStudioContext();   // a listen can come before the stage opens; it renders at the studio's own rate
   return renderInSteps(secs, 2, sampleRate ?? Tone.getContext().sampleRate, function* (transport: Transport) {
     yield* buildGraphInSteps(song, transport, clips, kit);
     transport.start(0);

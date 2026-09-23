@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const RATE = 24000;
-type Deps = { duck?: (on: boolean) => void };
+type Deps = { duck?: (on: boolean) => void; playing?: () => boolean };
 type Job = { id: number; text: string; resolve: () => void };
 // The first word of an utterance is out: the stage lets the record join underneath it, and the probe times it.
 const firstWord = () => { performance.mark("producer:voice"); window.dispatchEvent(new Event("producer:voice")); };
@@ -33,7 +33,18 @@ export function useVoiceOut(d: Deps = {}) {
   const voiceOk = useRef<boolean | null>(null);
   const seq = useRef(0);
 
-  const ctx = () => { if (!ctxRef.current) ctxRef.current = new AudioContext(); if (ctxRef.current.state === "suspended") void ctxRef.current.resume().catch(() => {}); return ctxRef.current; };
+  // The voice sums with the record at the device. The record now peaks at -1 dBFS, so the voice gets headroom
+  // (-6 dB) and a limiter at -8 dBFS: together they never reach full scale, where the sum used to clip.
+  // A playback-sized buffer, like the desk, so the voice does not crackle when the laptop is busy.
+  const outRef = useRef<AudioNode | null>(null);
+  const ctx = () => { if (!ctxRef.current) ctxRef.current = new AudioContext({ latencyHint: "playback" }); if (ctxRef.current.state === "suspended") void ctxRef.current.resume().catch(() => {}); return ctxRef.current; };
+  const bus = (c: AudioContext) => {
+    if (outRef.current) return outRef.current;
+    const g = c.createGain(); g.gain.value = 0.5;
+    const lim = c.createDynamicsCompressor(); lim.threshold.value = -8; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.002; lim.release.value = 0.12;
+    g.connect(lim); lim.connect(c.destination);
+    return (outRef.current = g);
+  };
 
   // Fetch one sentence as PCM and schedule it; resolves when the audio has finished playing.
   const playSentence = useCallback(async (text: string, gen: number): Promise<boolean> => {
@@ -54,7 +65,7 @@ export function useVoiceOut(d: Deps = {}) {
         const buf = c.createBuffer(1, n, RATE); const ch = buf.getChannelData(0);
         const dv = new DataView(bytes.buffer, bytes.byteOffset, n * 2);
         for (let i = 0; i < n; i++) ch[i] = dv.getInt16(i * 2, true) / 32768;
-        const src = c.createBufferSource(); src.buffer = buf; src.connect(c.destination);
+        const src = c.createBufferSource(); src.buffer = buf; src.connect(bus(c));
         const at = Math.max(c.currentTime + (started ? 0 : 0.05), nextAtRef.current);
         src.start(at); nextAtRef.current = at + buf.duration; lastEnd = nextAtRef.current;
         if (!started) firstWord();
@@ -89,7 +100,7 @@ export function useVoiceOut(d: Deps = {}) {
       if (!out || gen !== genRef.current) return !!out;
       const c = ctx();
       const buf = c.createBuffer(1, out.samples.length, out.sampleRate); buf.getChannelData(0).set(out.samples);
-      const src = c.createBufferSource(); src.buffer = buf; src.connect(c.destination);
+      const src = c.createBufferSource(); src.buffer = buf; src.connect(bus(c));
       const at = Math.max(c.currentTime + 0.02, nextAtRef.current); src.start(at); nextAtRef.current = at + buf.duration; firstWord();
       sourcesRef.current.push(src); src.onended = () => { sourcesRef.current = sourcesRef.current.filter((s) => s !== src); };
       await new Promise((res) => setTimeout(res, Math.max(0, (nextAtRef.current - c.currentTime) * 1000)));
@@ -98,6 +109,9 @@ export function useVoiceOut(d: Deps = {}) {
   }, []);
   const browserSpeak = (text: string) => new Promise<void>((res) => {
     if (typeof speechSynthesis === "undefined") { res(); return; }
+    // Under a test harness the system voice stays silent: it speaks through macOS, which no browser mute reaches,
+    // so every harness run used to talk out of the laptop. The line still takes its time, so flows that wait on it hold.
+    if (/[?&]e2e=1/.test(window.location.search)) { firstWord(); window.setTimeout(res, Math.min(4000, 400 + text.length * 40)); return; }
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text); u.rate = 1.05; u.onstart = firstWord; u.onend = () => res(); u.onerror = () => res();
     speechSynthesis.speak(u);
@@ -118,7 +132,11 @@ export function useVoiceOut(d: Deps = {}) {
         while (i < parts.length && gen === genRef.current) {
           const ok = await playSentence(parts[i], gen);
           if (!ok && gen === genRef.current) {
-            const local = await localSpeak(parts[i], gen);
+            // The free in-browser voice runs its model on the page's own thread (150 to 800 ms blocks), which is
+            // the thread the record's scheduler needs: under a playing record it would crackle the music. So
+            // while the record plays, a failed voice falls back to the browser's own speech, which runs outside.
+            const forced = typeof window !== "undefined" && /[?&]voice=local/.test(window.location.search);
+            const local = forced || !dRef.current.playing?.() ? await localSpeak(parts[i], gen) : false;
             if (!local && gen === genRef.current) { await browserSpeak(parts.slice(i).join(" ")); break; }
           }
           i++;

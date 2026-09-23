@@ -4,8 +4,10 @@
 // rampable; the analysis taps sit on what actually leaves the master.
 import * as Tone from "tone";
 import type { Master, AutoParam } from "../song/types";
+import { reverbImpulse } from "./context";
 
-export type Analysis = { fft: Tone.FFT; meter: Tone.Meter; tracks: Map<string, Tone.Meter> };
+// meter = the smoothed level the bars show; wave = the raw samples, so PEAK is a real sample peak, not a held level.
+export type Analysis = { fft: Tone.FFT; meter: Tone.Meter; wave: Tone.Analyser | null; tracks: Map<string, Tone.Meter> };
 // `music` is where the record's voices, reverb and riser meet; the producer's talk-duck rides it, so an
 // audition entering `master` goes through the whole master chain without being ducked with the record.
 export type Buses = { master: Tone.ToneAudioNode; music: Tone.ToneAudioNode; duck: Tone.ToneAudioNode; reverb: Tone.ToneAudioNode };
@@ -25,6 +27,12 @@ export type Board = {
 
 const RAMP = 0.05;
 const TALK_DB = -7;   // how far the record steps back while the producer speaks
+// The desk's ceiling: -1 dBFS, so the record never reaches full scale and the producer's voice has room on top.
+const CEILING = Math.pow(10, -1 / 20);
+// Post-compressor gain when a record names none. It was +6 into a clipper that added 3.4 dB of its own, which
+// drove every record into saturation (about -5.5 LUFS): the crackle. +5 into a transparent ceiling lands the
+// seed at about -9.5 LUFS, inside the -10 to -7 the mix step asks for (+3 measured -11.5).
+export const DEFAULT_MAKEUP = 5;
 
 /** The desk, wired into `destination`. One per playing context (the live transport, or one offline render).
  *  An offline render has no eye on it, so it carries no analyser: those cost real time per block. */
@@ -33,10 +41,12 @@ export function makeBoard(destination?: Tone.ToneAudioNode, live = true): Board 
   const masterEq = new Tone.EQ3(0, 0, 0);
   const masterFilter = new Tone.Filter(20000, "lowpass");
   const comp = new Tone.Compressor(-20, 3);
-  const makeup = new Tone.Volume(6);
+  const makeup = new Tone.Volume(DEFAULT_MAKEUP);
   const limiter = new Tone.Limiter(-1);
-  // Final soft clipper: club-master glue, and a hard guarantee that nothing leaves above 0 dBFS.
-  const clipper = new Tone.WaveShaper((x) => Math.tanh(x * 1.25) / Math.tanh(1.25), 4096);
+  // Final soft ceiling: unity gain for anything below it (x stays x), bending smoothly into -1 dBFS, so
+  // nothing leaves above it and nothing below it is coloured. The old curve, tanh(1.25x) / tanh(1.25),
+  // added 3.4 dB and saturated the whole record.
+  const clipper = new Tone.WaveShaper((x) => CEILING * Math.tanh(x / CEILING), 4096);
   // The last gain on the desk: stop fades it down before the rig is torn down, so a tail is faded, not cut.
   const out = new Tone.Gain(1);
   masterVol.connect(masterEq); masterEq.connect(masterFilter); masterFilter.connect(comp); comp.connect(makeup); makeup.connect(limiter); limiter.connect(clipper); clipper.connect(out);
@@ -45,13 +55,16 @@ export function makeBoard(destination?: Tone.ToneAudioNode, live = true): Board 
   // The visible proof: a spectrum fine enough to draw on a log axis, and a stereo meter.
   const fft = new Tone.FFT({ size: live ? 1024 : 32, smoothing: 0.5 });
   const meter = new Tone.Meter({ channelCount: 2, smoothing: 0.8 });
-  if (live) { clipper.connect(fft); clipper.connect(meter); }
+  const wave = live ? new Tone.Analyser({ type: "waveform", size: 1024, channels: 2 }) : null;
+  if (live) { clipper.connect(fft); clipper.connect(meter); clipper.connect(wave!); }
 
   const master: Tone.ToneAudioNode = masterVol;
   const music = new Tone.Volume(0).connect(master);
   const duck = new Tone.Gain(1).connect(music);
-  const reverb = new Tone.Freeverb({ roomSize: 0.82, dampening: 2800 });
-  reverb.wet.value = 1; reverb.connect(music);
+  // A native convolver on a generated room, not Freeverb: Freeverb is eight AudioWorklets running
+  // JavaScript on the audio thread every 3 ms, and that thread is where a crackle is born.
+  const reverb = new Tone.Convolver(Tone.ToneAudioBuffer.fromArray(reverbImpulse(masterVol.context.sampleRate)));
+  reverb.connect(music);
 
   // Drop craft: every riser in the record gets its own noise voice and its own sweep, so two that
   // overlap never fight over one envelope. Built when the schedule is laid, never in the audio callback.
@@ -73,7 +86,7 @@ export function makeBoard(destination?: Tone.ToneAudioNode, live = true): Board 
     set(masterFilter.frequency as unknown as { value: number; rampTo: (v: number, t: number) => unknown }, m.filter?.cutoff ?? 20000);
     if (masterFilter.type !== (m.filter?.type ?? "lowpass")) masterFilter.type = m.filter?.type ?? "lowpass";
     set(comp.threshold as unknown as { value: number; rampTo: (v: number, t: number) => unknown }, m.compThreshold ?? -20);
-    set(makeup.volume, m.makeup ?? 6);
+    set(makeup.volume, m.makeup ?? DEFAULT_MAKEUP);
     set(limiter.threshold as unknown as { value: number; rampTo: (v: number, t: number) => unknown }, m.limiter ?? -1);
   };
 
@@ -93,11 +106,11 @@ export function makeBoard(destination?: Tone.ToneAudioNode, live = true): Board 
   };
   const fadeOut = (seconds: number) => { const g = out.gain; const t = out.immediate(); g.cancelScheduledValues(t); g.setValueAtTime(g.getValueAtTime(t), t); g.linearRampToValueAtTime(0, t + seconds); };
 
-  const nodes: { dispose: () => void }[] = [masterVol, masterEq, masterFilter, comp, makeup, limiter, clipper, out, music, duck, reverb, riserGain, fft, meter];
+  const nodes: { dispose: () => void }[] = [masterVol, masterEq, masterFilter, comp, makeup, limiter, clipper, out, music, duck, reverb, riserGain, fft, meter, ...(wave ? [wave] : [])];
   return {
     buses: { master, music, duck, reverb },
     duck,
-    analysis: { fft, meter, tracks: new Map() },
+    analysis: { fft, meter, wave, tracks: new Map() },
     riser,
     talk,
     fadeOut,

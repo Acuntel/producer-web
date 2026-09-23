@@ -233,22 +233,36 @@ function master(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, 
     if (hold > -60) { ctx.fillStyle = hold > -1 ? C.hot : C.ink; ctx.fillRect(mx, y + 6 + mh - mh * dbUnit(hold) - 1, mw, 1.5); }
     text(ctx, i ? "R" : "L", mx + mw / 2, y + h - 6, { size: 9, align: "center", color: C.ink3 });
   }
-  if (!compact) for (const db of [0, -6, -12, -24, -48]) {
-    const ly = y + 6 + mh * (1 - dbUnit(db));
-    ctx.fillStyle = "rgba(40,40,52,0.9)"; ctx.fillRect(x + 40, ly, 12, 1);
-    text(ctx, String(db), x + 55, ly, { size: 9, color: C.ink3 });
+  // The scale: every tick is drawn, but a label only where it has room (11 px from the last one), so the
+  // top of the scale never piles 0, -6 and -12 on top of each other on a short desk.
+  if (!compact) {
+    let lastY = -Infinity;
+    for (const db of [0, -6, -12, -24, -48]) {
+      const ly = y + 6 + mh * (1 - dbUnit(db));
+      ctx.fillStyle = "rgba(40,40,52,0.9)"; ctx.fillRect(x + 40, ly, 12, 1);
+      if (ly - lastY >= 11) { text(ctx, String(db), x + 55, ly, { size: 9, color: C.ink3 }); lastY = ly; }
+    }
   }
-  // The numbers a mix is judged by, each on its own line, laid out to whatever room there is.
+  // The numbers a mix is judged by. PEAK is the loudest real sample (the desk's ceiling is -1 dBFS), RMS is
+  // three seconds of level, LUFS is the whole record as the ears measured it. Laid out to the room there is:
+  // stacked when tall, side by side when short, and the least needed row dropped before anything overlaps.
   const peak = Math.max(f.peakHold[0], f.peakHold[1]);
-  const rows: [string, string, string][] = compact
-    ? [["PEAK", `${tnum(peak)} dB`, peak > -0.5 ? C.hot : C.ink], ["LUFS", f.lufs === null ? "hearing" : tnum(f.lufs), C.ink2]]
-    : [["PEAK", `${tnum(peak)} dB`, peak > -0.5 ? C.hot : C.ink], ["RMS 3s", `${tnum(f.rms3s)} dB`, C.ink2], ["LUFS", f.lufs === null ? "hearing" : tnum(f.lufs), C.ink2]];
+  const all: [string, string, string][] = [
+    ["PEAK", `${tnum(peak)} dB`, peak > -1.2 ? C.hot : C.ink],
+    ["LUFS", f.lufs === null ? "hearing" : tnum(f.lufs), C.ink2],
+    ["RMS 3s", `${tnum(f.rms3s)} dB`, C.ink2],
+  ];
+  const valueRight = specX - 10;
+  const stacked = !compact && mh / all.length >= 26;
+  // Side by side, a row is a 9 px label and a right-aligned number in the 76 to 82 px between the needles and the
+  // spectrum: "RMS 3s" shortens to "RMS" to fit, and the phone desk keeps two rows.
+  const fit = Math.max(1, Math.min(compact ? 2 : all.length, Math.floor(mh / 14)));
+  const rows = stacked ? all : all.slice(0, fit).map(([l, v, c]) => [l === "RMS 3s" ? "RMS" : l, v, c] as [string, string, string]);
   const rowH = mh / rows.length;
   rows.forEach(([label, value, color], i) => {
     const ry = y + 6 + i * rowH;
-    // Tight rows read the label and the number side by side; tall ones stack them.
-    if (compact) { text(ctx, label, numX, ry + rowH / 2, { size: 9, color: C.ink3, weight: 700 }); text(ctx, value, numX + 36, ry + rowH / 2, { size: 12, color }); }
-    else { text(ctx, label, numX, ry + rowH * 0.3, { size: 9, color: C.ink3, weight: 700 }); text(ctx, value, numX, ry + rowH * 0.72, { size: 12, color }); }
+    if (stacked) { text(ctx, label, numX, ry + rowH * 0.3, { size: 9, color: C.ink3, weight: 700 }); text(ctx, value, numX, ry + rowH * 0.72, { size: 12, color }); }
+    else { text(ctx, label, numX, ry + rowH / 2, { size: 9, color: C.ink3, weight: 700 }); text(ctx, value, valueRight, ry + rowH / 2, { size: compact ? 10 : 11, color, align: "right" }); }
   });
 
   // The spectrum on a log axis, the way an analyser reads: decades marked, the curve filled.

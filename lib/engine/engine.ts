@@ -7,8 +7,10 @@ import { locate, loopBounds, type SectionSpan, type Schedule } from "./schedule"
 import { loadClipsFor, clipKeysFor } from "./clips";
 import { getKit, kitStyleFor, type Kit } from "./kits";
 import { Latest, wrapToBar } from "./steady";
+import { ensureStudioContext } from "./context";
 
-export type Levels = { master: [number, number]; spectrum: Float32Array | null; tracks: Record<string, number> };
+// master = the bars' smoothed level; peak = the loudest sample in the last frame, per channel, in dBFS.
+export type Levels = { master: [number, number]; peak: [number, number]; spectrum: Float32Array | null; tracks: Record<string, number> };
 export type Position = { section: string; sectionId: string; index: number; barInSection: number; beatInBar: number; absBar: number; beat: number };
 // What a DAW shows in its corner: dropouts, and how many rigs are actually alive on the transport (one is right;
 // more than one means an older build of the record is still playing underneath the current one).
@@ -40,6 +42,9 @@ export class Engine {
   private lastSection = -1;
   playing = false;
   onSection: ((name: string, index: number, total: number) => void) | null = null;
+
+  // The playback context before any transport or node exists (context.ts: why not the interactive one).
+  constructor() { ensureStudioContext(); }
 
   private get transport() { return Tone.getTransport(); }
 
@@ -96,7 +101,8 @@ export class Engine {
 
   getBeat(): number | null {
     if (this.sections.length === 0) return null;
-    return this.transport.ticks / this.transport.PPQ;
+    // Where the ear is, not where the scheduler is: the transport's own ticks run a lookahead (0.2 s) ahead.
+    return this.transport.getTicksAtTime(Tone.immediate()) / this.transport.PPQ;
   }
 
   getPosition(): Position | null {
@@ -113,7 +119,10 @@ export class Engine {
     const master: [number, number] = Array.isArray(m) ? [Number(m[0]), Number(m[1] ?? m[0])] : [Number(m), Number(m)];
     const tracks: Record<string, number> = {};
     for (const [id, tm] of r.analysis.tracks) { const v = tm.getValue(); tracks[id] = Array.isArray(v) ? Number(v[0]) : Number(v); }
-    return { master, spectrum: r.analysis.fft.getValue(), tracks };
+    const pk = (a: Float32Array) => { let p = 0; for (let i = 0; i < a.length; i++) { const v = Math.abs(a[i]); if (v > p) p = v; } return p > 0 ? 20 * Math.log10(p) : -100; };
+    const w = r.analysis.wave?.getValue();
+    const peak: [number, number] = Array.isArray(w) ? [pk(w[0]), pk(w[1] ?? w[0])] : w ? [pk(w), pk(w)] : master;
+    return { master, peak, spectrum: r.analysis.fft.getValue(), tracks };
   }
 
   /** Dropouts and leaks, summed over every rig alive on the transport. */

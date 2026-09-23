@@ -9,7 +9,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 const BASE = process.argv[2] ?? "http://localhost:3111";
 const PORT = 9337;
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const chrome = spawn(CHROME, [`--remote-debugging-port=${PORT}`, "--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--autoplay-policy=no-user-gesture-required", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--mute-audio=false", `--user-data-dir=/tmp/producer-glitch-profile-${process.pid}`, "about:blank"], { stdio: "ignore" });
+const chrome = spawn(CHROME, [`--remote-debugging-port=${PORT}`, "--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--autoplay-policy=no-user-gesture-required", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--mute-audio", `--user-data-dir=/tmp/producer-glitch-profile-${process.pid}`, "about:blank"], { stdio: "ignore" });
 process.on("exit", () => chrome.kill());
 for (let i = 0; i < 40; i++) { try { await fetch(`http://127.0.0.1:${PORT}/json/version`); break; } catch { await sleep(250); } }
 const { webSocketDebuggerUrl } = await fetch(`http://127.0.0.1:${PORT}/json/version`).then((r) => r.json());
