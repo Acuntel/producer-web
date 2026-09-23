@@ -21,7 +21,9 @@ type Deps = {
   onLanding: (c: { open?: string; new?: boolean; library?: boolean; account?: boolean }) => void;
   grab?: (what: string, at?: number | null) => Promise<string | null>;   // a part of the heard record, into this one (hooks/useStems)
   vocal?: (what?: string | null, where?: string | null, from?: string | null) => Promise<string | null>;   // a voice off a record, landed before the drop
+  ritual?: { control: (c: VoiceControl) => Promise<string | null>; heard: (words: string) => void };   // the order of work (hooks/useRitual)
 };
+const RITUAL_TITLE = (c: VoiceControl) => c.source ? `Setting the grid from ${c.source.name}` : c.chop ? "Cutting a chop on the grid" : c.alone ? "The chop alone, on a loop" : c.beat ? "Bringing the beat to the chop" : c.next ? "The next candidate" : c.down ? "Everything down but the seed" : null;
 export type Timing = { stt: number; firstWord: number; voiceMs: number };
 
 function resolveSection(song: Song, want?: string) {
@@ -200,6 +202,12 @@ export function useConversation(d: Deps) {
     } catch { doneWork(id, "did not land"); }
   }, [addWork, doneWork]);
 
+  // The order of work: the studio does it with no Hands and speaks the result itself; the card shows it happening.
+  const doRitual = useCallback(async (c: VoiceControl, title: string) => {
+    const id = addWork({ kind: c.source ? "research" : "hands", title, detail: "the studio, no model" });
+    try { const line = await dRef.current.ritual?.control(c); doneWork(id, line ? "landed" : "nothing to do"); } catch { doneWork(id, "did not land"); }
+  }, [addWork, doneWork]);
+
   const act = useCallback(async (c: VoiceControl) => {
     const s = dRef.current.studio;
     if (c.stop) { interrupt(true); return; }
@@ -210,16 +218,19 @@ export function useConversation(d: Deps) {
     if (c.learn) { void doLearn(c.learn); }
     if (c.research) void doResearch(c.research);
     if (dRef.current.screen !== "stage") { if (c.open || c.new) dRef.current.onLanding({ open: c.open, new: c.new }); return; }
+    const ritual = RITUAL_TITLE(c);
+    if (ritual) { void doRitual(c, ritual); return; }
     if (c.task) void runTask(c.task);
     else if (c.audition) void audition(c.audition.section, c.audition.bars);
     else if (c.open || c.new) dRef.current.onLanding({ open: c.open, new: c.new });
     void s;
-  }, [audition, doResearch, doGrab, doVocal, doLearn, interrupt, runTask]);
+  }, [audition, doResearch, doGrab, doVocal, doLearn, doRitual, interrupt, runTask]);
 
   // The entry point: what you said, and how long the engine took to commit it.
   const hear = useCallback(async (text: string, sttMs: number) => {
     const s = dRef.current.studio;
     const t = text.trim(); if (!t) return;
+    dRef.current.ritual?.heard(t);   // a pulled down listen comes back on the next word, and the words judge the newest element
     const turn = ++turnRef.current;
     if (dRef.current.screen === "stage" && (await s.tryLocal(t))) { setTiming({ stt: sttMs, firstWord: 0, voiceMs: 0 }); return; }
     s.append("user", t);

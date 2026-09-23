@@ -3,6 +3,12 @@
 // lands a groove through the Hands -> "play it" runs an announced audition -> a press cuts it
 // off -> "play it" again runs to the end and asks "In or out?" -> "make the bass darker" lands
 // ops with a report. Proves every seam the live brain drives, with no model key.
+// Session 2 is the order of work we watched a producer follow (docs/MASTERPROMPT_SMOOTH.md section 1), by voice:
+// name a record and get its tempo from the store, chop a phrase off its vocal, loop it alone, bring the beat in at
+// that tempo, hear the verdict prompt inside thirty seconds, "next one" plays a different candidate, "pull it down"
+// leaves the seed alone, and the next word brings everything back. It asserts on the transport, the rig's faders and
+// the record, not on the chat. The worker is not called: the harness makes the record's vocal stem itself and hands
+// it in as if the stems job had separated it (the source tempo is the real store's).
 // Server: PRODUCER_MOCK=1 npx next start -p 3111.   Usage: node tests/ritual.e2e.mjs [baseUrl]
 import { spawn, execSync } from "node:child_process";
 import assert from "node:assert/strict";
@@ -90,7 +96,114 @@ async function main() {
   assert.ok(/no record with a voice|VOCAL ISOLATED|Isolating the voice/.test(vocalLine), "the vocal control reaches the studio and is answered");
   console.log(`[ritual] cost: ${await js(`document.querySelector('[data-role="cost"]')?.innerText ?? ''`)}; exceptions: ${errors.length ? errors.join(" || ") : "none"}`);
   assert.equal(errors.length, 0, "no uncaught exceptions during the ritual");
+  await orderOfWork({ call, js, waitFor, type, status });
+  assert.equal(errors.length, 0, `no uncaught exceptions during the order of work: ${errors.join(" || ")}`);
   console.log("[ritual] ALL PASSED");
   process.exit(0);
 }
+async function orderOfWork({ call, js, waitFor, type, status }) {
+  const URL2 = `${BASE}/?e2e=1&typed=1&landing=1&mock=1&guest=1&economy=1`;
+  await call("Page.navigate", { url: URL2 }); await sleep(1200);
+  await js(`localStorage.clear(); localStorage.setItem('producer.guest.v1','1'); true`);
+  await call("Page.navigate", { url: URL2 });
+  await waitFor(`!!document.querySelector('[data-role="new-project"]') && !!document.querySelector('input[aria-label="Message the producer"]')`, 30000, "the landing again");
+  await type("new project");
+  await waitFor(`[...document.querySelectorAll('[data-role="producer-line"] p')].some((e) => /Who are we chasing/.test(e.textContent))`, 30000, "the greeting");
+  const song = async () => JSON.parse(await js(`localStorage.getItem('producer.song.v4')`));
+  const ritual = async () => JSON.parse(await js(`JSON.stringify(window.__ritual())`));
+  const line = (re, ms, label) => waitFor(`[...document.querySelectorAll('[data-role="producer-line"] p')].map((e) => e.textContent).find((t) => ${re}.test(t)) ?? ''`, ms, label);
+  // A person in the room lets the producer finish a sentence before the next one, so the harness does too.
+  const say = async (text) => { await waitFor(`!window.__ritual().speaking`, 60000, "the producer to finish speaking"); await type(text); };
+  const faders = async () => JSON.parse(await js(`JSON.stringify(Object.fromEntries([...window.__engine().rig.voiceById].map(([id, v]) => [id, Math.round(v.out.volume.value * 10) / 10])))`));
+  const meters = async () => JSON.parse(await js(`JSON.stringify(Object.fromEntries(Object.entries(window.__levels()?.tracks ?? {}).map(([k, v]) => [k, Math.round(v)])))`));
+
+  // 1. The grid first: the record's tempo from what the studio already knows, before a single sound.
+  await say("What's the tempo of Summer by Calvin Harris?");
+  const said1 = await line(/sits at \d+|not sure of that|do not know/, 40000, "the tempo answer");
+  const r1 = await waitFor(`(() => { const r = window.__ritual(); return r.source && r.transportBpm === r.source.bpm ? JSON.stringify(r) : ''; })()`, 15000, "the transport on the source grid").then(JSON.parse);
+  const s1 = await song();
+  console.log(`[ritual] O1. source: ${said1} | song ${s1.bpm} BPM ${s1.key}, transport ${r1.transportBpm} BPM, tempo confidence ${r1.source.tempoConfidence} from the ${r1.source.from}, tracks ${s1.tracks.length}`);
+  assert.equal(r1.source.bpm, 128, "Summer sits at 128 in the store"); assert.equal(s1.bpm, 128); assert.equal(r1.transportBpm, 128);
+  assert.equal(typeof r1.source.tempoConfidence, "number", "the tempo carries a confidence"); assert.equal(s1.tracks.length, 0, "nothing exists yet but the grid");
+
+  // The record's vocal, separated: three sung lines on its 128 grid, the hook loudest. Handed in as the stems job would.
+  const made = await js(`(async () => {
+    const SR = 22050, secs = 24, beat = 60 / 128;
+    const buf = new OfflineAudioContext(1, SR * secs, SR).createBuffer(1, SR * secs, SR); const d = buf.getChannelData(0);
+    let seed = 5; const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 * 2 - 1; };
+    for (let i = 0; i < d.length; i++) d[i] = rnd() * 0.0005;
+    const sing = (fromBeat, secsLong, amp, hz) => { const a = Math.round(fromBeat * beat * SR), n = Math.round(secsLong * SR);
+      for (let i = 0; i < n && a + i < d.length; i++) { const t = i / SR; const env = Math.min(1, t / 0.02, (n - i) / SR / 0.05) * (0.8 + 0.2 * Math.sin(2 * Math.PI * 3 * t));
+        d[a + i] += (Math.sin(2 * Math.PI * hz * t) * 0.7 + Math.sin(2 * Math.PI * hz * 2 * t) * 0.3) * amp * env; } };
+    sing(4, 0.6, 0.12, 220); sing(16, 3.2, 0.6, 293.66); sing(32, 2.6, 0.42, 246.94);
+    const eng = await window.__engineModule();
+    const bytes = await eng.audioBufferToWav(buf).arrayBuffer();
+    await eng.putClip({ id: "stem_ritualjob_vocals", name: "Summer by Calvin Harris · vocals", type: "audio/wav", bytes, createdAt: Date.now(), durationSec: secs }, { mirror: false });
+    eng.cacheDecoded("stem_ritualjob_vocals", buf);
+    return window.__heard({ id: "ritualjob", name: "Summer by Calvin Harris", vocals: "stem_ritualjob_vocals", bpm: 128, tempoConfidence: 0.8, beatOffsetSec: 0, key: "G major", keyConfidence: 0.65 });
+  })()`);
+  assert.equal(made, true, "the heard record is in the studio");
+
+  // 2. The chop: a phrase, not a one shot, on the grid, on its own track, looping.
+  await say("I'm making a chop");
+  const r2 = await waitFor(`(() => { const r = window.__ritual(); return r.playing ? JSON.stringify(r) : ''; })()`, 30000, "the chop").then(JSON.parse);
+  const s2 = await song(); const chop = s2.tracks.find((t) => t.id === "chop");
+  const heard2 = await waitFor(`(() => { const v = window.__levels()?.tracks?.chop; return v > -60 ? String(Math.round(v)) : ''; })()`, 12000, "the chop to sound");
+  console.log(`[ritual] O2. chop: ${r2.playing}, ${chop?.loopBeats} beats of ${chop?.clip?.durationSec?.toFixed(2)} s audio, loop ${JSON.stringify(s2.loop)}, active ${JSON.stringify(s2.sections[0].active)}, meter ${heard2} dB, ${await status()}`);
+  assert.ok(chop && chop.role === "audio" && !chop.clip.oneShot, "a looping phrase on an audio track");
+  assert.ok([4, 8, 16].includes(chop.loopBeats), "whole bars on the grid"); assert.equal(chop.clip.clipId, r2.playing);
+  assert.deepEqual(s2.sections[0].active, ["chop"], "it is alone on the record"); assert.ok(/playing/.test(await status()));
+
+  // 3. Alone: the sing back.
+  await say("loop it alone");
+  const said3 = await line(/Sing it back/, 20000, "the sing back line");
+  const s3 = await song();
+  console.log(`[ritual] O3. alone: ${said3} | chop solo ${s3.tracks.find((t) => t.id === "chop").solo}, loop ${JSON.stringify(s3.loop)}`);
+  assert.equal(s3.tracks.find((t) => t.id === "chop").solo, true);
+
+  // 4. The beat comes to the vocal, at the source tempo.
+  await say("Let's go. To the beat.");
+  await waitFor(`(() => { const s = JSON.parse(localStorage.getItem('producer.song.v4')); return ['kick', 'clap', 'hat', 'bass'].every((id) => s.tracks.some((t) => t.id === id)); })()`, 30000, "the beat");
+  const s4 = await song(); const r4 = await ritual();
+  console.log(`[ritual] O4. beat: ${s4.tracks.map((t) => t.id).join(", ")} at ${s4.bpm} BPM, transport ${r4.transportBpm}, source ${r4.source.bpm}, soloed ${s4.tracks.filter((t) => t.solo).length}`);
+  assert.equal(s4.bpm, r4.source.bpm, "the beat is at the source tempo"); assert.equal(r4.transportBpm, 128); assert.ok(s4.tracks.every((t) => !t.solo));
+
+  // 5. Silence from the room: the verdict prompt comes inside thirty seconds of the new element.
+  const landed = r4.watch?.landedAt;
+  const trace = []; const tracer = setInterval(async () => { try { const r = await ritual(); trace.push(`${Math.round((Date.now() - landed) / 100) / 10}s sp=${r.speaking ? 1 : 0} busy=${r.busy ? 1 : 0} run=${r.running ? 1 : 0} loops=${r.loops}`); } catch {} }, 1000);
+  assert.equal(r4.watch?.element, "beat");
+  const prompt = await waitFor(`(() => { const p = window.__ritual().prompts.find((x) => x.element === 'beat' && x.kind === 'prompt'); return p ? JSON.stringify(p) : ''; })()`, 35000, "the verdict prompt").then(JSON.parse)
+    .catch(async (e) => { clearInterval(tracer); console.log(`[ritual] the watch when the prompt did not come: ${JSON.stringify(await ritual())}, now ${await js("Date.now()")}\n${trace.join(" | ")}`); throw e; });
+  clearInterval(tracer);
+  const promptLine = await line(/One line, in or out/, 5000, "the prompt spoken");
+  const r5 = await ritual();
+  console.log(`[ritual] O5. verdict prompt ${((prompt.at - landed) / 1000).toFixed(1)} s after the beat landed (${r5.loops - r4.watch.loopsAt} passes of the loop): ${promptLine}`);
+  assert.ok(prompt.at - landed < 30000, "inside thirty seconds");
+
+  // 6. Next one: a different candidate plays, and the loop never stopped.
+  await say("next one");
+  const r6 = await waitFor(`(() => { const r = window.__ritual(); return r.playing && r.playing !== ${JSON.stringify(r2.playing)} ? JSON.stringify(r) : ''; })()`, 30000, "the next candidate").then(JSON.parse);
+  const s6 = await song();
+  console.log(`[ritual] O6. next: ${r2.playing} -> ${r6.playing}, the chop track plays ${s6.tracks.find((t) => t.id === "chop").clip.clipId}, played ${r6.played.length}, ${await status()}`);
+  assert.equal(s6.tracks.find((t) => t.id === "chop").clip.clipId, r6.playing); assert.ok(/playing/.test(await status()), "the music never stopped");
+
+  // 7. Pull it down: every fader but the seed's 10 dB down on the rig, then back on the next word.
+  await sleep(600);
+  const before = await faders(); const mBefore = await meters();
+  await say("pull it down");
+  await waitFor(`!!window.__ritual().down`, 10000, "the pull down"); await sleep(500);
+  const down = await faders(); const mDown = await meters();
+  console.log(`[ritual] O7. pull it down: faders ${JSON.stringify(before)} -> ${JSON.stringify(down)}; meters ${JSON.stringify(mBefore)} -> ${JSON.stringify(mDown)}`);
+  for (const id of Object.keys(before)) {
+    const delta = down[id] - before[id];
+    if (id === "chop") assert.ok(Math.abs(delta) <= 0.5, `the seed stays: ${delta}`);
+    else assert.ok(Math.abs(delta + 10) <= 0.5, `${id} is 10 dB down: ${delta}`);
+  }
+  await say("I kinda like that");
+  await waitFor(`!window.__ritual().down`, 10000, "the faders back"); await sleep(500);
+  const back = await faders();
+  console.log(`[ritual] O8. the next word brings them back: ${JSON.stringify(back)}`);
+  for (const id of Object.keys(before)) assert.ok(Math.abs(back[id] - before[id]) <= 0.5, `${id} is back: ${back[id]} vs ${before[id]}`);
+}
+
 main().catch((e) => { console.error("[ritual] FAILED:", e.message); process.exit(1); });

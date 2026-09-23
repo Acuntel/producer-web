@@ -20,7 +20,7 @@ import { localIntent, rolloutIntent, rolloutLine } from "@/lib/brain/local";
 import { verifyMove } from "@/lib/brain/verify";
 import { costOf, addCost, costFor, type Usage } from "@/lib/cost";
 import { feelFromFacts } from "@/lib/brain/feel";
-import type { BrainAction, Expectation } from "@/lib/brain/parse";
+import { RITUAL_ACTIONS, type BrainAction, type Expectation, type RitualAction } from "@/lib/brain/parse";
 import type { RolloutKind } from "@/lib/brain/rollouts";
 import { useRollout } from "./useRollout";
 import { useUploads } from "./useUploads";
@@ -47,7 +47,7 @@ const isE2E = () => typeof window !== "undefined" && /[?&](e2e|voice)=1/.test(wi
 
 export type SnapshotMeta = { label?: string; newProject?: boolean; facts?: unknown; chat?: { role: "user" | "assistant"; content: string }[]; blank?: boolean };
 
-export type StudioActions = { analyze?: (input: { url?: string; query?: string; from?: "local" | "web" }) => Promise<void> | void; vocal?: (prompt: string, lyrics?: string, lengthMs?: number) => Promise<void> | void; findSound?: (beats: number) => Promise<void> | void; hear?: (sectionId?: string) => Promise<string | null>; identify?: () => Promise<string | null>; tracklist?: (input: { url?: string; query?: string }) => Promise<void> | void };
+export type StudioActions = { analyze?: (input: { url?: string; query?: string; from?: "local" | "web" }) => Promise<void> | void; vocal?: (prompt: string, lyrics?: string, lengthMs?: number) => Promise<void> | void; findSound?: (beats: number) => Promise<void> | void; hear?: (sectionId?: string) => Promise<string | null>; identify?: () => Promise<string | null>; tracklist?: (input: { url?: string; query?: string }) => Promise<void> | void; ritual?: (a: BrainAction) => Promise<unknown> | void };
 
 export function useStudio(say: (t: string) => void, recordHum: (bpm: number, beats: number) => Promise<{ notes: Note[] } | null>, onSnapshot?: (s: Song, meta: SnapshotMeta) => void, actions?: StudioActions) {
   const onSnapshotRef = useRef(onSnapshot); onSnapshotRef.current = onSnapshot;
@@ -92,6 +92,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const busyRef = useRef(false); const pendingRef = useRef<string | null>(null);
   const lastMoveRef = useRef<string | null>(null);
   const hearSeq = useRef(0);
+  const laidRef = useRef<(() => void) | null>(null);   // told after each version is laid on the rig (a listen that is pulled down stays down)
   const setSongRef = useRef<((s: Song, o?: { silent?: boolean; label?: string; noHistory?: boolean }) => Promise<void>) | null>(null);
   const historyRef = useRef(new History(60));
   const abRef = useRef<AB>(null);
@@ -212,7 +213,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     setCanUndo(historyRef.current.canUndo); setCanRedo(historyRef.current.canRedo);
     songRef.current = s; setSongState(s);
     const eng = await getEngine();
-    if (started || engineRef.current) await eng.update(s);
+    if (started || engineRef.current) { await eng.update(s); laidRef.current?.(); }
     autoSave(s);
     // The cloud hears about every save too; a new record (rollout, full song) opens a new project.
     if (!opts?.noSnapshot) { const fresh = newProjectRef.current; if (!isBlank(s)) newProjectRef.current = false; onSnapshotRef.current?.(s, { label: opts?.label, newProject: fresh, chat: messagesRef.current.slice(-40), blank: isBlank(s) }); }
@@ -343,6 +344,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       if (a.prompt && actionsRef.current?.vocal) { flash("Rendering the vocal"); await actionsRef.current.vocal(a.prompt, a.lyrics, a.lengthMs); }
       else flash("Tell me what the vocal should be");
     }
+    else if (RITUAL_ACTIONS.includes(a.type as RitualAction)) await actionsRef.current?.ritual?.(a);
     else if (a.type === "recordHum") {
       const beats = a.beats && a.beats > 0 ? Math.min(32, a.beats) : 8;
       const role = (a.track && ["lead", "bass", "chords", "pluck", "arp", "stab", "pad", "sub"].includes(a.track) ? a.track : "lead") as Role;
@@ -572,6 +574,8 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const append = useCallback((role: "user" | "assistant", content: string) => { const m = { role, content }; messagesRef.current = [...messagesRef.current, m]; setMessages((x) => [...x, m]); }, []);
   const getPosition = useCallback((): Position | null => engineRef.current?.getPosition() ?? null, []);
   const duck = useCallback((on: boolean) => { engineRef.current?.duck(on); }, []);
+  const liveEngine = useCallback(() => engineRef.current, []);
+  const onLaid = useCallback((f: (() => void) | null) => { laidRef.current = f; }, []);
   const jump = useCallback(async (sectionId: string) => { const eng = await getEngine(); if (eng.goto(sectionId)) flash(`Jumped to ${songRef.current.sections.find((s) => s.id === sectionId)?.name ?? sectionId}`); }, [flash, getEngine]);
   const verdict = useCallback((v: "liked" | "killed") => { if (!lastMoveId) return; setVerdict(lastMoveId, v); flash(v === "liked" ? "Kept" : "Killed"); void send(v === "liked" ? "Yes, keep that." : "No, kill that, go a different direction."); }, [flash, lastMoveId, send]);
   const undo = useCallback(() => void tryLocal("undo"), [tryLocal]); const redo = useCallback(() => void tryLocal("redo"), [tryLocal]);
@@ -581,5 +585,5 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
 
   return { song, messages, busy, started, starting, paused, nowSection, library, clips, facts, hearing, reference, deltaText, listenHint, toast, lastMoveId, rendering, ab, score, canUndo, canRedo, rollout, notSaved,
     boot, send, sendVoice, ignored, ignoredCount, thatWasForMe, loadChat, newSession, setReferenceBuffer, moves, previewClip, brainDown, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, getSchedule, getHealth, setVolume, toggleTrack,
-    play, pause, append, tryLocal, spend, cost, getPosition, duck };
+    play, pause, append, tryLocal, spend, cost, getPosition, duck, liveEngine, onLaid };
 }

@@ -45,6 +45,52 @@ def load_mono(path: str, sr: int = 22050) -> tuple[np.ndarray, int]:
     return (y if y.ndim == 1 else y.mean(axis=1)), int(got)
 
 
+TEMPO_FLOOR = 0.25   # below this the autocorrelation peak is noise: the tempo is refused, not guessed
+
+
+FOLDED_CONFIDENCE = 0.55   # a folded octave is a guess about the genre, not a measurement, so it is said out loud
+
+
+def tempo_from_drums(y: np.ndarray, sr: int, lo: float = 70.0, hi: float = 180.0) -> tuple[float | None, float, float, float | None]:
+    """Tempo the way a producer counts it. Ported from the local ears (~/.dictation/producer/learning_read.py,
+    tempo_from_drums) after a beat tracker returned a constant default on imperfect audio and nothing flagged it.
+    Onset-envelope autocorrelation at 128-sample hops (0.6 percent at 120 bpm), the lag that also has support at
+    twice itself (a beat, not a sixteenth), a parabolic peak, octaves folded into 95 to 185, the beat phase, and a
+    confidence (the normalized autocorrelation at the peak). Returns (bpm, confidence, beat phase in seconds, the
+    other octave or None). A tempo folded up from below 95 names the octave it was read at and carries at most
+    FOLDED_CONFIDENCE. Below TEMPO_FLOOR it refuses: (None, confidence, 0.0, None). Run it on the separated drums
+    when there are drums; the mix is the first read. The phase is searched in 48 steps a beat (about 10 ms at 128)
+    on a short-window envelope, so a chop cut on this grid lands with the kick."""
+    hop = 128
+    oenv = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop)
+    if len(oenv) < 200: return None, 0.0, 0.0, None
+    o = oenv - oenv.mean(); ac = librosa.autocorrelate(o); ac = ac / (abs(ac[0]) + 1e-9)
+    lag_lo, lag_hi = int(60 / hi * sr / hop), int(60 / lo * sr / hop)
+    if lag_hi >= len(ac): return None, 0.0, 0.0, None
+    i = max(range(lag_lo, lag_hi), key=lambda k: ac[k] + (0.5 * ac[2 * k] if 2 * k < len(ac) else 0))
+    d = 0.0
+    if 0 < i < len(ac) - 1:
+        a, b, c = ac[i - 1], ac[i], ac[i + 1]
+        den = a - 2 * b + c
+        if den != 0: d = float(np.clip(0.5 * (a - c) / den, -1, 1))
+    raw = bpm = 60.0 / ((i + d) * hop / sr)
+    while bpm < 95: bpm *= 2
+    while bpm > 185: bpm /= 2
+    conf = float(np.clip(ac[i], 0, 1))
+    if conf < TEMPO_FLOOR: return None, round(conf, 3), 0.0, None
+    alt = round(raw, 1) if abs(bpm - raw) > 1 else None
+    if alt is not None: conf = min(conf, FOLDED_CONFIDENCE)
+    # The beat phase: the offset inside one beat whose comb of onsets is strongest, read off a short-window envelope
+    # (512 samples, 23 ms) because the tempo's 93 ms window smears an attack by tens of milliseconds.
+    penv = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop, n_fft=512, n_mels=40)
+    beat = 60.0 / bpm; t = librosa.frames_to_time(np.arange(len(penv)), sr=sr, hop_length=hop)
+    best, best_s = 0.0, -1.0
+    for ph in np.linspace(0, beat, 48, endpoint=False):
+        s = float(np.sum(np.interp(np.arange(int((t[-1] - ph) / beat)) * beat + ph, t, penv)))
+        if s > best_s: best_s, best = s, float(ph)
+    return round(bpm, 1), round(conf, 3), round(best, 3), alt
+
+
 def analyze(path: str) -> dict:
     # Measured on a five minute record: librosa.load 2.4 s, harmonic separation 10 s (and 80 s on the worker),
     # chroma_cqt 0.6 s, chroma_stft 0.3 s with the same key. So: ffmpeg for the resample, no HPSS, chroma_stft.
@@ -54,14 +100,20 @@ def analyze(path: str) -> dict:
     # a dance record does not change tempo), energy and key from the whole record.
     mid = len(y) // 2; half = 45 * sr
     ex = y[max(0, mid - half): mid + half] if len(y) > 2 * half + sr else y
-    onset_env = librosa.onset.onset_strength(y=ex, sr=sr)
-    tempo, beats = librosa.beat.beat_track(onset_envelope=onset_env, sr=sr, trim=False)
     ex_offset = max(0, mid - half) if len(y) > 2 * half + sr else 0
-    bpm = float(np.atleast_1d(tempo)[0])
-    # Dance records live 100-180; fold octave errors into that band.
-    while bpm and bpm < 95: bpm *= 2
-    while bpm > 185: bpm /= 2
-    beat_times = librosa.frames_to_time(beats, sr=sr) + ex_offset / sr
+    bpm_est, tempo_conf, phase, tempo_alt = tempo_from_drums(ex, sr)
+    if bpm_est is not None:
+        bpm = float(bpm_est)
+        beat_offset = (ex_offset / sr + phase) % (60.0 / bpm)
+    else:
+        # Refused: the bars still need counting, so the old tracker's number stands in, carrying the low confidence
+        # it earned so the studio says it out loud instead of building on it blind.
+        tempo, beats = librosa.beat.beat_track(onset_envelope=librosa.onset.onset_strength(y=ex, sr=sr), sr=sr, trim=False)
+        bpm = float(np.atleast_1d(tempo)[0]) or 120.0
+        while bpm < 95: bpm *= 2
+        while bpm > 185: bpm /= 2
+        beat_times = librosa.frames_to_time(beats, sr=sr) + ex_offset / sr
+        beat_offset = float(beat_times[0] % (60.0 / bpm)) if len(beat_times) else 0.0
     chroma = librosa.feature.chroma_stft(y=y, sr=sr)
     key, key_conf = detect_key(chroma.mean(axis=1))
     # Energy per bar (4 beats) and the best 8 bars: the loudest window.
@@ -89,11 +141,12 @@ def analyze(path: str) -> dict:
         if i > 0 and blk["energy"] >= 0.85 and blocks[i - 1]["energy"] < blk["energy"] - 0.15:
             drop_at = blk["at"]; break
     return {
-        "bpm": round(bpm, 1), "key": key, "keyConfidence": key_conf, "durationSec": round(duration, 2),
+        "bpm": round(bpm, 1), "tempoConfidence": round(float(tempo_conf), 3), "tempoRefused": bpm_est is None, "tempoAlt": tempo_alt, "tempoFrom": "mix",
+        "key": key, "keyConfidence": key_conf, "durationSec": round(duration, 2),
         "bars": n_bars, "barEnergy": [round(float(v), 3) for v in be.tolist()], "blocks": blocks, "dropAt": drop_at,
         "bestBars": {"startBar": best_start, "startSec": round(best_start * bar_sec, 2), "endSec": round((best_start + 8) * bar_sec, 2), "energy": round(best_val, 2)},
-        # The beat grid's phase from the record's start (the first tracked beat folded into one beat period).
-        "beatOffsetSec": round(float(beat_times[0] % (60.0 / bpm)), 3) if len(beat_times) and bpm else 0.0,
+        # The beat grid's phase from the record's start, folded into one beat period.
+        "beatOffsetSec": round(float(beat_offset), 3),
     }
 
 

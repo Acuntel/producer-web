@@ -369,6 +369,16 @@ def process(job: Job) -> None:
         stamp("previewReady")
         supa.update_job(job.job_id, progress=45, result={"facts": facts, "stage": "separating the whole record", "preview": {"stems": preview_out, "oneshots": pshot_out}, "timing": timing})
         stems = analysis.separate(wav, os.path.join(tmp, "sep")); stamp("separated")
+        # The tempo again, from the drums alone: a mix's vocal and pads blur the onsets the count is made from.
+        # The drums' read replaces the mix's when it is at least as sure; a refused read changes nothing.
+        if "drums" in stems:
+            try:
+                yd, srd = analysis.load_mono(stems["drums"], 22050)
+                bpm_d, conf_d, off_d, alt_d = analysis.tempo_from_drums(yd, srd)
+                if bpm_d is not None and conf_d >= float(facts.get("tempoConfidence") or 0):
+                    facts.update(bpm=bpm_d, tempoConfidence=conf_d, beatOffsetSec=off_d, tempoAlt=alt_d, tempoRefused=False, tempoFrom="drums")
+                stamp("drumsTempo")
+            except Exception as e: print("drums tempo failed", e, flush=True)
         # The drum stem as kick, snare, hat and percussion (DRUM_PARTS=1): more to grab, nothing to download.
         if os.environ.get("DRUM_PARTS", "1") == "1" and "drums" in stems:
             try:

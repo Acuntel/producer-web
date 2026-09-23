@@ -1,7 +1,7 @@
 // A stand-in brain for the harness only. It never runs for a real user: the routes use it
 // only when PRODUCER_MOCK=1 is set on the server or the request carries ?mock=1, and the
 // harness sets both. Its job is to exercise every seam the real brain drives (research,
-// tasks, auditions, stop, the landing) with deterministic answers, so the ritual can be
+// tasks, auditions, stop, the landing, the order of work) with deterministic answers, so the ritual can be
 // proven end to end even when no model key has credit.
 import type { VoiceControl, VoiceState } from "./voice";
 import type { Song } from "../song/types";
@@ -20,6 +20,14 @@ export function mockVoice(state: VoiceState, utterance: string): { say: string; 
     return { say: "Say new project, or name one to open.", control: {} };
   }
   if (STOP.test(t)) return { say: "Stopped.", control: { stop: true } };
+  // The order of work (lib/song/ritual.ts), by the words a producer uses for it. Before grab: "pull" is both.
+  const src = t.match(/\b(?:tempo|bpm|key) of (?:the (?:song|record|track|tune) )?(.+?)[.?!]*$/i) ?? t.match(/^(?:let'?s )?(?:flip|start from|sample)\s+(.+?)[.?!]*$/i);
+  if (src) return { say: `Pulling up ${src[1].trim()}.`, control: { source: { name: src[1].trim() } } };
+  if (/\bpull (?:it|everything|it all)(?: all)? down\b|\bmute to listen\b|\bhear the (?:vocal|chop|seed) again\b/i.test(t)) return { say: "Everything down but the seed.", control: { down: { keep: null } } };
+  if (/\b(?:chop|cut (?:a|the|that) (?:phrase|line))\b/i.test(t) && !/\balone\b/i.test(t)) return { say: "Making a chop.", control: { chop: { at: null, bars: null } } };
+  if (/\b(?:alone|by itself|on its own|sing it back)\b/i.test(t)) return { say: "Just the chop, on a loop.", control: { alone: true } };
+  if (/\bto the beat\b|\bbring (?:in )?the (?:beat|drums)\b|\b(?:beat|drums) (?:in )?under (?:it|the chop|the vocal)\b/i.test(t)) return { say: "Bringing the beat to it.", control: { beat: true } };
+  if (/\b(?:next one|go to the next|swap it)\b/i.test(t)) return { say: "Next one.", control: { next: true } };
   const g = t.match(/\b(?:grab|pull|take|steal)\b.*?\b(synth|bass|vocal|vocals|kick|snare|hat|hats|pad|keys|guitar|piano)\b(?:.*?\bat\s+(\d+):(\d\d)|.*?\bat\s+(\d+(?:\.\d+)?)\s*s)?/i);
   if (g) { const at = g[2] ? Number(g[2]) * 60 + Number(g[3]) : g[4] ? Number(g[4]) : null; return { say: `Grabbing the ${g[1]}.`, control: { grab: { what: g[1], at } } }; }
   // "go learn the biggest house records of 2019": everything after the verb is the description,

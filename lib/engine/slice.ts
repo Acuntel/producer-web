@@ -76,20 +76,15 @@ export function sliceBuffer(src: AudioBuffer, atSec: number, lengthSec?: number,
   return out;
 }
 
-/** A phrase, cut where it was measured. No onset hunting: the measurement already found the word,
- *  and hunting for a transient inside a sung line lands on the wrong syllable. */
-export async function cutPhraseClip(src: AudioBuffer, startSec: number, lengthSec: number, id: string, name: string): Promise<{ id: string; durationSec: number; buffer: AudioBuffer }> {
+// The shared cut: n samples from `start` on every channel, faded in and out, peak normalized to -1 dBFS
+// so every cut arrives at a known level; then kept in the clip store and the decoded cache.
+async function keepCut(src: AudioBuffer, start: number, n: number, fadeInSec: number, fadeOutSec: number, id: string, name: string): Promise<AudioBuffer> {
   const sr = src.sampleRate;
-  const m = mono(src);
-  let start = Math.max(0, Math.min(m.length - 1, Math.floor(startSec * sr)));
-  // Back up at most five milliseconds to a zero crossing so the first word does not click.
-  for (let n = 0; n < Math.floor(0.005 * sr) && start > 1; n++, start--) if (m[start - 1] <= 0 && m[start] > 0) break;
-  const n = Math.max(Math.floor(0.05 * sr), Math.min(m.length - start, Math.floor(Math.min(8, lengthSec) * sr)));
   const Ctx = typeof OfflineAudioContext !== "undefined" ? OfflineAudioContext : null;
   if (!Ctx) throw new Error("no audio context");
   const ctx = new Ctx(src.numberOfChannels, n, sr);
   const out = ctx.createBuffer(src.numberOfChannels, n, sr);
-  const fadeIn = Math.floor(0.005 * sr), fadeOut = Math.floor(0.03 * sr);
+  const fadeIn = Math.floor(fadeInSec * sr), fadeOut = Math.floor(fadeOutSec * sr);
   let peak = 0;
   for (let c = 0; c < src.numberOfChannels; c++) {
     const d = src.getChannelData(c), o = out.getChannelData(c);
@@ -100,12 +95,51 @@ export async function cutPhraseClip(src: AudioBuffer, startSec: number, lengthSe
       o[i] = v; peak = Math.max(peak, Math.abs(v));
     }
   }
-  const g = peak > 0 ? 0.891 / peak : 1;   // -1 dBFS, so the phrase arrives at a known level
+  const g = peak > 0 ? 0.891 / peak : 1;   // -1 dBFS
   for (let c = 0; c < out.numberOfChannels; c++) { const o = out.getChannelData(c); for (let i = 0; i < n; i++) o[i] *= g; }
   const bytes = await audioBufferToWav(out).arrayBuffer();
   await putClip({ id, name, type: "audio/wav", bytes, createdAt: Date.now(), durationSec: out.duration });
   cacheDecoded(id, await decodeBytes(bytes.slice(0)));
+  return out;
+}
+
+/** A phrase, cut where it was measured. No onset hunting: the measurement already found the word,
+ *  and hunting for a transient inside a sung line lands on the wrong syllable. */
+export async function cutPhraseClip(src: AudioBuffer, startSec: number, lengthSec: number, id: string, name: string): Promise<{ id: string; durationSec: number; buffer: AudioBuffer }> {
+  const sr = src.sampleRate;
+  const m = mono(src);
+  let start = Math.max(0, Math.min(m.length - 1, Math.floor(startSec * sr)));
+  // Back up at most five milliseconds to a zero crossing so the first word does not click.
+  for (let n = 0; n < Math.floor(0.005 * sr) && start > 1; n++, start--) if (m[start - 1] <= 0 && m[start] > 0) break;
+  const n = Math.max(Math.floor(0.05 * sr), Math.min(m.length - start, Math.floor(Math.min(8, lengthSec) * sr)));
+  const out = await keepCut(src, start, n, 0.005, 0.03, id, name);
   return { id, durationSec: out.duration, buffer: out };
+}
+
+/** A phrase on the record's own grid, so the chop loops without a hiccup. The start goes back to the beat at or
+ *  just before the first word (a sung pickup up to 80 ms early stays with its beat), and the length rounds up to
+ *  whole bars, one, two or four, enough to hold nine tenths of the phrase. The grid's phase is the record's
+ *  first beat, as the worker measured it. */
+export function phraseOnGrid(startSec: number, endSec: number, bpm: number, offsetSec = 0, maxBars = 4): { startSec: number; bars: number; beats: number; lengthSec: number } {
+  const beat = 60 / bpm;
+  const k = Math.floor((startSec + 0.08 - offsetSec) / beat);
+  const start = Math.max(0, offsetSec + k * beat);
+  const want = Math.max(0, endSec - start);
+  let bars = 1;
+  while (bars < maxBars && bars * 4 * beat < want * 0.9) bars *= 2;
+  return { startSec: start, bars, beats: bars * 4, lengthSec: bars * 4 * beat };
+}
+
+/** The chop: a phrase cut on the grid to a whole number of bars and stored as a loop clip. The ends are faded just
+ *  enough (3 ms in, 12 ms out) that the loop point does not click, and no more, so the downbeat keeps its attack. */
+export async function cutGridPhrase(src: AudioBuffer, phrase: { startSec: number; endSec: number }, bpm: number, offsetSec: number, id: string, name: string): Promise<{ id: string; durationSec: number; startSec: number; bars: number; beats: number }> {
+  const g = phraseOnGrid(phrase.startSec, phrase.endSec, bpm, offsetSec);
+  const sr = src.sampleRate;
+  const start = Math.max(0, Math.min(src.length - 1, Math.round(g.startSec * sr)));
+  // Exactly the grid length: a phrase at the very end of the stem is padded with silence, never shortened.
+  const n = Math.max(Math.floor(0.05 * sr), Math.round(Math.min(16, g.lengthSec) * sr));
+  const out = await keepCut(src, start, n, 0.003, 0.012, id, name);
+  return { id, durationSec: out.duration, startSec: g.startSec, bars: g.bars, beats: g.beats };
 }
 
 const isSlice = (o: unknown): o is SliceOp => !!o && typeof o === "object" && (o as { op?: string }).op === "slice" && typeof (o as SliceOp).from === "string" && typeof (o as SliceOp).at === "number";
