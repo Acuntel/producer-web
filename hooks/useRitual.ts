@@ -139,7 +139,18 @@ export function useRitual(d: Deps) {
     return say(`Drums and bass are in at ${src.bpm}, on ${src.name}'s own grid.${src.tempoConfidence < LOW_CONFIDENCE ? " I was not sure of that tempo, so tell me if it drags." : ""}`);
   }, [land, say]);
 
-  // The stream: this record's other lines first (instant, the loop never stops), then the finder's next record.
+  // After the records: the sound libraries (lib/sources), the owned starter library first. Instant, and it needs no sign in.
+  const fromLanes = useCallback(async (): Promise<string | null> => {
+    const [{ laneNext, candidateLine }, { loadManifest }] = await Promise.all([import("@/lib/sources"), import("@/lib/engine")]);
+    const m = await loadManifest().catch(() => null); if (!m) return null;
+    const s = song(), c = await laneNext(s, playedRef.current, m);
+    if (!c || !(await dRef.current.studio.edit([{ op: "next", clip: c.clip, beats: c.beats }], `swapped to ${c.name}`))) return null;
+    playedRef.current.add(c.id); playingRef.current = c.id;
+    await land("next", `went to the next sound: ${c.name}, from the ${c.lane} library`);
+    return say(candidateLine(c, s.source?.bpm ?? s.bpm, s.source?.key ?? s.key));
+  }, [land, say]);
+
+  // The stream: this record's other lines first (instant, the loop never stops), then the finder's next record, then the libraries.
   const next = useCallback(async (): Promise<string> => {
     const h = heardRef.current;
     const lines = h ? (await phrasesOf(h)).filter((c) => !playedRef.current.has(c.id)) : [];
@@ -149,11 +160,11 @@ export function useRitual(d: Deps) {
     }
     const rec: RecordCand | undefined = dRef.current.stems.candidates.map((c) => ({ kind: "record" as const, id: `rec_${c.url}`, url: c.url, title: c.artist ? `${c.artist} - ${c.title}` : c.title }))
       .find((c) => !playedRef.current.has(c.id) && c.title.toLowerCase() !== (h?.name ?? "").toLowerCase());
-    if (!rec || !dRef.current.signedIn) return say("That was the last candidate I have. Name another record and I will pull it in.");
+    if (!rec || !dRef.current.signedIn) return (await fromLanes()) ?? say("That was the last candidate I have. Name another record and I will pull it in.");
     playedRef.current.add(rec.id); pendingRef.current = { next: true };
     void dRef.current.stems.start({ url: rec.url, name: rec.title });
     return say(`Pulling in the next one, ${rec.title}. The loop keeps running until it lands.`);
-  }, [phrasesOf, place, say]);
+  }, [fromLanes, phrasesOf, place, say]);
 
   // Mute to listen, on the graph: fader ramps only, nothing rebuilt and nothing saved. The next word brings it back.
   const applyDown = useCallback(() => {

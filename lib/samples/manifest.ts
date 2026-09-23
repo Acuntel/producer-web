@@ -6,8 +6,10 @@ export type SampleRole = (typeof SAMPLE_ROLES)[number];
 export const KIT_SOUNDS = ["kick", "clap", "snare", "hat", "openhat", "perc"] as const;
 export type KitSoundName = (typeof KIT_SOUNDS)[number];
 
-// Licenses the library may ship. Attribution-free ones need no credit line.
-export const ATTRIBUTION_FREE = ["CC0 1.0", "CC0", "Public Domain", "PD"];
+// Licenses the library may ship. Attribution-free ones need no credit line. A commissioned sound with a written
+// buyout is ours outright (docs/SOURCES_MANIFEST.json names the contract).
+export const COMMISSIONED = "Commissioned buyout";
+export const ATTRIBUTION_FREE = ["CC0 1.0", "CC0", "Public Domain", "PD", COMMISSIONED];
 export const ALLOWED_LICENSES = [...ATTRIBUTION_FREE, "CC BY 4.0", "CC BY 3.0"];
 export const MAX_PACK_BYTES = 6 * 1024 * 1024;
 export const MANIFEST_URL = "/samples/starter/manifest.json";

@@ -5,13 +5,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Song } from "@/lib/song/types";
 import { clipKeysFor } from "@/lib/engine";
+import { staysOnDevice } from "@/lib/sources/splice";
 
 export type ClipRow = { id: string; clip_key: string; name: string; storage_path: string; mime: string | null; duration_sec: number | null; bpm: number | null; key: string | null; bytes: number | null };
 export type ClipMetaIn = { durationSec?: number; bpm?: number; key?: string; mime?: string; bytes?: number };
 
 const COLS = "id, clip_key, name, storage_path, mime, duration_sec, bpm, key, bytes";
-/** Library samples ship with the app and are never a user's to keep. */
-export const needsVault = (key: string) => !key.startsWith("sample:");
+/** Library samples ship with the app and are never a user's to keep. A Splice sound is licensed to one person and
+ *  never leaves their device (lib/sources/splice.ts), so the vault never takes one either. */
+export const needsVault = (key: string) => !key.startsWith("sample:") && !staysOnDevice(key);
 /** The audio a record cannot be played without. */
 export const vaultKeysOf = (song: Song) => clipKeysFor(song).filter(needsVault);
 
