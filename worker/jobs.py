@@ -1,9 +1,9 @@
 """The stems job: find the record (or take the upload), check it is the record that was asked for, hear it,
 separate it, publish stems and one-shots, and listen. The original audio is deleted when the job ends."""
 from __future__ import annotations
-import os, subprocess, time
+import os, time
 from dataclasses import asdict
-import analysis, fetch, finder, fingerprint, hearing, identify, resolver, supa
+import analysis, fetch, finder, fingerprint, hearing, identify, resolver, separate, supa
 from models import Job
 
 MAX_SECONDS = int(os.environ.get("MAX_SECONDS", "480"))
@@ -88,25 +88,33 @@ def process_stems(job: Job, tmp: str) -> None:
 
 
 def separate_and_publish(job: Job, tmp: str, wav: str, name: str, facts: dict, ident: dict | None, timing: dict, stamp, version: dict) -> dict:
-    supa.update_job(job.job_id, progress=22, result={"facts": facts, "stage": "separating the best bars", **version})
-    # Progressive: the best 16 bars are separated first (about a fifth of the work), so stems, one-shots and a
-    # listen land early; the whole record follows and replaces them.
+    """Vocals first: the hook region's voice, then the whole voice (lossless), then drums, bass and the rest."""
+    base = f"{job.owner}/stems/{job.job_id}"
+    sep_dir = os.path.join(tmp, "sep")
     bar_sec = 240.0 / float(facts.get("bpm") or 126)
     start = float((facts.get("bestBars") or {}).get("startSec") or 0.0)
-    pre = os.path.join(tmp, "preview.wav")
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{max(0.0, start):.3f}", "-t", f"{16 * bar_sec:.3f}", "-i", wav, pre], check=True)
-    pstems = analysis.separate(pre, os.path.join(tmp, "psep")); stamp("previewSeparated")
-    pshots = analysis.slice_oneshots(pstems["drums"], os.path.join(tmp, "pshots")) if "drums" in pstems else []
-    base = f"{job.owner}/stems/{job.job_id}"
-    preview_out = []
-    for stem, p in pstems.items():
-        mp3 = os.path.join(tmp, f"preview-{stem}.mp3"); analysis.ffmpeg_to_mp3(p, mp3)
-        preview_out.append({"stem": stem, "path": supa.upload(f"{base}/preview-{stem}.mp3", mp3, "audio/mpeg"), "startSec": start, "bars": 16})
-    pshot_out = [{**asdict(sh), "path": supa.upload(f"{base}/preview-oneshot-{os.path.basename(sh.path)}", sh.path, "audio/wav")} for sh in pshots]
-    stamp("previewReady")
-    preview = {"stems": preview_out, "oneshots": pshot_out}
-    supa.update_job(job.job_id, progress=45, result={"facts": facts, "stage": "separating the whole record", "preview": preview, "timing": timing, **version})
-    stems = analysis.separate(wav, os.path.join(tmp, "sep")); stamp("separated")
+    preview: dict = {"stems": [], "oneshots": []}
+    def report(progress: int, stage: str, **more) -> None:
+        supa.update_job(job.job_id, progress=progress, result={"facts": facts, "stage": stage, "preview": preview, "timing": timing, **version, **more})
+    def on_hook(paths: dict) -> None:
+        # The best 16 bars' voice lands while the rest of the record is still separating.
+        stamp("hookVocal")
+        preview["stems"].append({"stem": "vocals", "path": supa.upload(f"{base}/preview-vocals.flac", paths["vocals"], "audio/flac"), "startSec": start, "bars": 16})
+        report(35, "the voice of the best bars is here; separating the whole vocal")
+        try:
+            ps = separate.band_stems(paths["instrumental"], os.path.join(tmp, "psep"))
+            for stem, p in ps.items():
+                mp3 = os.path.join(tmp, f"preview-{stem}.mp3"); analysis.ffmpeg_to_mp3(p, mp3)
+                preview["stems"].append({"stem": stem, "path": supa.upload(f"{base}/preview-{stem}.mp3", mp3, "audio/mpeg"), "startSec": start, "bars": 16})
+            shots = analysis.slice_oneshots(ps["drums"], os.path.join(tmp, "pshots")) if "drums" in ps else []
+            preview["oneshots"] = [{**asdict(sh), "path": supa.upload(f"{base}/preview-oneshot-{os.path.basename(sh.path)}", sh.path, "audio/wav")} for sh in shots]
+            stamp("previewReady"); report(45, "the best bars are separated; separating the whole vocal")
+        except Exception as e: print("preview stems failed", e, flush=True)
+    report(22, "separating the voice, the best bars first")
+    v = separate.vocal(wav, sep_dir, hook_sec=(start, start + 16 * bar_sec), on_hook=on_hook); stamp("vocalSeparated")
+    vocal_out = {"stem": "vocals", "path": supa.upload(f"{base}/vocals.flac", v["vocals"], "audio/flac")}
+    report(55, "the whole vocal is here; separating the drums, the bass and the rest", stems=[vocal_out])
+    stems = {"vocals": v["vocals"], **separate.band_stems(v["instrumental"], sep_dir)}; stamp("separated")
     retempo_from_drums(stems, facts, stamp)
     if os.environ.get("DRUM_PARTS", "1") == "1" and "drums" in stems:
         try:
@@ -114,13 +122,13 @@ def separate_and_publish(job: Job, tmp: str, wav: str, name: str, facts: dict, i
             stamp("drumParts")
         except Exception as e: print("drum parts failed", e, flush=True)
     shots = analysis.slice_oneshots(stems["drums"], os.path.join(tmp, "shots")) if "drums" in stems else []
-    supa.update_job(job.job_id, progress=72, result={"facts": facts, "stage": "uploading", "preview": preview, "timing": timing, **version})
-    stem_out, shot_out, rows = publish(job, tmp, base, name, facts, stems, shots)
+    report(72, "uploading", stems=[vocal_out])
+    stem_out, shot_out, rows = publish(job, tmp, base, name, facts, stems, shots, {"vocals": vocal_out["path"]})
     stamp("uploaded")
-    supa.update_job(job.job_id, progress=80, result={"facts": facts, "stems": stem_out, "oneshots": shot_out, "name": name, "identity": ident, "stage": "listening", "timing": timing, **version})
-    heard = listen(wav, stems, facts, stem_out, shot_out, shots, rows)
+    report(80, "listening", stems=stem_out, oneshots=shot_out, name=name, identity=ident)
+    heard = listen(wav, {k: stems[k] for k in ("drums", "bass", "vocals", "other") if k in stems}, facts, stem_out, shot_out, shots, rows)
     stamp("heard")
-    final = {"facts": facts, "stems": stem_out, "oneshots": shot_out, "name": name, "hearing": heard, "identity": ident, "timing": timing, **version}
+    final = {"facts": facts, "stems": stem_out, "oneshots": shot_out, "name": name, "hearing": heard, "identity": ident, "timing": timing, "separator": separate.MODEL_NAME, **version}
     supa.update_job(job.job_id, status="done", progress=100, result=final)
     return final
 
@@ -138,13 +146,16 @@ def retempo_from_drums(stems: dict, facts: dict, stamp) -> None:
     except Exception as e: print("drums tempo failed", e, flush=True)
 
 
-def publish(job: Job, tmp: str, base: str, name: str, facts: dict, stems: dict, shots: list) -> tuple[list, list, list]:
+def publish(job: Job, tmp: str, base: str, name: str, facts: dict, stems: dict, shots: list, uploaded: dict[str, str] | None = None) -> tuple[list, list, list]:
+    """Stems as clips rows. The vocal was uploaded already, as FLAC; the rest go up as MP3."""
     rows, stem_out, shot_out = [], [], []
     for stem, p in stems.items():
-        mp3 = os.path.join(tmp, f"{stem}.mp3"); analysis.ffmpeg_to_mp3(p, mp3)
-        path = supa.upload(f"{base}/{stem}.mp3", mp3, "audio/mpeg")
+        if uploaded and stem in uploaded: path, mime = uploaded[stem], "audio/flac"
+        else:
+            mp3 = os.path.join(tmp, f"{stem}.mp3"); analysis.ffmpeg_to_mp3(p, mp3)
+            path, mime = supa.upload(f"{base}/{stem}.mp3", mp3, "audio/mpeg"), "audio/mpeg"
         stem_out.append({"stem": stem, "path": path})
-        rows.append({"owner": job.owner, "project_id": job.project_id, "name": f"{name} · {stem}", "storage_path": path, "mime": "audio/mpeg", "duration_sec": facts["durationSec"], "bpm": facts["bpm"], "key": facts["key"], "source": {"kind": "stem", "stem": stem, "job_id": job.job_id, "from": name}})
+        rows.append({"owner": job.owner, "project_id": job.project_id, "name": f"{name} · {stem}", "storage_path": path, "mime": mime, "duration_sec": facts["durationSec"], "bpm": facts["bpm"], "key": facts["key"], "source": {"kind": "stem", "stem": stem, "job_id": job.job_id, "from": name}})
     for sh in shots:
         path = supa.upload(f"{base}/oneshot-{os.path.basename(sh.path)}", sh.path, "audio/wav")
         d = asdict(sh); d["path"] = path; shot_out.append(d)

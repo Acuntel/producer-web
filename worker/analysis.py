@@ -1,5 +1,5 @@
-"""Music analysis for The Producer's stems worker: tempo, key, best bars, source
-separation (demucs htdemucs), and drum one-shot slicing from the drums stem."""
+"""Music analysis for The Producer's stems worker: tempo, key, best bars, the drum split and drum one-shot
+slicing from the drums stem. Source separation lives in separate.py (Kim Mel-Band RoFormer, no Demucs)."""
 from __future__ import annotations
 import json, math, os, shutil, subprocess, sys, tempfile
 import time
@@ -150,27 +150,6 @@ def analyze(path: str) -> dict:
     }
 
 
-STEM_NAMES = ("drums", "bass", "vocals", "other", "guitar", "piano")   # htdemucs makes four, htdemucs_6s six
-
-
-def separate(wav_path: str, out_dir: str, model: str | None = None) -> dict[str, str]:
-    """Run demucs in a subprocess (its own process keeps torch memory out of the server).
-    DEMUCS_MODEL=htdemucs_6s adds guitar and piano stems (section 15 of the masterprompt)."""
-    model = model or os.environ.get("DEMUCS_MODEL", "htdemucs")
-    # Measured on the demo record: shifts=1 79 s, shifts=0 56 s, shifts=0 + overlap 0.1 48 s, same stems for our use
-    # (one-shots, loops, listening). SEPARATE_FAST=0 restores demucs' defaults.
-    fast = os.environ.get("SEPARATE_FAST", "1") == "1"
-    extra = ["--shifts", "0", "--overlap", "0.15"] if fast else []
-    subprocess.run([sys.executable, "-m", "demucs.separate", "-n", model, "-o", out_dir, "--filename", "{stem}.{ext}", *extra, wav_path], check=True)
-    base = os.path.join(out_dir, model)
-    stems = {}
-    for name in STEM_NAMES:
-        p = os.path.join(base, f"{name}.wav")
-        if os.path.exists(p): stems[name] = p
-    if not stems: raise RuntimeError("demucs produced no stems")
-    return stems
-
-
 def drum_parts(drums_path: str, out_dir: str) -> dict[str, str]:
     """The drum stem as kick, snare, hat and percussion stems (DRUM_PARTS=1): a band-and-transient split, no model.
     Kick is what sits under 160 Hz around low, dull onsets; hats what sits above 5 kHz around bright, short onsets;
@@ -299,7 +278,8 @@ if __name__ == "__main__":
     facts = analyze(wav)
     print("FACTS", json.dumps(facts)[:700], flush=True)
     if len(sys.argv) > 2 and sys.argv[2] == "--stems":
-        t1 = time.time(); stems = separate(wav, os.path.join(tmp, "sep"))
+        import separate as sep
+        t1 = time.time(); stems = sep.separate(wav, os.path.join(tmp, "sep"))
         print("STEMS", {k: os.path.basename(v) for k, v in stems.items()}, f"in {time.time() - t1:.0f}s", flush=True)
         if os.environ.get("DRUM_PARTS", "1") == "1" and "drums" in stems:
             t2 = time.time(); parts = drum_parts(stems["drums"], os.path.join(tmp, "parts"))

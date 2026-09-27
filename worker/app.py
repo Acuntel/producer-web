@@ -8,7 +8,7 @@ from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 import analysis, supa
 import hearing, finder, identify
-import fetch, jobs, jobs_misc
+import fetch, jobs, jobs_misc, separate
 from models import Job, Source  # noqa: F401  (Source is part of the posted shape)
 
 SECRET = os.environ.get("WORKER_SECRET", "")
@@ -22,7 +22,7 @@ lock = threading.Lock()
 @app.get("/health")
 def health():
     # The model it actually loads, not a string typed once and left behind: the site shows this.
-    return {"ok": True, "model": os.environ.get("DEMUCS_MODEL", "htdemucs"), "drumParts": os.environ.get("DRUM_PARTS", "1") == "1",
+    return {"ok": True, "model": separate.MODEL_NAME, "backend": separate.BACKEND, "drumParts": os.environ.get("DRUM_PARTS", "1") == "1",
             "cpus": os.cpu_count(), "workers": pool._max_workers, "identifyCooldownSec": int(identify.cooling()),
             **state, "uptimeSec": int(time.time() - state["started"])}
 
