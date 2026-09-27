@@ -6,7 +6,8 @@ optional), Bandcamp (direct links). YouTube is not a source: it refuses servers.
 from __future__ import annotations
 import json, os, re, subprocess, urllib.parse, urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
+import resolver
 
 UA = "producer-web/1.0 (+https://producer-web-theta.vercel.app)"
 TIMEOUT = 12
@@ -23,6 +24,8 @@ class Candidate:
     license: str | None = None
     kind: str = "track"        # track | mix | sample | album
     score: float = 0.0
+    why: list[str] = field(default_factory=list)   # the ranking's reasons, in words
+    version: str | None = None                      # the version its title says it is (cover, remix, live) or "original?"
 
 
 def _get_json(url: str, headers: dict | None = None) -> dict | list | None:
@@ -120,26 +123,13 @@ def freesound(query: str, n: int = 6) -> list[Candidate]:
 
 
 SOURCES = {"soundcloud": soundcloud, "mixcloud": mixcloud, "archive": archive, "fma": fma, "jamendo": jamendo, "freesound": freesound}
-WORDS = re.compile(r"[a-z0-9]+")
+def rank(query: str, cands: list[Candidate], want: str | None = None, ask: resolver.Ask | None = None) -> list[Candidate]:
+    """Identity first (worker/resolver.py): the uploader is the artist, the duration matches the catalog, and no
+    cover, karaoke, remix, live, sped up or nightcore marker the ask did not use. Then the kind and source trust."""
+    return resolver.rank(ask or resolver.parse_ask(query), cands, want)
 
 
-def _tokens(s: str) -> set[str]: return set(WORDS.findall((s or "").lower()))
-
-
-def rank(query: str, cands: list[Candidate], want: str | None = None) -> list[Candidate]:
-    """Title match first, then the kind the user asked for, then duration sanity, then source trust."""
-    q = _tokens(query)
-    trust = {"soundcloud": 1.0, "archive": 0.9, "mixcloud": 0.85, "jamendo": 0.8, "fma": 0.8, "freesound": 0.7}
-    for c in cands:
-        t = _tokens(f"{c.artist or ''} {c.title}")
-        overlap = len(q & t) / max(1, len(q))
-        dur_ok = 1.0 if c.duration_sec is None else (1.0 if 45 <= c.duration_sec <= 900 else 0.6 if c.duration_sec > 900 else 0.4)
-        kind_ok = 1.15 if want and c.kind == want else 1.0
-        c.score = round(overlap * 3 + dur_ok + trust.get(c.source, 0.5) * 0.5, 3) * kind_ok
-    return sorted(cands, key=lambda c: -c.score)
-
-
-def search(query: str, sources: list[str] | None = None, want: str | None = None, per_source: int = 6) -> list[Candidate]:
+def search(query: str, sources: list[str] | None = None, want: str | None = None, per_source: int = 6, ask: resolver.Ask | None = None) -> list[Candidate]:
     """Every source in parallel, one ranked list. Sources that need a key and have none return nothing."""
     names = [s for s in (sources or list(SOURCES)) if s in SOURCES]
     out: list[Candidate] = []
@@ -153,7 +143,7 @@ def search(query: str, sources: list[str] | None = None, want: str | None = None
         k = (c.source, c.url)
         if k in seen or not c.url: continue
         seen.add(k); uniq.append(c)
-    return rank(query, uniq, want)
+    return rank(query, uniq, want, ask)
 
 
 def to_json(cands: list[Candidate]) -> list[dict]: return [asdict(c) for c in cands]
@@ -164,4 +154,4 @@ if __name__ == "__main__":
     q = " ".join(sys.argv[1:]) or "john summit where you are"
     t0 = time.time(); res = search(q)
     print(f"{len(res)} candidates in {time.time() - t0:.1f}s")
-    for c in res[:12]: print(f"  {c.score:5.2f} {c.source:10} {c.kind:6} {str(c.duration_sec or '?'):>6} | {(c.artist or '')[:22]:22} | {c.title[:60]} | {c.url[:70]}")
+    for c in res[:12]: print(f"  {c.score:5.2f} {c.source:10} {c.kind:6} {str(c.duration_sec or '?'):>6} | {(c.artist or '')[:22]:22} | {c.title[:60]} | {'; '.join(c.why)}")
