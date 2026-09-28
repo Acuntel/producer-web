@@ -25,7 +25,7 @@ def align(words: list[dict], cand: np.ndarray, power: np.ndarray, lag: float) ->
     """Each word to one onset index (or None), in order, minimising |onset - (asr - lag)| less 0.3 x strength."""
     n, m = len(words), len(cand)
     if not n or not m: return [None] * n
-    target = np.array([w["start"] - lag for w in words])
+    target = np.array([w.get("asr", w["start"]) - lag for w in words])
     INF = 1e9
     # dp[i][j]: best cost with the first i words placed and every onset before j used or skipped.
     dp = np.full((n + 1, m + 1), INF); dp[0, :] = 0.0
@@ -49,25 +49,38 @@ def align(words: list[dict], cand: np.ndarray, power: np.ndarray, lag: float) ->
     return out
 
 
+def place_phrase(ws: list[dict], a: float, b: float, ons: np.ndarray, strength: np.ndarray, lag: float) -> list[tuple[float, float]]:
+    """(asr, onset) pairs for the words it aligned; moves every word of one phrase onto its onset, in place."""
+    m = (ons >= a - 0.1) & (ons < b)
+    cand = ons[m]; power = strength[m] / (strength[m].max() + 1e-9) if m.any() else strength[m]
+    # The voice starts with a word: the first word takes the onset that opens the phrase (the gate's rise).
+    opening = cand[(cand >= a - 0.1) & (cand <= a + 0.3)]
+    ws[0]["start"] = round(float(opening[0]) if len(opening) else a, 3)
+    pairs = [(ws[0]["asr"], ws[0]["start"])]
+    later = cand > ws[0]["start"] + 0.05
+    pick = align(ws[1:], cand[later], power[later], lag)
+    prev = ws[0]["start"]
+    for w, k in zip(ws[1:], pick):
+        t = float(cand[later][k]) if k is not None else w["asr"] - lag
+        if k is not None: pairs.append((w["asr"], t))
+        w["start"] = round(max(t, prev + 0.05), 3); prev = w["start"]   # never before the word it follows
+    for x, y in zip(ws, ws[1:] + [None]):   # a word ends where the next begins, or where it ended before
+        x["end"] = round(max(x["start"] + 0.05, y["start"] if y else x["end"]), 3)
+    return pairs
+
+
 def refine(per_phrase: list[list[dict]], spans: list[tuple[float, float]], ons: np.ndarray, strength: np.ndarray) -> float:
-    """Move every word's start onto its onset, in place. Returns the lag it measured."""
+    """Move every word's start onto its onset, in place. The lag is measured, the words aligned with it, and the lag
+    measured again from what aligned (three rounds). Returns the lag."""
     every = [w for ws in per_phrase for w in ws]
+    for w in every: w.setdefault("asr", w["start"])
     lag = lag_of(every, ons, strength)
-    for ws, (a, b) in zip(per_phrase, spans):
-        if not ws: continue
-        m = (ons >= a - 0.05) & (ons < b)
-        cand, power = ons[m], strength[m] / (strength[m].max() + 1e-9) if m.any() else strength[m]
-        for w in ws: w["asr"] = w["start"]
-        if not len(cand):
-            for w in ws: w["start"] = round(max(a, w["asr"] - lag), 3)
-            continue
-        first = cand[power >= STRONG]
-        ws[0]["start"] = round(float(first[0] if len(first) else cand[0]), 3)
-        rest = ws[1:]
-        pick = align(rest, cand[cand > ws[0]["start"] + 0.05], power[cand > ws[0]["start"] + 0.05], lag)
-        later = cand[cand > ws[0]["start"] + 0.05]
-        for w, k in zip(rest, pick):
-            w["start"] = round(float(later[k]) if k is not None else max(a, w["asr"] - lag), 3)
-        for x, y in zip(ws, ws[1:] + [None]):   # a word ends where the next begins, or where it ended before
-            x["end"] = round(max(x["start"] + 0.05, y["start"] if y else x["end"]), 3)
+    for _ in range(3):
+        pairs = []
+        for ws, (a, b) in zip(per_phrase, spans):
+            if ws: pairs += place_phrase(ws, a, b, ons, strength, lag)
+        diffs = [asr - t for asr, t in pairs[:] if -0.5 < asr - t < REACH + 0.5]
+        new = float(np.median(diffs)) if diffs else lag
+        if abs(new - lag) < 0.01: break
+        lag = new
     return round(lag, 3)
