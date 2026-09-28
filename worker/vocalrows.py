@@ -69,8 +69,8 @@ def coverage(phrases: list[dict], a: float, b: float) -> float:
 
 
 def phrase_rows(vmap: dict, record_key: str, family: str | None, hearing: dict | None = None) -> list[dict]:
-    """One row per phrase: its place against the next peak (a drop or a chorus), the nearest section boundary and
-    its own section, with its hook score and its pitch against the key."""
+    """One row per phrase: its place against its peak (the drop or chorus it sings in, else the next one), the nearest
+    section boundary and its own section, with its hook score and its pitch against the key."""
     src = vmap.get("source") or {}; beat = float(src.get("beatSec") or 0.5); bar = 4 * beat
     secs = vmap.get("sections") or []; phrases = vmap.get("phrases") or []
     peaks = [s for s in secs if s.get("label") in PEAKS]
@@ -79,8 +79,10 @@ def phrase_rows(vmap: dict, record_key: str, family: str | None, hearing: dict |
     rows = []
     for ph in phrases:
         anchor = float(ph["stressOnset"])
-        nxt = next((s for s in peaks if s["start"] >= ph["start"] - 0.2), None)
         inside = next((s for s in secs if s["start"] <= anchor < s["end"]), None)
+        # The peak a phrase belongs to: the one it sings inside (then the distances are negative: past the one),
+        # else the next one to come.
+        nxt = inside if inside and inside.get("label") in PEAKS else next((s for s in peaks if s["start"] >= ph["start"] - 0.2), None)
         near = min(bounds, key=lambda t: abs(t - anchor)) if bounds else None
         rows.append({
             "record_key": record_key, "phrase": ph["id"], **{k: p[k] for k in ("family", "tempo", "tempo_band", "archetype")},

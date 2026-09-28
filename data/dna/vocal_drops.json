@@ -1,0 +1,440 @@
+{
+ "version": 1,
+ "builtAt": "2026-09-27",
+ "source": "the backfill's dry run over the 11 dna_heard rows on 2026-09-27 (lyric line starts and 8-bar blocks, no vocal maps yet); no group reaches minRecords, so the planner keeps its rule priors",
+ "minRecords": 8,
+ "records": 6,
+ "duplicatesDropped": 4,
+ "groups": {
+  "*|*|*": {
+   "records": 6,
+   "phrases": 131,
+   "leadInBeats": {
+    "p25": 2.584,
+    "p50": 3.034,
+    "p75": 3.485,
+    "n": 4
+   },
+   "carriesThroughShare": 1.0,
+   "hookAnchorToPeakBeats": {
+    "p25": -26.917,
+    "p50": -13.396,
+    "p75": -7.752,
+    "n": 6
+   },
+   "hookBarInSection": {
+    "p25": 2.393,
+    "p50": 5.517,
+    "p75": 16.093,
+    "n": 6
+   },
+   "hookSections": {
+    "drop": 0.5,
+    "chorus": 0.333,
+    "verse": 0.167
+   },
+   "hookPeaks": {
+    "drop": 0.667,
+    "chorus": 0.333
+   },
+   "pickupBeats": null,
+   "phraseBeats": {
+    "p25": 3.876,
+    "p50": 7.537,
+    "p75": 9.067,
+    "n": 131
+   },
+   "lineLeadInBeats": {
+    "p25": 3.485,
+    "p50": 3.627,
+    "p75": 8.183,
+    "n": 7
+   },
+   "vocalShareBySection": {
+    "break": 0.295,
+    "build": 0.711,
+    "chorus": 0.63,
+    "drop": 0.855,
+    "intro": 0.933,
+    "verse": 0.676
+   },
+   "measuredBy": {
+    "backfill": 1.0
+   }
+  },
+  "dubstep|*|*": {
+   "records": 1,
+   "phrases": 4,
+   "leadInBeats": null,
+   "carriesThroughShare": null,
+   "hookAnchorToPeakBeats": {
+    "p25": -9.573,
+    "p50": -9.573,
+    "p75": -9.573,
+    "n": 1
+   },
+   "hookBarInSection": {
+    "p25": 2.393,
+    "p50": 2.393,
+    "p75": 2.393,
+    "n": 1
+   },
+   "hookSections": {
+    "chorus": 1.0
+   },
+   "hookPeaks": {
+    "chorus": 1.0
+   },
+   "pickupBeats": null,
+   "phraseBeats": {
+    "p25": 6.701,
+    "p50": 7.18,
+    "p75": 7.659,
+    "n": 4
+   },
+   "lineLeadInBeats": null,
+   "vocalShareBySection": {
+    "chorus": 0.239,
+    "intro": 0.309
+   },
+   "measuredBy": {}
+  },
+  "dubstep|132-145|verse_chorus": {
+   "records": 1,
+   "phrases": 4,
+   "leadInBeats": null,
+   "carriesThroughShare": null,
+   "hookAnchorToPeakBeats": {
+    "p25": -9.573,
+    "p50": -9.573,
+    "p75": -9.573,
+    "n": 1
+   },
+   "hookBarInSection": {
+    "p25": 2.393,
+    "p50": 2.393,
+    "p75": 2.393,
+    "n": 1
+   },
+   "hookSections": {
+    "chorus": 1.0
+   },
+   "hookPeaks": {
+    "chorus": 1.0
+   },
+   "pickupBeats": null,
+   "phraseBeats": {
+    "p25": 6.701,
+    "p50": 7.18,
+    "p75": 7.659,
+    "n": 4
+   },
+   "lineLeadInBeats": null,
+   "vocalShareBySection": {
+    "chorus": 0.239,
+    "intro": 0.309
+   },
+   "measuredBy": {}
+  },
+  "house|*|*": {
+   "records": 4,
+   "phrases": 87,
+   "leadInBeats": {
+    "p25": 0.0,
+    "p50": 2.584,
+    "p75": 3.485,
+    "n": 3
+   },
+   "carriesThroughShare": 1.0,
+   "hookAnchorToPeakBeats": {
+    "p25": -17.22,
+    "p50": -12.486,
+    "p75": -7.752,
+    "n": 4
+   },
+   "hookBarInSection": {
+    "p25": 4.305,
+    "p50": 10.199,
+    "p75": 16.093,
+    "n": 4
+   },
+   "hookSections": {
+    "drop": 0.5,
+    "verse": 0.25,
+    "chorus": 0.25
+   },
+   "hookPeaks": {
+    "drop": 0.75,
+    "chorus": 0.25
+   },
+   "pickupBeats": null,
+   "phraseBeats": {
+    "p25": 6.347,
+    "p50": 7.752,
+    "p75": 10.66,
+    "n": 87
+   },
+   "lineLeadInBeats": {
+    "p25": 3.485,
+    "p50": 3.556,
+    "p75": 3.627,
+    "n": 4
+   },
+   "vocalShareBySection": {
+    "break": 0.887,
+    "build": 0.632,
+    "chorus": 0.63,
+    "drop": 0.839,
+    "intro": 0.502,
+    "verse": 0.47
+   },
+   "measuredBy": {
+    "backfill": 1.0
+   }
+  },
+  "house|122-132|build_drop": {
+   "records": 2,
+   "phrases": 39,
+   "leadInBeats": {
+    "p25": 2.584,
+    "p50": 3.034,
+    "p75": 3.485,
+    "n": 2
+   },
+   "carriesThroughShare": 1.0,
+   "hookAnchorToPeakBeats": {
+    "p25": -17.22,
+    "p50": -12.486,
+    "p75": -7.752,
+    "n": 2
+   },
+   "hookBarInSection": {
+    "p25": 1.938,
+    "p50": 3.121,
+    "p75": 4.305,
+    "n": 2
+   },
+   "hookSections": {
+    "drop": 1.0
+   },
+   "hookPeaks": {
+    "drop": 1.0
+   },
+   "pickupBeats": null,
+   "phraseBeats": {
+    "p25": 7.752,
+    "p50": 8.183,
+    "p75": 10.66,
+    "n": 39
+   },
+   "lineLeadInBeats": {
+    "p25": 2.584,
+    "p50": 3.485,
+    "p75": 13.325,
+    "n": 3
+   },
+   "vocalShareBySection": {
+    "build": 0.66,
+    "drop": 0.868,
+    "intro": 0.502,
+    "verse": 0.47
+   },
+   "measuredBy": {
+    "backfill": 1.0
+   }
+  },
+  "house|132-145|build_drop": {
+   "records": 1,
+   "phrases": 31,
+   "leadInBeats": {
+    "p25": 0.0,
+    "p50": 0.0,
+    "p75": 0.0,
+    "n": 1
+   },
+   "carriesThroughShare": 1.0,
+   "hookAnchorToPeakBeats": {
+    "p25": 63.693,
+    "p50": 63.693,
+    "p75": 63.693,
+    "n": 1
+   },
+   "hookBarInSection": {
+    "p25": 16.093,
+    "p50": 16.093,
+    "p75": 16.093,
+    "n": 1
+   },
+   "hookSections": {
+    "verse": 1.0
+   },
+   "hookPeaks": {
+    "drop": 1.0
+   },
+   "pickupBeats": null,
+   "phraseBeats": {
+    "p25": 7.253,
+    "p50": 9.973,
+    "p75": 12.693,
+    "n": 31
+   },
+   "lineLeadInBeats": {
+    "p25": 3.627,
+    "p50": 3.627,
+    "p75": 3.627,
+    "n": 1
+   },
+   "vocalShareBySection": {
+    "break": 0.887,
+    "build": 0.518,
+    "drop": 0.839,
+    "verse": 0.883
+   },
+   "measuredBy": {
+    "backfill": 1.0
+   }
+  },
+  "house|90-110|loop": {
+   "records": 1,
+   "phrases": 17,
+   "leadInBeats": null,
+   "carriesThroughShare": null,
+   "hookAnchorToPeakBeats": {
+    "p25": -64.598,
+    "p50": -64.598,
+    "p75": -64.598,
+    "n": 1
+   },
+   "hookBarInSection": {
+    "p25": 16.149,
+    "p50": 16.149,
+    "p75": 16.149,
+    "n": 1
+   },
+   "hookSections": {
+    "chorus": 1.0
+   },
+   "hookPeaks": {
+    "chorus": 1.0
+   },
+   "pickupBeats": null,
+   "phraseBeats": {
+    "p25": 2.871,
+    "p50": 2.871,
+    "p75": 4.466,
+    "n": 17
+   },
+   "lineLeadInBeats": null,
+   "vocalShareBySection": {
+    "chorus": 0.63
+   },
+   "measuredBy": {}
+  },
+  "pop|*|*": {
+   "records": 1,
+   "phrases": 40,
+   "leadInBeats": {
+    "p25": 10.982,
+    "p50": 10.982,
+    "p75": 10.982,
+    "n": 1
+   },
+   "carriesThroughShare": 1.0,
+   "hookAnchorToPeakBeats": {
+    "p25": -26.917,
+    "p50": -26.917,
+    "p75": -26.917,
+    "n": 1
+   },
+   "hookBarInSection": {
+    "p25": 6.729,
+    "p50": 6.729,
+    "p75": 6.729,
+    "n": 1
+   },
+   "hookSections": {
+    "drop": 1.0
+   },
+   "hookPeaks": {
+    "drop": 1.0
+   },
+   "pickupBeats": null,
+   "phraseBeats": {
+    "p25": 3.876,
+    "p50": 3.876,
+    "p75": 6.029,
+    "n": 40
+   },
+   "lineLeadInBeats": {
+    "p25": 0.0,
+    "p50": 8.183,
+    "p75": 10.982,
+    "n": 3
+   },
+   "vocalShareBySection": {
+    "break": 0.295,
+    "build": 0.711,
+    "chorus": 0.35,
+    "drop": 0.855,
+    "intro": 0.933,
+    "verse": 0.956
+   },
+   "measuredBy": {
+    "backfill": 1.0
+   }
+  },
+  "pop|122-132|build_drop": {
+   "records": 1,
+   "phrases": 40,
+   "leadInBeats": {
+    "p25": 10.982,
+    "p50": 10.982,
+    "p75": 10.982,
+    "n": 1
+   },
+   "carriesThroughShare": 1.0,
+   "hookAnchorToPeakBeats": {
+    "p25": -26.917,
+    "p50": -26.917,
+    "p75": -26.917,
+    "n": 1
+   },
+   "hookBarInSection": {
+    "p25": 6.729,
+    "p50": 6.729,
+    "p75": 6.729,
+    "n": 1
+   },
+   "hookSections": {
+    "drop": 1.0
+   },
+   "hookPeaks": {
+    "drop": 1.0
+   },
+   "pickupBeats": null,
+   "phraseBeats": {
+    "p25": 3.876,
+    "p50": 3.876,
+    "p75": 6.029,
+    "n": 40
+   },
+   "lineLeadInBeats": {
+    "p25": 0.0,
+    "p50": 8.183,
+    "p75": 10.982,
+    "n": 3
+   },
+   "vocalShareBySection": {
+    "break": 0.295,
+    "build": 0.711,
+    "chorus": 0.35,
+    "drop": 0.855,
+    "intro": 0.933,
+    "verse": 0.956
+   },
+   "measuredBy": {
+    "backfill": 1.0
+   }
+  }
+ }
+}

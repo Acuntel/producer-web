@@ -78,3 +78,16 @@ def test_a_known_record_finishes_a_learn_job_and_only_informs_a_persons(monkeypa
     person = Job(job_id="j2", owner="o", source=Source(query="a b"))
     assert jobs._known(person, "A - B", known, {}) is False
     assert "status" not in calls[-1] and "stems" not in calls[-1]["result"] and calls[-1]["result"]["knownNumbers"] is True
+
+
+def test_the_rollup_files_records_by_their_pins_and_counts_a_twice_heard_record_once():
+    import vocal_drops
+    rows_a = vocalrows.phrase_rows(vmap(), "id:1", "house")
+    rows_b = [{**r, "record_key": "id:2"} for r in rows_a]                     # the same hearing under a second key
+    drop_a = vocalrows.drop_row(vmap(), "id:1", "house"); drop_b = {**drop_a, "key": "id:2"}
+    out = vocal_drops.rollup(rows_a + rows_b, [drop_a, drop_b], "test")
+    assert out["records"] == 1 and out["duplicatesDropped"] == 1
+    assert set(out["groups"]) == {"house|110-122|build_drop", "house|*|*", "*|*|*"}
+    g = out["groups"]["house|110-122|build_drop"]
+    assert g["records"] == 1 and g["leadInBeats"]["p50"] == pytest.approx(1.0) and g["hookSections"] == {"drop": 1.0}
+    assert g["hookAnchorToPeakBeats"]["p50"] == pytest.approx(0.0) and g["carriesThroughShare"] == 1.0
