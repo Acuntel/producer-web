@@ -1,7 +1,7 @@
 // The phrase finder, on audio whose phrases are known exactly.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findPhrases, pickPhrase, tuneFor, leadIn, envelope } from "../lib/song/vocal.ts";
+import { findPhrases, pickPhrase, tuneFor, leadIn, envelope, loudestWindow } from "../lib/song/vocal.ts";
 
 const SR = 22050;
 
@@ -67,4 +67,14 @@ test("the lead in puts the last word on the downbeat", () => {
   assert.deepEqual(leadIn(32, 6), { startBeat: 26, cut: false });
   assert.deepEqual(leadIn(32, 6, 2), { startBeat: 24, cut: false });
   assert.deepEqual(leadIn(4, 6), { startBeat: 0, cut: true });   // longer than the section: it starts at the top
+});
+
+test("a phrase past the cap keeps its loudest window, not its first seconds", () => {
+  // 8 s of voice: quiet for 5 s, then 3 s at full voice. The cap is 4 s, so the cut is the last 4 s.
+  const p = findPhrases(stem([[1, 6, 0.08], [6, 9, 0.6]], 12), SR, { maxSec: 4 });
+  assert.equal(p.length, 1);
+  assert.ok(p[0].endSec > 8.8 && p[0].startSec > 4.8, `the loud end is kept: ${p[0].startSec} to ${p[0].endSec}`);
+  assert.ok(p[0].endSec - p[0].startSec <= 4.01);
+  const env = new Float32Array([-60, -60, -10, -10, -60]);
+  assert.deepEqual(loudestWindow(env, 0, 4, 1, 2), [2, 4]);
 });

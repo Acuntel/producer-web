@@ -1,0 +1,51 @@
+{
+  "_note": "Search listings shaped like the finder's sources return them (SoundCloud via yt-dlp flat listing, Mixcloud, Archive). Written by hand from the shapes of real listings; no audio.",
+  "cases": [
+    {
+      "ask": {"query": "Neil Diamond - Sweet Caroline", "duration_sec": 203},
+      "expect_top_url": "https://soundcloud.com/neildiamond/sweet-caroline",
+      "candidates": [
+        {"source": "soundcloud", "title": "Sweet Caroline (Karaoke Version)", "url": "https://soundcloud.com/karaoke-hits/sweet-caroline-karaoke", "artist": "Karaoke Hits Band", "duration_sec": 205},
+        {"source": "soundcloud", "title": "Sweet Caroline - Neil Diamond Cover", "url": "https://soundcloud.com/jess-sings/sweet-caroline-cover", "artist": "Jess Sings", "duration_sec": 188},
+        {"source": "soundcloud", "title": "Sweet Caroline (Live at the Greek Theatre)", "url": "https://soundcloud.com/neildiamond/sweet-caroline-live", "artist": "Neil Diamond", "duration_sec": 262},
+        {"source": "soundcloud", "title": "Sweet Caroline", "url": "https://soundcloud.com/neildiamond/sweet-caroline", "artist": "Neil Diamond", "duration_sec": 202.6},
+        {"source": "soundcloud", "title": "sweet caroline (sped up)", "url": "https://soundcloud.com/tiktokaudio/sweet-caroline-sped-up", "artist": "tiktok audios", "duration_sec": 150},
+        {"source": "archive", "title": "Sweet Caroline", "url": "https://archive.org/details/78_sweet-caroline", "artist": "Bobby Womack", "duration_sec": null, "kind": "album"}
+      ]
+    },
+    {
+      "ask": {"query": "john summit where you are"},
+      "expect_top_url": "https://soundcloud.com/johnsummit/where-you-are",
+      "candidates": [
+        {"source": "soundcloud", "title": "Where You Are (Zedd Remix)", "url": "https://soundcloud.com/zedd/where-you-are-zedd-remix", "artist": "Zedd", "duration_sec": 212},
+        {"source": "soundcloud", "title": "John Summit & Hayla - Where You Are", "url": "https://soundcloud.com/johnsummit/where-you-are", "artist": "John Summit", "duration_sec": 221},
+        {"source": "mixcloud", "title": "Where You Are - John Summit Live @ Red Rocks", "url": "https://www.mixcloud.com/someone/red-rocks/", "artist": "someone", "duration_sec": 3600, "kind": "mix"}
+      ]
+    },
+    {
+      "ask": {"query": "Daft Punk - One More Time", "duration_sec": 320},
+      "expect_top_url": "https://soundcloud.com/daftpunkofficialmusic/one-more-time",
+      "candidates": [
+        {"source": "soundcloud", "title": "One More Time (Nightcore)", "url": "https://soundcloud.com/nightcore-world/one-more-time-nightcore", "artist": "Nightcore World", "duration_sec": 250},
+        {"source": "soundcloud", "title": "Daft Punk - One More Time (Tribute Remix)", "url": "https://soundcloud.com/djx/one-more-time-remix", "artist": "DJ X", "duration_sec": 330},
+        {"source": "soundcloud", "title": "One More Time", "url": "https://soundcloud.com/daftpunkofficialmusic/one-more-time", "artist": "Daft Punk Official", "duration_sec": 320.4}
+      ]
+    },
+    {
+      "ask": {"query": "Adele - Someone Like You remix"},
+      "expect_top_url": "https://soundcloud.com/djy/someone-like-you-remix",
+      "candidates": [
+        {"source": "soundcloud", "title": "Someone Like You", "url": "https://soundcloud.com/adele/someone-like-you", "artist": "Adele", "duration_sec": 285},
+        {"source": "soundcloud", "title": "Adele - Someone Like You (DJ Y Remix)", "url": "https://soundcloud.com/djy/someone-like-you-remix", "artist": "DJ Y", "duration_sec": 301}
+      ]
+    },
+    {
+      "ask": {"query": "T.I. - Live Your Life"},
+      "expect_top_url": "https://soundcloud.com/ti/live-your-life",
+      "candidates": [
+        {"source": "soundcloud", "title": "Live Your Life (feat. Rihanna)", "url": "https://soundcloud.com/ti/live-your-life", "artist": "T.I.", "duration_sec": 338},
+        {"source": "soundcloud", "title": "Live Your Life (Karaoke)", "url": "https://soundcloud.com/sing/live-your-life-karaoke", "artist": "Sing King", "duration_sec": 338}
+      ]
+    }
+  ]
+}

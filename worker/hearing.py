@@ -203,8 +203,9 @@ def whisper_lyrics(vocals_path: str, max_sec: int = 240) -> dict:
         return {"error": str(e)[:160], "lines": []}
 
 
-def hear(mix_path: str, stems: dict[str, str], facts: dict) -> dict:
-    """The full listening pass. facts needs bpm, bars, bestBars.startBar, blocks (optional)."""
+def hear(mix_path: str, stems: dict[str, str], facts: dict, lyrics: dict | None = None) -> dict:
+    """The full listening pass. facts needs bpm, bars, bestBars.startBar, blocks (optional). lyrics, when the vocal
+    map already transcribed the voice, is used instead of a second Whisper pass."""
     bpm = float(facts.get("bpm") or 126); bar_sec = 240.0 / bpm
     n_bars = int(facts.get("bars") or 32)
     best_bar = int((facts.get("bestBars") or {}).get("startBar", 0))
@@ -243,7 +244,7 @@ def hear(mix_path: str, stems: dict[str, str], facts: dict) -> dict:
             t = transcribe_notes(stems[name], best_bar * bar_sec, 8 * bar_sec)
             if t: notes[name] = t
     vocals_share = per_stem.get("vocals", {}).get("share", 0.0)
-    lyrics = whisper_lyrics(stems["vocals"]) if "vocals" in stems and vocals_share > 0.04 else {"lines": []}
+    if lyrics is None: lyrics = whisper_lyrics(stems["vocals"]) if "vocals" in stems and vocals_share > 0.04 else {"lines": []}
     # CLAP on the best bars of the mix and on each stem: descriptors, genres, embeddings for sound search.
     clap = {"descriptors": [], "genres": [], "embeddings": {}}
     try:
@@ -257,41 +258,9 @@ def hear(mix_path: str, stems: dict[str, str], facts: dict) -> dict:
             if float(np.max(np.abs(seg)) if len(seg) else 0) > 0.01: clap["embeddings"][name] = [round(float(v), 4) for v in clap_embed(seg, SR)]
     except Exception as e:
         clap["error"] = str(e)[:160]
+    from hearing_report import write_report
     report = write_report(facts, per_stem, blocks, drums, bass, chords, lyrics, clap)
     return {"perStem": per_stem, "blocks": blocks, "drumGrids": drums, "bass": bass, "chords": chords, "notes": notes, "lyrics": lyrics, "clap": {k: v for k, v in clap.items() if k != "embeddings"}, "embeddings": clap.get("embeddings", {}), "report": report}
-
-
-HUMAN = {"drums": "drums", "bass": "bass", "vocals": "vocals", "other": "chords and keys"}
-def hn(name: str) -> str: return HUMAN.get(name, name)
-
-
-def write_report(facts, per_stem, blocks, drums, bass, chords, lyrics, clap) -> str:
-    bpm = facts.get("bpm"); key = facts.get("key"); parts = []
-    parts.append(f"{round(bpm)} BPM, {key}." if bpm and key else "")
-    if blocks:
-        first = blocks[0]; parts.append(f"It opens at {int(first['level'] * 100)} percent energy with the {hn(first['carries'])} carrying it.")
-        moves = [f"at {mmss(b['at'])} the {' and '.join(hn(x) for x in b['entering'])} come{'s' if len(b['entering']) == 1 else ''} in" for b in blocks if b["entering"]][:5]
-        outs = [f"at {mmss(b['at'])} the {' and '.join(hn(x) for x in b['leaving'])} drop{'s' if len(b['leaving']) == 1 else ''} out" for b in blocks if b["leaving"]][:4]
-        if moves or outs: parts.append("; ".join(moves + outs).capitalize() + ".")
-        lead = max(per_stem, key=lambda k: per_stem[k]["share"]) if per_stem else None
-        if lead: parts.append(f"Over the whole record the {hn(lead)} carries {int(per_stem[lead]['share'] * 100)} percent of the energy.")
-    if drums:
-        parts.append("Drums in the best bars: " + ", ".join(f"{k} {v}" for k, v in drums.items()) + ".")
-    if bass:
-        parts.append(f"Bass lives on {bass.get('root')}, playing {', '.join(bass.get('notes', [])[:8])} with the rhythm {bass.get('eighthRhythm')} in eighths{' (one note the whole way)' if bass.get('distinct') == 1 else ''}.")
-    if chords and any(c != "-" for c in chords): parts.append("Chords move " + " ".join(c for c in chords if c != "-")[:80] + ".")
-    if lyrics.get("lines"):
-        parts.append(f"Vocals: {len(lyrics['lines'])} lines; first words at {mmss(lyrics['lines'][0]['at'])}: \"{lyrics['lines'][0]['text'][:80]}\".")
-    elif per_stem.get("vocals", {}).get("share", 0) > 0.04: parts.append("There is a vocal but the words are not clear.")
-    if clap.get("descriptors"):
-        parts.append("It sounds " + ", ".join(d for d, _ in clap["descriptors"][:4]) + (f"; the closest genre read is {clap['genres'][0][0]}." if clap.get("genres") else "."))
-    if per_stem:
-        d = per_stem.get("drums", {}); parts.append(f"Drum transients are {'sharp' if d.get('crestDb', 0) > 18 else 'soft'} ({d.get('crestDb')} dB crest), hats and top sit at {d.get('centroidHz')} Hz centroid.")
-    return " ".join(p for p in parts if p)
-
-
-def mmss(s: float) -> str:
-    return f"{int(s // 60)}:{int(s % 60):02d}"
 
 
 if __name__ == "__main__":

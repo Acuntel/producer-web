@@ -3,8 +3,11 @@
 // The store knows what a hundred thousand records ARE, from tags and charts. It knows what almost
 // none of them SOUND like, because hearing one means separating it and listening. This is the lane
 // that closes that: pick famous records the studio has never heard, send them through the same
-// worker a person's own record goes through, and keep the DNA. Nothing is downloaded to stay;
-// the studio hears a public copy once and keeps the numbers, which is the line the spec draws.
+// worker a person's own record goes through, and keep the DNA. Nothing is downloaded to stay:
+// the job goes out with learn: true, so the worker separates and listens in its own scratch space,
+// uploads no stem, one-shot or vocal, registers no clip, and keeps only the numbers (facts, hearing,
+// vocal map, the vocal placement rows), which is the line docs/MASTERPROMPT_PRODUCER.md section 7 draws.
+// The chart's family rides along so the placement rows file under the SOURCE record's family.
 import { supabaseAdmin, userFromRequest } from "@/lib/account/supabase";
 import { familiesIn, yearIn } from "@/lib/brain/families";
 import { rememberHeard, type JobResult } from "@/lib/dna/heard";
@@ -67,7 +70,7 @@ export async function POST(req: Request) {
     const { data: job } = await admin.from("jobs").insert({ owner: user.id, kind: "stems", source, status: "queued" }).select("id").single();
     if (!job) continue;
     try {
-      const r = await fetch(`${worker.replace(/\/$/, "")}/jobs`, { method: "POST", headers: { "Content-Type": "application/json", "X-Worker-Secret": secret }, body: JSON.stringify({ job_id: job.id, owner: user.id, kind: "stems", source: { query, name: source.name } }) });
+      const r = await fetch(`${worker.replace(/\/$/, "")}/jobs`, { method: "POST", headers: { "Content-Type": "application/json", "X-Worker-Secret": secret }, body: JSON.stringify({ job_id: job.id, owner: user.id, kind: "stems", source: { query, name: source.name, learn: true, family: source.family } }) });
       if (!r.ok) throw new Error(`worker ${r.status}`);
       started.push({ jobId: job.id, artist: p.artist, title: p.title });
     } catch (e) {

@@ -6,10 +6,18 @@ numpy<2.3
 scipy
 librosa==0.10.2.post1
 soundfile==0.12.1
-demucs==4.0.1
+# The acapella: lucidrains BS-RoFormer 0.3.10 (MIT) is the version whose MelBandRoformer loads Kim's checkpoint
+# with no missing and no unexpected keys; the three below it are the versions it was checked with.
+BS-RoFormer==0.3.10
+rotary-embedding-torch==0.3.6
+beartype==0.14.1
+einops==0.8.1
 yt-dlp
 transformers==4.46.3
 faster-whisper==1.1.0
+# The grid for the vocal map: beat_this (CPJKU, code and weights MIT), pinned to the commit it was checked with.
+beat-this @ https://github.com/CPJKU/beat_this/archive/b95c8ab0c58c2d9fcfd40508ae8dffbc05ac4f5c.zip
+soxr
 ctranslate2>=4.4
 huggingface_hub
 
