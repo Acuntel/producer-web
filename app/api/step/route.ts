@@ -1,5 +1,6 @@
 // One rollout step = one inference with only its context. Fast steps route to
 // Sonnet, deep steps to Opus. Same persona, same contract, same cached Mind.
+import { samplingFor } from "@/lib/brain/sampling";
 import { brainClient } from "@/lib/brain/client";
 import { withRetry } from "@/lib/brain/retry";
 import { guardSpend, recordUsage } from "@/lib/brain/usage";
@@ -57,8 +58,9 @@ export async function POST(req: Request) {
     `Respond with the usual JSON. "say" must be ONE short sentence of progress for this step (it may be spoken); keep it natural.`,
   ].filter(Boolean).join("\n\n");
   try {
+    const model = x.step.tier === "deep" && !economy(req) ? DEEP : FAST;
     const ask = (content: string) => withRetry(() => client.messages.create({
-      model: x.step.tier === "deep" && !economy(req) ? DEEP : FAST,
+      model, ...samplingFor(model),
       max_tokens: x.step.fullSong ? 12000 : 14000,
       output_config: { effort: "low" },
       system: [

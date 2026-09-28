@@ -9,8 +9,8 @@ import type { ClipMeta } from "@/lib/types/ui";
 const REF_KEY = "producer.reference.v1";
 type Deps = {
   flash: (t: string) => void;
-  send: (t: string, o?: { hidden?: boolean }) => Promise<void>;
-  setSong: (s: Song, o?: { silent?: boolean; label?: string; noHistory?: boolean }) => Promise<void>;
+  send: (t: string, o?: { hidden?: boolean }) => Promise<unknown>;
+  setSong: (s: Song, o?: { silent?: boolean; label?: string; noHistory?: boolean }) => Promise<unknown>;
   setClips: Dispatch<SetStateAction<ClipMeta[]>>;
   factsRef: MutableRefObject<MusicFacts | null>;
   referenceRef: MutableRefObject<Reference | null>;

@@ -133,7 +133,7 @@ export class Engine {
   /** A change, landed on its boundary (boundary.ts): content on the next bar, structure on the next
    *  phrase, the mixer on the next beat, mute and solo at once. Resolves once it is loaded and scheduled;
    *  `landed` settles when it is in the audio. Before the session opens this only remembers the record. */
-  async update(song: Song, opts?: { jobId?: string; boundary?: Boundary }): Promise<Landing | null> {
+  async update(song: Song, opts?: { jobId?: string; boundary?: Boundary; fromTop?: boolean }): Promise<Landing | null> {
     const calledAt = performance.now();
     const ticket = this.latest.take(song);
     await this.prepare(song, ticket);
@@ -143,7 +143,7 @@ export class Engine {
     // Another record altogether is swapped on the next bar and starts from its top.
     const other = !!this.laidSong && !!song.id && song.id !== this.laidSong.id;
     const b = opts?.boundary ?? (other ? "bar" : onlyMuteSolo(this.laidSong, song) ? "now" : boundaryFor(this.laidSong, song));
-    return this.lander.land(b, () => this.latest.current(ticket) && !!this.rig, (land) => this.lay(song, opts?.jobId, calledAt, b, land, other));
+    return this.lander.land(b, () => this.latest.current(ticket) && !!this.rig, (land) => this.lay(song, opts?.jobId, calledAt, b, land, opts?.fromTop ?? other));
   }
 
   /** Jump to a section, on the next phrase (at once when stopped). Loops sound from the jump at their phase. */

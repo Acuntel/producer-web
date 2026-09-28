@@ -16,6 +16,9 @@ import { useSpeak } from "@/hooks/useSpeak";
 import { useStopWords } from "@/hooks/useStopWords";
 import { useConversation } from "@/hooks/useConversation";
 import { useRitual } from "@/hooks/useRitual";
+import { useDraft } from "@/hooks/useDraft";
+import { useQuestions } from "@/hooks/useQuestions";
+import { JobBar } from "@/components/JobBar";
 import { Glow, type GlowState } from "@/components/Glow";
 import { Landing } from "@/components/Landing";
 import { Library } from "@/components/Library";
@@ -33,7 +36,7 @@ import type { Song } from "@/lib/song/types";
 import type { BrainAction } from "@/lib/brain/parse";
 
 const harnessMode = () => typeof window !== "undefined" && /[?&](e2e|typed)=1/.test(window.location.search);
-type Actions = { analyze: (i: { url?: string; query?: string; from?: "local" | "web" }) => Promise<void>; vocal: (p: string, l?: string, ms?: number) => Promise<void>; findSound: (beats: number) => Promise<void>; hear: (sectionId?: string) => Promise<string | null>; identify: () => Promise<string | null>; tracklist: (i: { url?: string; query?: string }) => Promise<void>; ritual: (a: BrainAction) => Promise<unknown> };
+type Actions = { analyze: (i: { url?: string; query?: string; from?: "local" | "web" }) => Promise<void>; vocal: (p: string, l?: string, ms?: number) => Promise<void>; findSound: (beats: number) => Promise<void>; hear: (sectionId?: string) => Promise<string | null>; identify: () => Promise<string | null>; tracklist: (i: { url?: string; query?: string }) => Promise<void>; ritual: (a: BrainAction) => Promise<unknown>; draft: (name: string | null) => unknown };
 
 export default function App() {
   // Server and client must render the same first frame: the harness flag is read after mount.
@@ -49,7 +52,7 @@ export default function App() {
   const [showAccount, setShowAccount] = useState(false);
   const [showAnalyze, setShowAnalyze] = useState(false);
   const snapshotRef = useRef<(s: Song, m: SnapshotMeta) => void>(() => {});
-  const actionsRef = useRef<Actions>({ analyze: async () => {}, vocal: async () => {}, findSound: async () => {}, hear: async () => null, identify: async () => null, tracklist: async () => {}, ritual: async () => null });
+  const actionsRef = useRef<Actions>({ analyze: async () => {}, vocal: async () => {}, findSound: async () => {}, hear: async () => null, identify: async () => null, tracklist: async () => {}, ritual: async () => null, draft: () => null });
   const duckRef = useRef<(on: boolean) => void>(() => {});
   const landingRef = useRef<(c: { open?: string; new?: boolean; library?: boolean; account?: boolean }) => void>(() => {});
 
@@ -61,6 +64,7 @@ export default function App() {
     prefetchVoice: voiceOut.prefetch,
     analyze: (i) => actionsRef.current.analyze(i), vocal: (p, l, ms) => actionsRef.current.vocal(p, l, ms), findSound: (b) => actionsRef.current.findSound(b),
     hear: (sec) => actionsRef.current.hear(sec), identify: () => actionsRef.current.identify(), tracklist: (i) => actionsRef.current.tracklist(i), ritual: (a) => actionsRef.current.ritual(a),
+    draft: (name) => { actionsRef.current.draft(name); },
   });
   duckRef.current = studio.duck;
   playingRef.current = () => (studio.started && !studio.paused) || studio.starting;   // the greeting runs while the record starts
@@ -78,6 +82,7 @@ export default function App() {
   const getSongRef = useRef(studio.getSong); getSongRef.current = studio.getSong;
   useEffect(() => { if (clipKeys) void restoreRef.current(getSongRef.current()); }, [clipKeys, uid]);
   const ritual = useRitual({ studio, stems, speak: voiceOut.speak, speaking: voiceOut.speaking, signedIn: !!account.user });
+  const draft = useDraft({ studio, speak: voiceOut.speak, findAndAnalyze: (q) => stems.findAndAnalyze(q, null), job: stems.job, signedIn: !!account.user });
   actionsRef.current = {
     analyze: async (i) => { setShowAnalyze(true); if (i.url) await stems.start({ url: i.url }); else await stems.findAndAnalyze(i.query ?? "", i.from ?? null); },
     vocal: async (p, l, ms) => { setShowAnalyze(true); await stems.renderVocal(p, l, ms); },
@@ -86,6 +91,7 @@ export default function App() {
     identify: async () => { setShowAnalyze(true); return stems.identifyPlaying(); },
     tracklist: async (i) => { setShowAnalyze(true); await stems.startTracklist(i); },
     ritual: (a) => ritual.act(a),
+    draft: (name) => draft.run(name),
   };
   useCritic({ song: studio.song, facts: studio.facts, reference: studio.reference, paused: !!studio.rollout, send: studio.send, started: studio.started });
   // The harness can hand the studio a vocal stem it made itself and watch where the phrase lands.
@@ -95,8 +101,13 @@ export default function App() {
   useEffect(() => { if (harnessMode()) (window as unknown as { __say?: unknown }).__say = (t: string) => speakRef.current(t); }, []);
 
   const titles = useMemo(() => [...projects.projects.map((p) => p.title), ...studio.library.map((s) => s.song.title)], [projects.projects, studio.library]);
-  const convo = useConversation({ studio, voice: voiceOut, screen: view === "stage" ? "stage" : view, projects: titles, onLanding: (c) => landingRef.current(c), grab: stems.grab, vocal: stems.vocalFrom, ritual });
+  // The stage warms the name resolver's store, so the first name said is not the one that loads it.
+  useEffect(() => { if (view === "stage") void fetch("/api/draft").catch(() => {}); }, [view]);
+  const holdingRef = useRef(false);
+  const questions = useQuestions({ studio, speak: voiceOut.speak, talking: voiceOut.speaking || holdingRef.current, draftNow: draft.current, next: (st, why) => draft.next(st, why), vocal: (from) => void stems.vocalFrom(null, null, from) });
+  const convo = useConversation({ studio, voice: voiceOut, screen: view === "stage" ? "stage" : view, projects: titles, onLanding: (c) => landingRef.current(c), grab: stems.grab, vocal: stems.vocalFrom, ritual, draft, questions });
   const speak = useSpeak({ onFinal: (t, ms) => void convo.hear(t, ms), onPress: () => convo.interrupt() });
+  holdingRef.current = speak.holding;
   useStopWords(convo.auditioning, () => convo.interrupt(true));
 
   const { song, started, paused } = studio;
@@ -123,8 +134,9 @@ export default function App() {
   landingRef.current = ({ open, new: fresh, library, account: acct }) => {
     if (acct) { setShowAccount(true); return; }
     if (library) { if (playing) void studio.pause(); setView("library"); return; }
-    if (fresh) { void enter(async () => { projects.startFresh(); await studio.newSession(); }); return; }
+    if (fresh) { convo.reset(); void enter(async () => { projects.startFresh(); await studio.newSession(); }); return; }
     if (!open) return;
+    convo.reset();
     const q = open.toLowerCase();
     const cloud = projects.projects.find((p) => p.title.toLowerCase().includes(q));
     if (cloud) { void enter(() => projects.open(cloud.id)); return; }
@@ -181,13 +193,7 @@ export default function App() {
                 </div>
               )}
               <WorkCards work={convo.work} />
-              {studio.rollout && (
-                <div className="panel rounded-2xl px-3.5 py-2.5" data-role="rollout">
-                  <div className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-sm font-medium text-live">{studio.rollout.title}</span><span className="tnum shrink-0 text-xs text-ink-3">{studio.rollout.index + 1} of {studio.rollout.total}</span></div>
-                  <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-s3"><div className="h-full rounded-full bg-live transition-[width] duration-500" style={{ width: `${((studio.rollout.index + 1) / Math.max(1, studio.rollout.total)) * 100}%` }} /></div>
-                  <p className="mt-1 truncate text-xs text-ink-3">{studio.rollout.status}</p>
-                </div>
-              )}
+              <JobBar waiting={!!questions.open} rollout={studio.rollout} />
               {studio.listenHint && <p className="flex items-start gap-1.5 text-sm text-live"><Icon name="ear" size={15} className="mt-0.5 shrink-0" /><span>{studio.listenHint}</span></p>}
               {/* A record is never quietly incomplete: what is missing, and what did not save, are said. */}
               {vault.missing.length > 0 && (

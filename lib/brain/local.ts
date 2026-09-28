@@ -150,7 +150,8 @@ export function localIntent(text: string, song: Song): LocalIntent | null {
   }
   const soloM = t.match(/^(?:solo|isolate|just|only|play (?:me )?(?:just|only)|let me hear (?:just|only)|i want to hear (?:just|only)|give me (?:just|only)) (?:the )?(?<t>.+?)(?: alone| by itself| on its own| solo)?$/)
     ?? t.match(/^(?:play (?:me )?)?(?:the )?(?<t>.+?) (?:alone|by itself|on its own|solo|solo'?d)$/);
-  if (soloM?.groups?.t) {
+  // "isolate the vocal from X" names a record to pull the voice off, not a track to solo (lib/brain/route.ts).
+  if (soloM?.groups?.t && !/\b(from|off|out of)\b/.test(soloM.groups.t)) {
     const ts = matchTracks(soloM.groups.t, song);
     if (ts.length) return { ops: [{ op: "unsolo", track: "all" }, ...ts.map((x) => ({ op: "solo" as const, track: x.id }))], say: `${names(ts)} alone.`, note: `soloed ${names(ts)}`, kind: "mixer" };
   }

@@ -22,7 +22,7 @@ export function structureKey(song: Song, reference?: string | null): string {
   return JSON.stringify([song.title, song.bpm, song.key, tracks, sections, song.arrangement, reference ?? ""]);
 }
 
-type Deps = { song: Song; facts: MusicFacts | null; reference: { name: string; facts: MusicFacts } | null; paused: boolean; send: (t: string) => Promise<void>; started: boolean };
+type Deps = { song: Song; facts: MusicFacts | null; reference: { name: string; facts: MusicFacts } | null; paused: boolean; send: (t: string) => Promise<unknown>; started: boolean };
 
 export function useCritic(d: Deps) {
   const [notes, setNotes] = useState<CriticNote[]>([]);

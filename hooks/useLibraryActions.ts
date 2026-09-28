@@ -6,7 +6,7 @@ import { useCallback } from "react";
 import type { Song } from "@/lib/song";
 import type { SavedSong } from "@/lib/types/ui";
 
-type Deps = { autoSave: (s: Song) => void; flash: (t: string) => void; say: (t: string) => void; setSong: (s: Song, o?: { label?: string }) => Promise<void>; started: boolean; getSong: () => Song; setRendering: (b: boolean) => void };
+type Deps = { autoSave: (s: Song) => void; flash: (t: string) => void; say: (t: string) => void; setSong: (s: Song, o?: { label?: string }) => Promise<unknown>; started: boolean; getSong: () => Song; setRendering: (b: boolean) => void };
 
 function saveBlob(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);

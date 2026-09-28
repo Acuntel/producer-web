@@ -135,7 +135,8 @@ export async function resolveDraftDna(ask: string, o?: { timeoutMs?: number }): 
     const dbProgs = Array.isArray(adb?.top_progressions) ? (adb!.top_progressions as [string, number][]).filter((p) => typeof p?.[0] === "string").map(([p, n]) => [p, n + 1] as [string, number]) : [];
     if (rows.length) from.push(`${rows.length} of ${who}'s records in the store`);
     if (adb) from.push(`the artist row for ${who}`);
-    const display = one ? `${one.title} by ${one.artist}` : rows[0]?.artist ?? (words ? laneInfo(words)?.name ?? who : who);
+    const plainest = rows.map((p) => p.artist).filter(Boolean).sort((a, b) => a.length - b.length)[0];
+    const display = one ? `${one.title} by ${one.artist}` : plainest ?? (words ? laneInfo(words)?.name ?? who : who);
     dna = { v: 1, name: display, key, tier: "artist", lane, family, bpm: t.bpm, tempoConfidence: t.confidence ?? TEMPO_PRIOR,
       keys: oneKey ? [[oneKey, 6], ...keyCounts.filter(([k]) => k !== oneKey)] : keyCounts, energy, valence,
       grids: { kick: adb?.kick_grid_mode && adb.kick_grid_mode.length === 16 ? adb.kick_grid_mode : g.kick }, bass: adb?.bass_rhythm_mode ? bass16(adb.bass_rhythm_mode) ?? g.bass : g.bass,

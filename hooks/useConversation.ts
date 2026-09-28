@@ -7,10 +7,13 @@ import { useCallback, useRef, useState } from "react";
 import type { Work } from "@/components/WorkCards";
 import type { VoiceControl, VoiceState } from "@/lib/brain/voice";
 import type { Song } from "@/lib/song/types";
+import type { Position } from "@/lib/engine";
 import { economyQuery } from "@/lib/brain/stream";
 import { feelFromFacts } from "@/lib/brain/feel";
 import { tasteSummary } from "@/lib/taste";
 import type { useStudio } from "./useStudio";
+import { studioJobs } from "@/lib/jobs/queue";
+import { useRouteWords } from "./useRouteWords";
 
 type Studio = ReturnType<typeof useStudio>;
 type Deps = {
@@ -22,6 +25,8 @@ type Deps = {
   grab?: (what: string, at?: number | null) => Promise<string | null>;   // a part of the heard record, into this one (hooks/useStems)
   vocal?: (what?: string | null, where?: string | null, from?: string | null) => Promise<string | null>;   // a voice off a record, landed before the drop
   ritual?: { control: (c: VoiceControl) => Promise<string | null>; heard: (words: string) => void };   // the order of work (hooks/useRitual)
+  draft?: { run: (name: string | null, o?: { surprise?: boolean; heardAt?: number }) => unknown; next: (steer: null) => unknown };   // hooks/useDraft
+  questions?: { answer: (words: string) => boolean };   // hooks/useQuestions
 };
 const RITUAL_TITLE = (c: VoiceControl) => c.source ? `Setting the grid from ${c.source.name}` : c.chop ? "Cutting a chop on the grid" : c.alone ? "The chop alone, on a loop" : c.beat ? "Bringing the beat to the chop" : c.next ? "The next candidate" : c.down ? "Everything down but the seed" : null;
 export type Timing = { stt: number; firstWord: number; voiceMs: number };
@@ -61,9 +66,11 @@ export function useConversation(d: Deps) {
   }, []);
 
   // A press on the button, or a stop word: the producer yields the floor at once.
+  // The press stops speech only and never drops work; a spoken stop also ends the work in flight (a new epoch).
+  const stopsRef = useRef(0);
   const interrupt = useCallback((stopMusic = false) => {
-    turnRef.current++;
     dRef.current.voice.stop();
+    if (stopMusic) { stopsRef.current++; turnRef.current++; studioJobs.bump("stop"); }
     if (auditionRef.current) { stopAudition(); void dRef.current.studio.pause(); }
     else if (stopMusic) void dRef.current.studio.pause();
   }, [stopAudition]);
@@ -151,18 +158,26 @@ export function useConversation(d: Deps) {
     finally { learnRef.current = null; }
   }, [addWork, doneWork, progressWork]);
 
-  const runTask = useCallback(async (task: string) => {
+  // A task is a job: it waits its turn, and its card says landed only when the change is in the audio.
+  const runTask = useCallback(async (task: string, nowPlaying: Position | null = null) => {
     const id = addWork({ kind: "hands", title: task.length > 88 ? task.slice(0, 85) + "..." : task, detail: "the hands are on it" });
     inflightRef.current.set(id, `hands: ${task.slice(0, 70)}`);
     try {
-      // Research the Voice started a moment ago usually lands within a second; the task waits for it (two seconds at most).
-      if (researchWaitRef.current) await Promise.race([researchWaitRef.current, new Promise<void>((r) => setTimeout(r, 2000))]);
-      const research = researchRef.current.length ? `RESEARCH (from the store, use it):\n${researchRef.current.join("\n")}\n\nTHE ASK: ` : "";
-      await dRef.current.studio.send(`${research}${task}`, { hidden: true, task: true });
-      doneWork(id, "landed");
+      const { done } = studioJobs.enqueue({ text: task, origin: "task", songId: dRef.current.studio.getSong().id }, async (j, alive) => {
+        // Research the Voice started a moment ago usually lands within a second; the task waits for it (two seconds at most).
+        if (researchWaitRef.current) await Promise.race([researchWaitRef.current, new Promise<void>((r) => setTimeout(r, 2000))]);
+        const research = researchRef.current.length ? `RESEARCH (from the store, use it):\n${researchRef.current.join("\n")}\n\nTHE ASK: ` : "";
+        const landing = await dRef.current.studio.send(`${research}${task}`, { hidden: true, task: true, alive, jobId: `task:${j.id}`, nowPlaying });
+        return { landing };
+      });
+      const j = await done;
+      doneWork(id, j.state === "landed" ? (j.landsAtBar ? `landed on bar ${j.landsAtBar}` : "landed") : j.state === "cancelled" ? "cancelled" : "did not land");
     } catch { doneWork(id, "did not land"); }
     finally { inflightRef.current.delete(id); }
   }, [addWork, doneWork]);
+
+  /** A new or opened record: what was researched for the last one does not follow it. */
+  const reset = useCallback(() => { researchRef.current = []; setResearch([]); }, []);
 
   const buildState = useCallback((): VoiceState => {
     const s = dRef.current.studio;
@@ -202,37 +217,47 @@ export function useConversation(d: Deps) {
     } catch { doneWork(id, "did not land"); }
   }, [addWork, doneWork]);
 
+  const { routeWords, doTake } = useRouteWords({ studio: () => dRef.current.studio, speak: (t) => dRef.current.voice.speak(t), draft: () => dRef.current.draft, doVocal });
+
   // The order of work: the studio does it with no Hands and speaks the result itself; the card shows it happening.
   const doRitual = useCallback(async (c: VoiceControl, title: string) => {
     const id = addWork({ kind: c.source ? "research" : "hands", title, detail: "the studio, no model" });
     try { const line = await dRef.current.ritual?.control(c); doneWork(id, line ? "landed" : "nothing to do"); } catch { doneWork(id, "did not land"); }
   }, [addWork, doneWork]);
 
-  const act = useCallback(async (c: VoiceControl) => {
+  const act = useCallback(async (c: VoiceControl, nowPlaying: Position | null = null) => {
     const s = dRef.current.studio;
     if (c.stop) { interrupt(true); return; }
     if (c.library) { dRef.current.onLanding({ library: true }); return; }
     if (c.account) { dRef.current.onLanding({ account: true }); return; }
     if (c.grab?.what) { void doGrab(c.grab); }
     if (c.vocal) { void doVocal(c.vocal); }
+    if (c.voice) { void doVocal(c.voice); }
+    if (c.take) { void doTake(c.take.what === "said" ? "said" : "record"); }
+    if (c.draft && dRef.current.screen === "stage") { dRef.current.draft?.run(c.draft.name ?? null); return; }
     if (c.learn) { void doLearn(c.learn); }
     if (c.research) void doResearch(c.research);
+    if (c.open || c.new) reset();
     if (dRef.current.screen !== "stage") { if (c.open || c.new) dRef.current.onLanding({ open: c.open, new: c.new }); return; }
     const ritual = RITUAL_TITLE(c);
     if (ritual) { void doRitual(c, ritual); return; }
-    if (c.task) void runTask(c.task);
+    if (c.task) void runTask(c.task, nowPlaying);
     else if (c.audition) void audition(c.audition.section, c.audition.bars);
     else if (c.open || c.new) dRef.current.onLanding({ open: c.open, new: c.new });
     void s;
-  }, [audition, doResearch, doGrab, doVocal, doLearn, doRitual, interrupt, runTask]);
+  }, [audition, doResearch, doGrab, doVocal, doLearn, doRitual, doTake, interrupt, runTask, reset]);
+
 
   // The entry point: what you said, and how long the engine took to commit it.
   const hear = useCallback(async (text: string, sttMs: number) => {
     const s = dRef.current.studio;
     const t = text.trim(); if (!t) return;
     dRef.current.ritual?.heard(t);   // a pulled down listen comes back on the next word, and the words judge the newest element
-    const turn = ++turnRef.current;
-    if (dRef.current.screen === "stage" && (await s.tryLocal(t))) { setTiming({ stt: sttMs, firstWord: 0, voiceMs: 0 }); return; }
+    const heardAt = performance.now(), nowPlaying = s.getPosition();
+    const turn = ++turnRef.current, stops = stopsRef.current;
+    if (dRef.current.screen === "stage") {
+      if (dRef.current.questions?.answer(t) || routeWords(t, heardAt) || (await s.tryLocal(t))) { setTiming({ stt: sttMs, firstWord: 0, voiceMs: 0 }); return; }
+    }
     s.append("user", t);
     setThinking(true);
     const t0 = performance.now();
@@ -258,13 +283,14 @@ export function useConversation(d: Deps) {
         }
       }
       if (finalSay) s.append("assistant", finalSay);
-      if (turn !== turnRef.current) return;   // they cut in while this was still arriving: say nothing more, do nothing
-      await act(control);
+      // Talking over it drops the words still to be spoken, never the work: only a spoken stop does.
+      if (stops !== stopsRef.current) return;
+      await act(control, nowPlaying);
     } catch {
       const line = "Connection wobbled. Say that again?";
       s.append("assistant", line); void dRef.current.voice.speak(line);
     } finally { setThinking(false); }
-  }, [act, buildState]);
+  }, [act, buildState, routeWords]);
 
-  return { hear, interrupt, audition, work, research, thinking, auditioning, timing, brainDown };
+  return { hear, interrupt, audition, work, research, thinking, auditioning, timing, brainDown, reset };
 }

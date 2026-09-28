@@ -12,6 +12,7 @@ import type { BrainAction } from "@/lib/brain/parse";
 import type { Phrase } from "@/lib/song/vocal";
 import { seedOf, downLevels, upLevels } from "@/lib/song/ritual";
 import { watchFor, step, hearWords, judged, superseded, type Watch, type Judgement } from "@/lib/ritual/patience";
+import { askClock, mayAsk } from "@/lib/ritual/questions";
 import { sourceLine, earsConfidence, LOW_CONFIDENCE, type SourceHit } from "@/lib/ritual/source";
 import { judgeWords, logMove, recordJudgement } from "@/lib/taste";
 
@@ -249,6 +250,9 @@ export function useRitual(d: Deps) {
       // queue (which plays in order) and is on screen at once, inside the window.
       const now = Date.now(), r = step(w, now, p.loopCount(), dRef.current.speaking || dRef.current.studio.busy);
       if (!r.what) return;
+      // One question in the room per 30 s, whoever asks it (lib/ritual/questions.ts): a prompt waits its turn.
+      if (r.say && !mayAsk(now)) return;
+      if (r.say) askClock.last = now;
       watchRef.current = r.watch;
       promptsRef.current.push({ element: w.element, kind: r.what, landedAt: w.landedAt, at: now });
       judge(r.judge);

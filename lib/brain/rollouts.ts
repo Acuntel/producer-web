@@ -8,7 +8,9 @@ import { patternFor } from "../song/pattern";
 import { laneKicksPerBar } from "./laneNames";
 
 export type StepTier = "fast" | "deep";
-export type RolloutKind = "newSong" | "emulate" | "finish" | "fixSection";
+// newSong and emulate are kept for records and replies that still name them, but a new record is a draft now
+// (lib/song/draft.ts); every step survives as a refine Brady can ask for by name ("make the drums hit harder").
+export type RolloutKind = "newSong" | "emulate" | "finish" | "fixSection" | "drums" | "bass" | "harmony" | "hook" | "craft" | "mix";
 export type StepCtx = { song: Song; facts: MusicFacts | null; reference: MusicFacts | null; lane: string; section?: string };
 export type Step = { id: string; title: string; goal: string; scope: Role[] | "arrangement" | "mix" | "all"; tier: StepTier; fullSong?: boolean; check: (ctx: StepCtx) => string | null; maxRetries?: number; group?: string };
 
@@ -88,7 +90,9 @@ export const ROLLOUTS: Record<RolloutKind, Step[]> = {
   emulate: [blueprint, drums, bass, harmony, hook, craft, mix, verdict],
   finish: [extend, hook, craft, mix, verdict],
   fixSection: [fixSection, verdict],
+  drums: [drums], bass: [bass], harmony: [harmony], hook: [hook], craft: [craft], mix: [mix],
 };
+export const REFINE_KINDS: RolloutKind[] = ["newSong", "emulate", "finish", "fixSection", "drums", "bass", "harmony", "hook", "craft", "mix"];
 
 // Consecutive steps sharing a group run concurrently (they touch different tracks).
 export function groupSteps(steps: Step[]): Step[][] {

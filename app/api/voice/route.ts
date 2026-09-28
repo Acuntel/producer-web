@@ -1,6 +1,7 @@
 // The Voice lane: Haiku 4.5, streamed. NDJSON out: a "say" line per finished sentence
 // (the client speaks each one the moment it closes), then a "final" line with the
 // control object and the usage. Target: first sentence inside a second.
+import { samplingFor } from "@/lib/brain/sampling";
 import { brainClient } from "@/lib/brain/client";
 import { VOICE_SYSTEM, parseVoice, voiceUser, type VoiceState } from "@/lib/brain/voice";
 import { mockVoice, mockRequested, mockJson, MOCK_HEADERS } from "@/lib/brain/mock";
@@ -38,6 +39,7 @@ export async function POST(req: Request) {
   if (capped) return Response.json({ say: capped, control: {}, detail: "cap: daily house allowance", down: "cap", keySource: source });
   const params = {
     model: MODEL,
+    ...samplingFor(MODEL),
     max_tokens: 400,
     system: [{ type: "text" as const, text: VOICE_SYSTEM, cache_control: { type: "ephemeral" as const, ttl: "1h" as const } }],
     messages: [{ role: "user" as const, content: voiceUser(body.state, body.utterance) }],

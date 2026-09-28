@@ -14,6 +14,7 @@ import { PROCESS } from "@/lib/brain/process";
 import { dnaForBrain, findReference, artistDna } from "@/lib/brain/dna";
 import { laneRecipe } from "@/lib/brain/lanes";
 import { dnaLaneFor, laneNamed } from "@/lib/brain/laneNames";
+import { samplingFor } from "@/lib/brain/sampling";
 import { brainClient } from "@/lib/brain/client";
 import { skillsFor, skillsBlock } from "@/lib/brain/skills";
 import { flowNotes } from "@/lib/brain/flow";
@@ -100,7 +101,7 @@ export async function POST(req: Request) {
     let resp = first;
     for (let i = 0; i < 2 && resp.stop_reason === "pause_turn"; i++) {
       msgs = [...msgs, { role: "assistant" as const, content: resp.content }];
-      resp = await client.messages.create({ ...params, messages: msgs } as never) as Anthropic.Message;
+      resp = await client.messages.create({ ...params, ...samplingFor(params.model), messages: msgs } as never) as Anthropic.Message;
     }
     return resp;
   };
@@ -112,7 +113,7 @@ export async function POST(req: Request) {
   if (!wantsStream) {
     try {
       let used = params.model;
-      const resp = await withRetry(async (attempt) => { used = modelFor(attempt); return finish(await client.messages.create({ ...params, model: used, messages: msgs } as never) as Anthropic.Message); });
+      const resp = await withRetry(async (attempt) => { used = modelFor(attempt); return finish(await client.messages.create({ ...params, ...samplingFor(used), model: used, messages: msgs } as never) as Anthropic.Message); });
       await recordUsage(req, { route: "chat", model: used, usage: resp.usage as never, source });
       return Response.json({ ...pack(parseBrain(textOf(resp)), resp.usage, used), keySource: source });
     } catch (e) { return Response.json(friendly(e), { status: 200 }); }
@@ -126,7 +127,7 @@ export async function POST(req: Request) {
       for (let attempt = 0; ; attempt++) {
         const used = modelFor(attempt);
         try {
-          const s = client.messages.stream({ ...params, model: used, messages: msgs } as never);
+          const s = client.messages.stream({ ...params, ...samplingFor(used), model: used, messages: msgs } as never);
           s.on("text", (delta: string) => {
             buf += delta;
             if (saidEarly) return;
