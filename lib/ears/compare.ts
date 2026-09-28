@@ -28,15 +28,17 @@ export function compare(render: MusicFacts, reference: MusicFacts): Comparison {
   const pump = r(render.groove.pump - reference.groove.pump);
   const swing = r(render.groove.swing - reference.groove.swing);
   const lines: string[] = [];
+  // A reference taken from the worker's numbers (fromWorker.ts) has no spectrum or loudness: say nothing of them.
   const lowDelta = Math.round(((rb.sub + rb.low) - (fb.sub + fb.low)) * 100);
-  if (Math.abs(lowDelta) >= 4) lines.push(`Your low end is ${Math.abs(lowDelta)} percent ${lowDelta < 0 ? "under" : "over"} the reference.`);
+  if (!Number.isFinite(lowDelta)) { /* the reference's spectrum is unknown */ }
+  else if (Math.abs(lowDelta) >= 4) lines.push(`Your low end is ${Math.abs(lowDelta)} percent ${lowDelta < 0 ? "under" : "over"} the reference.`);
   else lines.push("Your low end sits where the reference sits.");
   const midDelta = Math.round(((rb.lowMid + rb.mid) - (fb.lowMid + fb.mid)) * 100);
   if (Math.abs(midDelta) >= 5) lines.push(`Your mids are ${Math.abs(midDelta)} percent ${midDelta < 0 ? "thinner" : "thicker"} than the reference.`);
   const topDelta = Math.round(((rb.highMid + rb.air) - (fb.highMid + fb.air)) * 100);
   if (Math.abs(topDelta) >= 4) lines.push(`Your top end is ${Math.abs(topDelta)} percent ${topDelta < 0 ? "darker" : "brighter"} than the reference.`);
   if (Number.isFinite(lufs) && Math.abs(lufs) >= 1) lines.push(`The reference is ${Math.abs(lufs).toFixed(1)} dB ${lufs < 0 ? "louder" : "quieter"} than you.`);
-  else lines.push("Loudness matches the reference.");
+  else if (Number.isFinite(lufs)) lines.push("Loudness matches the reference.");
   if (Math.abs(tempoRatio - 1) < 0.015) lines.push("Tempo matches.");
   else if (Math.abs(tempoRatio - 0.5) < 0.02 || Math.abs(tempoRatio - 2) < 0.04) lines.push("Tempo is an octave off the reference.");
   else lines.push(`You are at ${Math.round(render.tempo.bpm)} BPM, the reference is at ${Math.round(reference.tempo.bpm)}.`);

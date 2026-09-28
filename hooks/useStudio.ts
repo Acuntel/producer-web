@@ -207,7 +207,9 @@ export function useStudio(say: (t: string, o?: { at?: number }) => void, recordH
     setCanUndo(historyRef.current.canUndo); setCanRedo(historyRef.current.canRedo);
     songRef.current = s; setSongState(s);
     const eng = await getEngine();
-    if (started || engineRef.current) { await eng.update(s); laidRef.current?.(); }
+    // Told once the version is in the audio (its boundary), not when it is scheduled: a fader held down for a
+    // listen is put back down after the landing's own ramps, never before them.
+    if (started || engineRef.current) { const landing = await eng.update(s); if (landing) void landing.landed.then((ok) => { if (ok) laidRef.current?.(); }); }
     autoSave(s);
     // The cloud hears about every save too; a new record (rollout, full song) opens a new project.
     if (!opts?.noSnapshot) { const fresh = newProjectRef.current; if (!isBlank(s)) newProjectRef.current = false; onSnapshotRef.current?.(s, { label: opts?.label, newProject: fresh, chat: messagesRef.current.slice(-40), blank: isBlank(s) }); }
@@ -281,6 +283,12 @@ export function useStudio(say: (t: string, o?: { at?: number }) => void, recordH
     referenceRef.current = ref; setReference(ref);
     try { localStorage.setItem(REF_KEY, JSON.stringify(ref)); } catch {}
     if (factsRef.current) { const { compare } = await import("@/lib/ears"); setDeltaText(compare(factsRef.current, f).text); }
+  }, []);
+  // A reference from numbers already measured (the worker's hearing of a record): no audio decoded here.
+  const setReferenceFacts = useCallback((f: MusicFacts, name: string) => {
+    const ref = { name, facts: f }; referenceRef.current = ref; setReference(ref);
+    try { localStorage.setItem(REF_KEY, JSON.stringify(ref)); } catch {}
+    if (factsRef.current) void import("@/lib/ears").then(({ compare }) => setDeltaText(compare(factsRef.current!, f).text));
   }, []);
   const loadChat = useCallback((chat: { role: "user" | "assistant"; content: string }[], summary: string | null) => { setMessages(chat); messagesRef.current = chat; resumeRef.current = summary; askedTitleRef.current = false; }, []);
   const newSession = useCallback(async () => {
@@ -597,6 +605,6 @@ export function useStudio(say: (t: string, o?: { at?: number }) => void, recordH
   const { addReference, addClip } = useUploads({ flash, send, setSong, setClips, factsRef, referenceRef, setReference, setDeltaText, getSong: () => songRef.current });
 
   return { song, messages, busy, started, starting, paused, nowSection, library, clips, facts, hearing, reference, deltaText, listenHint, toast, lastMoveId, rendering, ab, score, canUndo, canRedo, rollout, notSaved,
-    boot, send, sendVoice, ignored, ignoredCount, thatWasForMe, loadChat, newSession, setReferenceBuffer, moves, previewClip, brainDown, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, getSchedule, getHealth, setVolume, toggleTrack,
+    boot, send, sendVoice, ignored, ignoredCount, thatWasForMe, loadChat, newSession, setReferenceBuffer, setReferenceFacts, moves, previewClip, brainDown, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, getSchedule, getHealth, setVolume, toggleTrack,
     play, pause, append, tryLocal, spend, cost, getPosition, duck, liveEngine, onLaid, onMoveLanded, whenArmed, setMetering };
 }

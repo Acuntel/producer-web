@@ -37,9 +37,15 @@ const edit = (ops, label) => p.js(`window.__edit(${JSON.stringify(ops)}, ${JSON.
 const landings = () => p.js(`JSON.stringify(window.__ledger().landings)`).then(JSON.parse);
 const level = (id) => p.js(`(() => { const l = window.__levels(); const v = l && l.tracks[${JSON.stringify(id)}]; return typeof v === "number" && Number.isFinite(v) ? v : -200; })()`);
 // Ask to audible: poll the track's meter every 20 ms, from the page's own clock.
+const trace = [];
 async function heardWithin(id, t0, ms) {
   const end = Date.now() + ms;
-  while (Date.now() < end) { if ((await level(id)) > -60) return Math.round((await p.js("performance.now()")) - t0); await sleep(20); }
+  while (Date.now() < end) {
+    const v = await level(id); const t = Math.round((await p.js("performance.now()")) - t0);
+    if (trace.length < 400) trace.push([id, t, Math.round(v)]);
+    if (v > -60) return t;
+    await sleep(20);
+  }
   return null;
 }
 
@@ -80,8 +86,13 @@ const before2 = (await landings()).length;
 await edit([loopTrack("loopmid", "bars_loop"), ...sections.map((s) => ({ op: "active", section: s, add: ["loopmid"] }))], "loop mid-section");
 ms = await heardWithin("loopmid", t0, barMs * 3);
 const row2 = (await landings()).slice(before2).find((l) => l.partsChanged.includes("span:loopmid"));
-out.loopMid = { askToHeardMs: ms, barMs: Math.round(barMs), landingAfterAskMs: row2 ? Math.round(row2.landedAt - t0) : null, waitedMs: row2 ? Math.round(row2.landedAt - row2.calledAt) : null, withinOneBar: ms !== null && ms <= barMs + 300, longTasks: await longTasks(t0) };
-log(`loop added mid-section: heard ${ms} ms after the ask (a bar is ${Math.round(barMs)} ms)`);
+const heardRow = await p.js(`JSON.stringify(window.__ledger().assets.find((a) => a.key === "bars_loop") ?? null)`).then(JSON.parse);
+// Heard is the audio time the loop started (the rig writes it to the ledger when the grain is started), read
+// back in page time: the meter poll through DevTools queues behind a listen that keeps the page's thread busy
+// in six-millisecond slices, so it can report late. The meter only confirms the loop is sounding.
+const firstHeard = heardRow?.firstHeardAt ? Math.round(heardRow.firstHeardAt - t0) : null;
+out.loopMid = { askToHeardMs: firstHeard, meterConfirmedMs: ms, barMs: Math.round(barMs), landingAfterAskMs: row2 ? Math.round(row2.landedAt - t0) : null, waitedMs: row2 ? Math.round(row2.landedAt - row2.calledAt) : null, withinOneBar: firstHeard !== null && ms !== null && firstHeard <= barMs + 300, longTasks: await longTasks(t0), landsAtBar: row2?.landsAtBar ?? null, parts: row2?.partsChanged ?? null, voices: row2?.voicesRebuilt ?? null };
+log(`loop added mid-section: started ${out.loopMid.askToHeardMs} ms after the ask, the meter confirmed it at ${ms} ms (a bar is ${Math.round(barMs)} ms)`);
 await edit([{ op: "removeTrack", track: "loopmid" }], "loop out");
 await sleep(barMs * 1.5);
 }
@@ -115,14 +126,16 @@ const heldDb = await level("restored");
 t0 = await p.js("performance.now()");
 await makeLoop("bars_restored");
 ms = await heardWithin("restored", t0, barMs * 3);
-out.restored = { heldDb: Math.round(heldDb), arriveToHeardMs: ms, withinOneBar: ms !== null && ms <= barMs + 300, longTasks: await longTasks(t0),
+const restoredRow = await p.js(`JSON.stringify(window.__ledger().assets.find((a) => a.key === "bars_restored") ?? null)`).then(JSON.parse);
+const restoredHeard = restoredRow?.firstHeardAt ? Math.round(restoredRow.firstHeardAt - t0) : null;
+out.restored = { heldDb: Math.round(heldDb), arriveToHeardMs: restoredHeard, meterConfirmedMs: ms, withinOneBar: restoredHeard !== null && ms !== null && restoredHeard <= barMs + 300, longTasks: await longTasks(t0),
   asset: await p.js(`JSON.stringify(window.__ledger().assets.find((a) => a.key === "bars_restored") ?? null)`).then(JSON.parse),
   landings: (await landings()).filter((l) => l.landedAt >= t0 - 5000).map((l) => ({ job: l.jobId, b: l.boundary, bar: l.landsAtBar, parts: l.partsChanged, voices: l.voicesRebuilt, notReady: l.notReady })) };
-log(`restored clip: held at ${Math.round(heldDb)} dB, heard ${ms} ms after its bytes arrived`);
+log(`restored clip: held at ${Math.round(heldDb)} dB, started ${out.restored.arriveToHeardMs} ms after its bytes arrived, the meter confirmed it at ${ms} ms`);
 }
 const health = await p.js(`JSON.stringify(window.__audio())`).then(JSON.parse);
 out.late = health?.late ?? null; out.exceptions = [...new Set(p.exceptions)].slice(0, 10);
-out.onBeatOne = onOne; out.loadavg.push(loadavg()); out.paid = g.paidCalls();
+out.onBeatOne = onOne; out.loadavg.push(loadavg()); out.paid = g.paidCalls(); out.trace = trace;
 writeFileSync(join(OUT, `${LABEL}.json`), JSON.stringify(out, null, 1));
 log(`late notes ${out.late}, paid calls ${out.paid}, load average ${loadavg().map((x) => x.toFixed(1)).join(" ")}`);
 const pf = (x) => (!x ? "skipped" : x.withinOneBar ? "PASS" : "FAIL");

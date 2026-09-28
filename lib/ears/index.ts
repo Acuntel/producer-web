@@ -7,3 +7,4 @@ export { compare } from "./compare";
 export type { Comparison } from "./compare";
 export { keyFromCamelot, NOTE_NAMES } from "./tonal";
 export { hearBuffer, decodeFile, factsForBrain } from "./browser";
+export { referenceFromWorker } from "./fromWorker";

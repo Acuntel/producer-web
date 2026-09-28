@@ -2,8 +2,9 @@
 // nearest transient, trim to the decay, snap to zero crossings, fade, normalize. Then
 // store it as a clip so a drum track or an audio track can play it.
 import type { Song } from "../song/types";
-import { loadClipsFor, putClip, cacheDecoded, decodeBytes } from "./clips";
+import { loadClipsFor, putClip, cacheDecoded, hasClip } from "./clips";
 import { audioBufferToWav } from "./render";
+import { cutId } from "./cuts";
 
 export type SliceOp = { op: "slice"; from: string; at: number; length?: number; role?: string; track?: string; name?: string; id?: string };
 const DRUM = ["kick", "clap", "snare", "hat", "openhat", "perc"];
@@ -99,15 +100,25 @@ async function keepCut(src: AudioBuffer, start: number, n: number, fadeInSec: nu
   for (let c = 0; c < out.numberOfChannels; c++) { const o = out.getChannelData(c); for (let i = 0; i < n; i++) o[i] *= g; }
   const bytes = await audioBufferToWav(out).arrayBuffer();
   await putClip({ id, name, type: "audio/wav", bytes, createdAt: Date.now(), durationSec: out.duration });
-  cacheDecoded(id, await decodeBytes(bytes.slice(0)));
+  cacheDecoded(id, out);   // the cut is already samples: no second decode of the bytes just written
   return out;
+}
+
+// A content-addressed cut that exists already is the same sound: it is loaded, not cut and stored again.
+async function existing(id: string): Promise<AudioBuffer | null> {
+  if (!id.startsWith("cut:") || !(await hasClip(id).catch(() => false))) return null;
+  return (await loadClipsFor([id], "cut")).get(id) ?? null;
 }
 
 /** A phrase, cut where it was measured. No onset hunting: the measurement already found the word,
  *  and hunting for a transient inside a sung line lands on the wrong syllable. */
 export async function cutPhraseClip(src: AudioBuffer, startSec: number, lengthSec: number, id: string, name: string): Promise<{ id: string; durationSec: number; buffer: AudioBuffer }> {
+  const have = await existing(id);
+  if (have) return { id, durationSec: have.duration, buffer: have };
   const sr = src.sampleRate;
-  const m = mono(src);
+  // The first channel is enough to find a zero crossing; averaging a whole four-minute stem to mono first
+  // was a long task on the thread the scheduler needs.
+  const m = src.getChannelData(0);
   let start = Math.max(0, Math.min(m.length - 1, Math.floor(startSec * sr)));
   // Back up at most five milliseconds to a zero crossing so the first word does not click.
   for (let n = 0; n < Math.floor(0.005 * sr) && start > 1; n++, start--) if (m[start - 1] <= 0 && m[start] > 0) break;
@@ -156,12 +167,15 @@ export async function resolveSliceOps(ops: unknown[], song: Song, register?: (c:
       const src = bufs.get(o.from);
       if (!src) throw new Error(`no clip ${o.from}`);
       const cut = sliceBuffer(src, Math.max(0, o.at), o.length && o.length > 0 ? Math.min(4, o.length) : undefined);
-      const bytes = await audioBufferToWav(cut).arrayBuffer();
       const role = o.role && (DRUM.includes(o.role) || o.role === "audio") ? o.role : "audio";
-      const id = o.id ?? `slice_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      // Named by what it is: the same slice asked for again is the same clip, stored once.
+      const id = o.id ?? cutId(o.from, Math.max(0, o.at), o.length ?? 0, `slice:${role}`);
       const name = o.name ?? `${role} at ${o.at.toFixed(1)}s`;
-      await putClip({ id, name, type: "audio/wav", bytes, createdAt: Date.now(), durationSec: cut.duration });
-      cacheDecoded(id, await decodeBytes(bytes.slice(0)));
+      if (!(await existing(id))) {
+        const bytes = await audioBufferToWav(cut).arrayBuffer();
+        await putClip({ id, name, type: "audio/wav", bytes, createdAt: Date.now(), durationSec: cut.duration });
+        cacheDecoded(id, cut);
+      }
       register?.({ id, name, durationSec: cut.duration });
       const clip = { clipId: id, name, oneShot: true, semitones: 0, gainDb: 0, durationSec: cut.duration };
       if (role !== "audio") {

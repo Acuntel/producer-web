@@ -9,6 +9,20 @@ import type { ClipMeta } from "@/lib/types/ui";
 import { supabaseBrowser } from "@/lib/account/supabase";
 import { connectFolder, searchLocal, hasFolder, folderInfo, canPickFolder, type LocalHit } from "@/lib/localSource";
 import { startCapture } from "@/lib/capture";
+import type { MusicFacts } from "@/lib/ears";
+
+// The voice first (the hook's preview before the whole vocal), then the other stems.
+const vocalsFirst = (stems: StemOut[]) => [...stems].sort((a, b) => rank(a) - rank(b));
+const rank = (s: StemOut) => (/vocal/i.test(s.stem) ? (/preview|hook/i.test(s.stem + s.path) ? 0 : 1) : 2);
+// A result file's bytes: from the account's storage, or from the harness when a probe lands a job (?e2e=1).
+async function stemBytes(path: string): Promise<ArrayBuffer> {
+  const given = (typeof window !== "undefined" ? (window as unknown as { __stemBytes?: Record<string, ArrayBuffer> }).__stemBytes : undefined)?.[path];
+  if (given && /[?&]e2e=1/.test(window.location.search)) return given;
+  const sb = supabaseBrowser(); if (!sb) throw new Error("not signed in");
+  const { data, error } = await sb.storage.from("clips").createSignedUrl(path, 600);
+  if (error || !data?.signedUrl) throw new Error(error?.message ?? "no url");
+  return (await fetch(data.signedUrl)).arrayBuffer();
+}
 
 export type StemsFacts = { bpm: number; tempoConfidence?: number; tempoAlt?: number | null; tempoRefused?: boolean; beatOffsetSec?: number; key: string; keyConfidence?: number; durationSec: number; bars: number; barEnergy?: number[]; blocks?: { bar: number; at: number; energy: number }[]; dropAt: number | null; bestBars: { startBar: number; startSec: number; endSec: number; energy: number }; name?: string };
 export type StemOut = { stem: string; path: string; clipId?: string };
@@ -21,7 +35,7 @@ export const identityLine = (i: Identity | null | undefined) => i?.title ? `${i.
 export type FindCandidate = { source: string; title: string; url: string; artist: string | null; duration_sec: number | null; year: number | null; license: string | null; kind: string; score: number };
 export type StemsJob = { id: string; kind?: "stems" | "hear" | "tracklist"; status: "queued" | "running" | "done" | "error"; progress: number; result: StemsResult | null; error: string | null; source: { url?: string; storage_path?: string; name?: string; query?: string } };
 
-type Deps = { user: User | null; projectId: string | null; flash: (t: string) => void; edit: (ops: unknown[], label: string) => Promise<boolean>; send: (t: string, o?: { hidden?: boolean }) => Promise<void>; registerClip: (c: ClipMeta) => void; getSong: () => Song; setReference?: (buf: AudioBuffer, name: string) => Promise<void>; recordSound?: (bpm: number, beats: number) => Promise<{ samples: Float32Array; sampleRate: number; notes: unknown[] } | null>; previewClip?: (clipId: string) => Promise<boolean>; noteClip?: (key: string, name: string, path: string, meta: { durationSec?: number; bpm?: number; key?: string; mime?: string }) => Promise<void> };
+type Deps = { user: User | null; projectId: string | null; flash: (t: string) => void; edit: (ops: unknown[], label: string) => Promise<boolean>; send: (t: string, o?: { hidden?: boolean }) => Promise<void>; registerClip: (c: ClipMeta) => void; getSong: () => Song; setReference?: (buf: AudioBuffer, name: string) => Promise<void>; setReferenceFacts?: (f: MusicFacts, name: string) => void; recordSound?: (bpm: number, beats: number) => Promise<{ samples: Float32Array; sampleRate: number; notes: unknown[] } | null>; previewClip?: (clipId: string) => Promise<boolean>; noteClip?: (key: string, name: string, path: string, meta: { durationSec?: number; bpm?: number; key?: string; mime?: string }) => Promise<void> };
 
 const NOTE = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 export const hzToNote = (hz: number) => { const m = Math.round(69 + 12 * Math.log2(hz / 440)); return `${NOTE[((m % 12) + 12) % 12]}${Math.floor(m / 12) - 1}`; };
@@ -50,74 +64,87 @@ export function useStems(d: Deps) {
   const stopPolling = () => { if (pollRef.current) { window.clearTimeout(pollRef.current); pollRef.current = null; } };
   useEffect(() => () => stopPolling(), []);
 
+  // A finished job, from the poll or from a probe (window.__landJob under ?e2e=1): the same path either way.
+  const landDone = useCallback(async (id: string, r: { status: string; result?: unknown; error?: string | null }) => {
+    if (r.status === "error") {
+      const msg = friendly(r.error ?? "The analysis failed.");
+      setError(msg);
+      void dRef.current.send(`The record could not be pulled in: ${msg} Tell the user in one sentence what to do instead (play it in another tab and use Capture what is playing, or upload the file). Do not change the song.`, { hidden: true });
+    }
+    if (r.status === "done" && announced.current !== id) {
+      // The record joins the store's heard table; a failure here is silent, the job is done either way.
+      void fetch("/api/dna/heard", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: id }) }).catch(() => {});
+      announced.current = id;
+      const res = r.result as StemsResult | null;
+      if (res?.kind === "tracklist") {
+        const tl = res.tracklist ?? [];
+        dRef.current.flash(tl.length ? `${tl.length} records in ${res.name ?? "the mix"}` : "Could not name anything in that mix");
+        const coverage = res.partial ? ` Named up to ${mmss(res.coveredSec ?? 0)} of ${mmss(res.durationSec ?? 0)}; the naming service asked for a pause${res.cooldownSec ? ` of about ${Math.ceil(res.cooldownSec / 60)} minutes` : ""}, so the rest waits for "keep going".` : "";
+        const lines = tl.slice(0, 40).map((e, i) => `${i + 1}. ${mmss(e.start)} ${e.artist ? `${e.artist} - ` : ""}${e.title}${Math.abs(e.pitchPct) >= 0.5 ? ` (played ${e.pitchPct > 0 ? "+" : ""}${e.pitchPct.toFixed(1)}%)` : ""}${e.confident ? "" : " (unsure)"}${e.year ? ` [${e.year}]` : ""} → query "${e.query}"`).join("\n");
+        void dRef.current.send(tl.length
+          ? `TRACKLIST of "${res.name ?? "the mix"}" (${mmss(res.durationSec ?? 0)}), identified from the sound in cuts:\n${lines}\n${coverage}Tell the user what is in it the way a DJ friend would (the records that matter, who plays what after what, the pitch moves), in a few lines at most. To pull one into the studio, return action {"type":"analyze","query": "<that entry's query>"}. Do not change the song.`
+          : res.cooldownSec ? `The mix "${res.name ?? "the mix"}" could not be read: the recognition service is cooling down for about ${Math.ceil(res.cooldownSec / 60)} minutes after too many requests. Say so in one line and offer to try again then. Do not change the song.`
+          : `The mix "${res.name ?? "the mix"}" (${mmss(res.durationSec ?? 0)}) came back with no identifiable records (unreleased edits, or too quiet). Say so in one line and offer capture from the tab for the part they care about. Do not change the song.`, { hidden: true });
+        return;
+      }
+      const f = res?.facts;
+      const name = res?.name ?? "the record";
+      dRef.current.flash(res?.identity?.title ? `That is ${identityLine(res.identity)}` : `Analyzed ${name}`);
+      // Bring every stem and one-shot into the browser (their bytes, stored; each is decoded only when a track
+      // plays it), the vocals first, so the brain can slice them by voice, then tell it the ids.
+      await (async () => {
+        const ids: string[] = [];
+        const keep = async (st: StemOut) => { try { ids.push(await ensureClipRef.current(st.path, `stem_${id}_${st.stem}`, `${name} · ${st.stem}`, { durationSec: f?.durationSec, bpm: f?.bpm, key: f?.key })); } catch {} };
+        const stems = vocalsFirst(res?.stems ?? []);
+        // The voice first: an ask for it is carried out before the other stems are even stored.
+        for (const st of stems.filter((x) => /vocal/i.test(x.stem))) await keep(st);
+        const storeRest = async () => {
+          for (const st of stems.filter((x) => !/vocal/i.test(x.stem))) await keep(st);
+          for (const o of res?.oneshots ?? []) { try { ids.push(await ensureClipRef.current(o.path, `shot_${id}_${o.role}${o.path.includes("-2") ? "_2" : ""}`, `${name} · ${o.role}`, { durationSec: o.durationSec })); } catch {} }
+        };
+        // The record becomes the reference from what the worker heard: no stem is decoded and nothing is summed
+        // on the page's thread while the record plays (lib/ears/fromWorker.ts).
+        if (f && dRef.current.setReferenceFacts) {
+          try { const { referenceFromWorker } = await import("@/lib/ears"); dRef.current.setReferenceFacts(referenceFromWorker(f, res?.hearing, name), name); }
+          catch (e) { console.warn("reference from the worker failed", e instanceof Error ? e.message : e); }
+        }
+        if (pendingVocalRef.current) {
+          const ask = pendingVocalRef.current; pendingVocalRef.current = null;
+          const report = await dropVocalRef.current?.(ask.said, ask.where, { id, status: "done", progress: 100, result: res, error: null, source: {} } as StemsJob);
+          await storeRest();
+          if (report) { void dRef.current.send(report, { hidden: true }); return; }
+        } else await storeRest();
+        if (autoPlaceRef.current) {
+          const want = autoPlaceRef.current; autoPlaceRef.current = null;
+          const st = (res?.stems ?? []).find((x) => x.stem === want);
+          if (st && f) { await placeStem({ id, result: res } as StemsJob, st, f, name, "hook"); }
+          if (f) void dRef.current.send(`The vocal "${name}" is rendered and its sung part is now an audio track in the drops (${Math.round(f.bpm)} BPM source, warped, key ${f.key}). Tell the user what you hear in one breath, tune it toward the song key with clip.semitones if it is off, and place the phrase where it should sit.`, { hidden: true });
+          return;
+        }
+        const heard = res?.hearing;
+        const report = heard?.report ? `\nLISTENING REPORT (the studio's ears on the record, numbers and words): ${heard.report}${heard.drumGrids ? ` Drum grids: ${JSON.stringify(heard.drumGrids)}.` : ""}${heard.bass?.notes?.length ? ` Bass: root ${heard.bass.root}, ${heard.bass.notes.slice(0, 8).join(" ")}, rhythm ${heard.bass.eighthRhythm}.` : ""}${heard.chords?.length ? ` Chords: ${heard.chords.join(" ")}.` : ""}${heard.lyrics?.lines?.length ? ` Lyrics: ${heard.lyrics.lines.slice(0, 6).map((l) => `[${mmss(l.at)}] ${l.text}`).join(" / ")}.` : ""}${heard.clap?.descriptors?.length ? ` It sounds: ${heard.clap.descriptors.slice(0, 5).map((d) => d[0]).join(", ")}.` : ""}` : "";
+        const who = res?.identity?.title ? ` IDENTIFIED from the sound: ${identityLine(res.identity)}${res.identity.isrc ? `, ISRC ${res.identity.isrc}` : ""}${res.identity.genre ? `, ${res.identity.genre}` : ""}.` : "";
+        if (f) void dRef.current.send(`I analyzed "${name}" with the studio:${who} ${Math.round(f.bpm)} BPM, ${f.key}, ${mmss(f.durationSec)} long, drop at ${f.dropAt !== null && f.dropAt !== undefined ? mmss(f.dropAt) : "unclear"}, best 8 bars ${mmss(f.bestBars.startSec)} to ${mmss(f.bestBars.endSec)}. Its stems and one-shots are now clips you can slice from: ${ids.join(", ")} (a stem clip's time axis is the record's own time, so "the snare at 0:32" is slice from the drums stem at 32). It is also loaded as the REFERENCE, so "make it like that" is an emulate rollout.${report}\nGive me the breakdown in one breath: what carries it, what its hook does, and the ONE piece worth taking into our record and how. Do not change the song yet.`, { hidden: true });
+      })();
+    }
+  }, []);
+
+  // A probe lands a finished job the way the poll does, with the stems' bytes it made (tests/arrival.probe.mjs).
+  useEffect(() => {
+    if (typeof window === "undefined" || !/[?&]e2e=1/.test(window.location.search)) return;
+    (window as unknown as { __landJob?: unknown }).__landJob = async (id: string, result: StemsResult, o?: { vocal?: boolean; said?: string | null }) => {
+      if (o?.vocal) pendingVocalRef.current = { said: o.said ?? null, where: null };
+      setJob({ id, status: "done", progress: 100, result, error: null, source: { name: result.name } });
+      await landDone(id, { status: "done", result });
+      return true;
+    };
+  }, [landDone]);
+
   const poll = useCallback(async (id: string, since: number) => {
     try {
       const r = await fetch(`/api/stems?id=${encodeURIComponent(id)}`).then((x) => x.json());
       if (r?.id) setJob(r as StemsJob);
-      if (r?.status === "done" || r?.status === "error") {
-        if (r.status === "error") {
-          const msg = friendly(r.error ?? "The analysis failed.");
-          setError(msg);
-          void dRef.current.send(`The record could not be pulled in: ${msg} Tell the user in one sentence what to do instead (play it in another tab and use Capture what is playing, or upload the file). Do not change the song.`, { hidden: true });
-        }
-        if (r.status === "done" && announced.current !== id) {
-          // The record joins the store's heard table; a failure here is silent, the job is done either way.
-          void fetch("/api/dna/heard", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: id }) }).catch(() => {});
-          announced.current = id;
-          const res = r.result as StemsResult | null;
-          if (res?.kind === "tracklist") {
-            const tl = res.tracklist ?? [];
-            dRef.current.flash(tl.length ? `${tl.length} records in ${res.name ?? "the mix"}` : "Could not name anything in that mix");
-            const coverage = res.partial ? ` Named up to ${mmss(res.coveredSec ?? 0)} of ${mmss(res.durationSec ?? 0)}; the naming service asked for a pause${res.cooldownSec ? ` of about ${Math.ceil(res.cooldownSec / 60)} minutes` : ""}, so the rest waits for "keep going".` : "";
-            const lines = tl.slice(0, 40).map((e, i) => `${i + 1}. ${mmss(e.start)} ${e.artist ? `${e.artist} - ` : ""}${e.title}${Math.abs(e.pitchPct) >= 0.5 ? ` (played ${e.pitchPct > 0 ? "+" : ""}${e.pitchPct.toFixed(1)}%)` : ""}${e.confident ? "" : " (unsure)"}${e.year ? ` [${e.year}]` : ""} → query "${e.query}"`).join("\n");
-            void dRef.current.send(tl.length
-              ? `TRACKLIST of "${res.name ?? "the mix"}" (${mmss(res.durationSec ?? 0)}), identified from the sound in cuts:\n${lines}\n${coverage}Tell the user what is in it the way a DJ friend would (the records that matter, who plays what after what, the pitch moves), in a few lines at most. To pull one into the studio, return action {"type":"analyze","query": "<that entry's query>"}. Do not change the song.`
-              : res.cooldownSec ? `The mix "${res.name ?? "the mix"}" could not be read: the recognition service is cooling down for about ${Math.ceil(res.cooldownSec / 60)} minutes after too many requests. Say so in one line and offer to try again then. Do not change the song.`
-              : `The mix "${res.name ?? "the mix"}" (${mmss(res.durationSec ?? 0)}) came back with no identifiable records (unreleased edits, or too quiet). Say so in one line and offer capture from the tab for the part they care about. Do not change the song.`, { hidden: true });
-            return;
-          }
-          const f = res?.facts;
-          const name = res?.name ?? "the record";
-          dRef.current.flash(res?.identity?.title ? `That is ${identityLine(res.identity)}` : `Analyzed ${name}`);
-          // Bring every stem and one-shot into the browser so the brain can slice them by voice, then tell it the ids.
-          void (async () => {
-            const ids: string[] = [];
-            for (const s of res?.stems ?? []) { try { ids.push(await ensureClipRef.current(s.path, `stem_${id}_${s.stem}`, `${name} · ${s.stem}`, { durationSec: f?.durationSec, bpm: f?.bpm, key: f?.key })); } catch {} }
-            for (const o of res?.oneshots ?? []) { try { ids.push(await ensureClipRef.current(o.path, `shot_${id}_${o.role}${o.path.includes("-2") ? "_2" : ""}`, `${name} · ${o.role}`, { durationSec: o.durationSec })); } catch {} }
-            if (pendingVocalRef.current) {
-              const ask = pendingVocalRef.current; pendingVocalRef.current = null;
-              const report = await dropVocalRef.current?.(ask.said, ask.where, { id, status: "done", progress: 100, result: res, error: null, source: {} } as StemsJob);
-              if (report) { void dRef.current.send(report, { hidden: true }); return; }
-            }
-            if (autoPlaceRef.current) {
-              const want = autoPlaceRef.current; autoPlaceRef.current = null;
-              const st = (res?.stems ?? []).find((x) => x.stem === want);
-              if (st && f) { await placeStem({ id, result: res } as StemsJob, st, f, name, "hook"); }
-              if (f) void dRef.current.send(`The vocal "${name}" is rendered and its sung part is now an audio track in the drops (${Math.round(f.bpm)} BPM source, warped, key ${f.key}). Tell the user what you hear in one breath, tune it toward the song key with clip.semitones if it is off, and place the phrase where it should sit.`, { hidden: true });
-              return;
-            }
-            // The record itself becomes the reference: the four stems summed are the mix, heard by the studio's own ears.
-            if (dRef.current.setReference && res?.stems?.length) {
-              try {
-                const { loadClipsFor } = await import("@/lib/engine");
-                const bufs = await loadClipsFor((res.stems ?? []).map((s) => `stem_${id}_${s.stem}`));
-                const list = [...bufs.values()];
-                if (list.length) {
-                  const sr = list[0].sampleRate, len = Math.max(...list.map((b) => b.length));
-                  const ctx = new OfflineAudioContext(2, len, sr); const mix = ctx.createBuffer(2, len, sr);
-                  for (const b of list) for (let c = 0; c < 2; c++) { const src = b.getChannelData(Math.min(c, b.numberOfChannels - 1)); const dst = mix.getChannelData(c); for (let i = 0; i < src.length; i++) dst[i] += src[i]; }
-                  await dRef.current.setReference(mix, name);
-                }
-              } catch (e) { console.warn("reference from stems failed", e instanceof Error ? e.message : e); }
-            }
-            const heard = res?.hearing;
-            const report = heard?.report ? `\nLISTENING REPORT (the studio's ears on the record, numbers and words): ${heard.report}${heard.drumGrids ? ` Drum grids: ${JSON.stringify(heard.drumGrids)}.` : ""}${heard.bass?.notes?.length ? ` Bass: root ${heard.bass.root}, ${heard.bass.notes.slice(0, 8).join(" ")}, rhythm ${heard.bass.eighthRhythm}.` : ""}${heard.chords?.length ? ` Chords: ${heard.chords.join(" ")}.` : ""}${heard.lyrics?.lines?.length ? ` Lyrics: ${heard.lyrics.lines.slice(0, 6).map((l) => `[${mmss(l.at)}] ${l.text}`).join(" / ")}.` : ""}${heard.clap?.descriptors?.length ? ` It sounds: ${heard.clap.descriptors.slice(0, 5).map((d) => d[0]).join(", ")}.` : ""}` : "";
-            const who = res?.identity?.title ? ` IDENTIFIED from the sound: ${identityLine(res.identity)}${res.identity.isrc ? `, ISRC ${res.identity.isrc}` : ""}${res.identity.genre ? `, ${res.identity.genre}` : ""}.` : "";
-            if (f) void dRef.current.send(`I analyzed "${name}" with the studio:${who} ${Math.round(f.bpm)} BPM, ${f.key}, ${mmss(f.durationSec)} long, drop at ${f.dropAt !== null && f.dropAt !== undefined ? mmss(f.dropAt) : "unclear"}, best 8 bars ${mmss(f.bestBars.startSec)} to ${mmss(f.bestBars.endSec)}. Its stems and one-shots are now clips you can slice from: ${ids.join(", ")} (a stem clip's time axis is the record's own time, so "the snare at 0:32" is slice from the drums stem at 32). It is also loaded as the REFERENCE, so "make it like that" is an emulate rollout.${report}\nGive me the breakdown in one breath: what carries it, what its hook does, and the ONE piece worth taking into our record and how. Do not change the song yet.`, { hidden: true });
-          })();
-        }
-        return;
-      }
+      if (r?.status === "done" || r?.status === "error") { await landDone(id, r); return; }
       if (Date.now() - since > 20 * 60 * 1000) { setError("The analysis is taking too long. Try a shorter file."); return; }
     } catch { /* keep polling */ }
     pollRef.current = window.setTimeout(() => void poll(id, since), 2500);
@@ -147,16 +174,12 @@ export function useStems(d: Deps) {
 
   /** Bring a result file into the browser clip store (once) and the clip list. Returns the clip id. */
   const ensureClip = useCallback(async (path: string, id: string, name: string, meta: { durationSec?: number; bpm?: number; key?: string }) => {
-    const { getClip, putClip, decodeBytes, cacheDecoded } = await import("@/lib/engine");
-    const have = await getClip(id);
-    if (!have) {
-      const sb = supabaseBrowser(); if (!sb) throw new Error("not signed in");
-      const { data, error: sErr } = await sb.storage.from("clips").createSignedUrl(path, 600);
-      if (sErr || !data?.signedUrl) throw new Error(sErr?.message ?? "no url");
-      const bytes = await (await fetch(data.signedUrl)).arrayBuffer();
-      // Already in the account's storage: the vault records where, it does not copy it again.
-      await putClip({ id, name, type: path.endsWith(".mp3") ? "audio/mpeg" : "audio/wav", bytes, createdAt: Date.now(), durationSec: meta.durationSec, bpm: meta.bpm, key: meta.key }, { mirror: false });
-      cacheDecoded(id, await decodeBytes(bytes));
+    const { hasClip, putClip } = await import("@/lib/engine");
+    if (!(await hasClip(id))) {
+      const bytes = await stemBytes(path);
+      // Already in the account's storage: the vault records where, it does not copy it again. Only the bytes
+      // are kept: a four-minute stem decodes to about 85 MB, so it is decoded when a track plays it.
+      await putClip({ id, name, type: path.endsWith(".mp3") ? "audio/mpeg" : path.endsWith(".flac") ? "audio/flac" : "audio/wav", bytes, createdAt: Date.now(), durationSec: meta.durationSec, bpm: meta.bpm, key: meta.key }, { mirror: false, origin: "remote" });
     }
     void dRef.current.noteClip?.(id, name, path, { ...meta, mime: path.endsWith(".mp3") ? "audio/mpeg" : "audio/wav" });
     dRef.current.registerClip({ id, name, bpm: meta.bpm, key: meta.key, durationSec: meta.durationSec });
@@ -223,10 +246,11 @@ export function useStems(d: Deps) {
     const song = dRef.current.getSong();
     const from = `stem_${job.id}_${stem}`;
     const at = atSec != null && atSec >= 0 ? atSec : (res.facts?.bestBars?.startSec ?? 0);
-    const id = `grab_${Date.now().toString(36)}`;
+    const { cutId } = await import("@/lib/engine/cuts");
+    const id = cutId(from, at, drumRole ? 0.7 : 2.0, `grab:${drumRole ?? "audio"}`); const trackId = `grab_${id.slice(4, 12)}`;
     const name = `${what} from ${res.name ?? "the record"} at ${mmss(at)}`;
     const { resolveSliceOps } = await import("@/lib/engine/slice");
-    const r = await resolveSliceOps([{ op: "slice", from, at, length: drumRole ? 0.7 : 2.0, role: drumRole ?? "audio", name, id, track: drumRole ?? id }], song, dRef.current.registerClip);
+    const r = await resolveSliceOps([{ op: "slice", from, at, length: drumRole ? 0.7 : 2.0, role: drumRole ?? "audio", name, id, track: drumRole ?? trackId }], song, dRef.current.registerClip);
     if (!r.ops.length || r.failed.length) return null;
     let ops = r.ops; let tuned = "";
     if (!drumRole) {
@@ -271,11 +295,14 @@ export function useStems(d: Deps) {
     if (!pick) return `I isolated the voice on ${name} but could not find a phrase in it worth taking.`;
 
     const song = dRef.current.getSong();
+    // The track keeps its readable id; the clip is named by what it is (the same phrase is the same clip).
+    const { cutId } = await import("@/lib/engine/cuts");
     const id = `vox_${jb.id.slice(0, 6)}_${Math.round(pick.startSec)}`;
+    const clipId = cutId(`stem_${jb.id}_${stem.stem}`, pick.startSec, pick.endSec - pick.startSec, "vox");
     const label = `${name} vocal at ${mmss(pick.startSec)}`;
     const { cutPhraseClip } = await import("@/lib/engine/slice");
-    const cut = await cutPhraseClip(src, pick.startSec, pick.endSec - pick.startSec, id, label);
-    dRef.current.registerClip({ id, name: label, durationSec: cut.durationSec });
+    const cut = await cutPhraseClip(src, pick.startSec, pick.endSec - pick.startSec, clipId, label);
+    dRef.current.registerClip({ id: clipId, name: label, durationSec: cut.durationSec });
 
     // In the key, if that is a move small enough to leave the voice sounding like a voice.
     const { detectRootPitch } = await import("@/lib/engine/pitch");
@@ -310,7 +337,7 @@ export function useStems(d: Deps) {
       track: {
         id, name: label.slice(0, 24), role: "audio", volume: -3, duck: false, loopBeats: secBeats,
         notes: [[60, startBeat, Math.min(phraseBeats, secBeats), 112]],
-        clip: { clipId: id, name: label, oneShot: true, warp: false, semitones: semitones ?? 0, gainDb: 0, durationSec: cut.durationSec },
+        clip: { clipId, name: label, oneShot: true, warp: false, semitones: semitones ?? 0, gainDb: 0, durationSec: cut.durationSec },
         fx: { filter: { type: "highpass", cutoff: 140 }, delay: { time: "8n", feedback: 0.22, wet: 0.16 }, reverb: 0.2 },
       },
     }, { op: "active", section: into.id, add: [id] }];

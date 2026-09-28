@@ -67,7 +67,7 @@ export default function App() {
   const projects = useProjects({ user: account.user, loadSong: studio.loadSong, loadChat: studio.loadChat, getSong: studio.getSong, localLibrary: studio.library, flash: studio.flash });
   snapshotRef.current = projects.snapshot;
   const vault = useVault({ user: account.user, projectId: projects.current?.id ?? null, flash: studio.flash });
-  const stems = useStems({ user: account.user, projectId: projects.current?.id ?? null, flash: studio.flash, edit: studio.edit, send: studio.send, registerClip: studio.registerClip, getSong: studio.getSong, setReference: studio.setReferenceBuffer, recordSound: (bpm, beats) => hum.record(bpm, beats), previewClip: studio.previewClip, noteClip: vault.note });
+  const stems = useStems({ user: account.user, projectId: projects.current?.id ?? null, flash: studio.flash, edit: studio.edit, send: studio.send, registerClip: studio.registerClip, getSong: studio.getSong, setReference: studio.setReferenceBuffer, setReferenceFacts: studio.setReferenceFacts, recordSound: (bpm, beats) => hum.record(bpm, beats), previewClip: studio.previewClip, noteClip: vault.note });
   // A record names its audio; this browser may never have seen it. Whenever that list changes,
   // whatever is missing is fetched back from the account before anyone notices silence.
   // It runs when the list or the account changes, never because the page re-rendered: the hooks'

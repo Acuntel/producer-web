@@ -2,11 +2,12 @@
 // Nothing is ever lost, nothing leaves the machine. Library samples (public/samples) share the same keys
 // under "sample:<id>". Every load goes through the asset store (assets.ts), the only fetch-and-decode path.
 import { idbPut, idbGet, idbHas, idbList, idbDelete, type StoredClip, type ClipOrigin } from "./idb";
-import { getMany, put, decodedCacheBytes, decodeAudio } from "./assets";
+import { getMany, put, decodedCacheBytes, decodeAudio, trimStore } from "./assets";
 import type { Tier } from "./ledger";
 
 export type { StoredClip };
 export { clipKeysFor, clipBuffer, keyOfClip } from "./keys";
+export { cutId } from "./cuts";
 
 // Anything stored here is also offered to the account's vault, so a record made on this machine
 // can be opened on another one with its audio intact. The sink is set by the app when signed in.
@@ -14,8 +15,9 @@ type ClipSink = (c: StoredClip) => void;
 let sink: ClipSink | null = null;
 export function setClipSink(fn: ClipSink | null) { sink = fn; }
 
+// A write can push the store past its budget: it is trimmed at idle (assets.ts), never now.
 export const putClip = (c: StoredClip, opts?: { mirror?: boolean; origin?: ClipOrigin }) =>
-  idbPut(c, opts?.origin).then((id) => { if (opts?.mirror !== false) try { sink?.(c); } catch { /* the vault is never a gate on playing */ } return id; });
+  idbPut(c, opts?.origin).then((id) => { trimStore(); if (opts?.mirror !== false) try { sink?.(c); } catch { /* the vault is never a gate on playing */ } return id; });
 export const getClip = (id: string) => idbGet(id);
 /** Whether this device holds the clip, without reading its bytes. */
 export const hasClip = (id: string) => idbHas(id);
