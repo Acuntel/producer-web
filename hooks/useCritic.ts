@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Song } from "@/lib/song";
 import type { MusicFacts } from "@/lib/ears";
-import { loadNotes, mergeNotes, setNoteStatus, openNotes, type CriticNote } from "@/lib/critic";
+import { loadNotes, mergeNotes, setNoteStatus, openNotes, vocalNotes, type CriticNote } from "@/lib/critic";
 import { tasteSummary, logMove, setVerdict } from "@/lib/taste";
 import { economyQuery } from "@/lib/brain/stream";
 
@@ -51,7 +51,9 @@ export function useCritic(d: Deps) {
         dismissed: loadNotes().filter((n) => n.status === "dismissed").slice(-12).map((n) => n.what), taste: tasteSummary(x.song.title),
       }) }).then((res) => res.json());
       if (r?.headline) setHeadline(r.headline);
-      if (Array.isArray(r?.notes)) setNotes(mergeNotes(r.notes.map((n: CriticNote) => ({ ...n, status: "open", at: Date.now() }))));
+      // The placed voice's own measurements come first: what the ears measured on it is a note, never a guess.
+      const measured = vocalNotes(x.facts.vocal);
+      if (Array.isArray(r?.notes) || measured.length) setNotes(mergeNotes([...measured, ...(Array.isArray(r?.notes) ? r.notes : []).map((n: CriticNote) => ({ ...n, status: "open" as const, at: Date.now() }))]));
     } catch { /* the critic is optional */ }
     finally {
       inflight.current = false; setThinking(false);
