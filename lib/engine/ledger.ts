@@ -17,6 +17,10 @@ export type LandingRow = {
   jobId: string; boundary: Boundary; calledAt: number; landedAt: number;
   landsAtBar: number | null; landsAtTime: number | null; beatInBar: number | null;
   partsChanged: string[]; voicesRebuilt: string[]; notReady: string[];
+  /** Where the boundary's audio time sits on the transport's grid, read back from the transport. */
+  measuredBeatInBar?: number | null;
+  /** For each part laid anew, how many beats after the boundary its first hit fired (never negative). */
+  firstHits?: Record<string, number>;
 };
 export type PlacementRow = { at: number; phrase: string; slot: string; scores: Record<string, number>; checks: Record<string, number | boolean>; verdict: string | null };
 

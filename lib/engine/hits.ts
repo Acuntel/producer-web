@@ -32,7 +32,9 @@ export function hitter(buf: AudioBuffer, into: Tone.ToneAudioNode): Hitter {
   return {
     hit: (t, gain, rate, offset = 0) => {
       if (last && ringing.has(last)) { try { last.stop(t); } catch { /* already ended */ } }
-      const src = new Tone.ToneBufferSource({ url: tb, playbackRate: rate, fadeIn: 0, fadeOut: CHOKE_SEC, curve: "linear" });
+      // Built in the context it plays into, whatever context is global when the hit fires: an offline
+      // listen fires its hits from its own clock, and a source from the room cannot connect into it.
+      const src = new Tone.ToneBufferSource({ context: into.context, url: tb, playbackRate: rate, fadeIn: 0, fadeOut: CHOKE_SEC, curve: "linear" });
       src.onended = () => ringing.delete(src);
       src.connect(into);
       ringing.add(src); last = src;

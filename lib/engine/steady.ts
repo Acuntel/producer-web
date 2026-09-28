@@ -9,7 +9,9 @@ export function hashEvents(evs: Ev[]): string {
   let h = 2166136261;
   for (const e of evs) {
     h = Math.imul(h ^ Math.round(e.beat * 960), 16777619);
-    h = Math.imul(h ^ (e.note[0] * 1024 + e.note[3] * 8 + Math.round(e.note[2] * 4)), 16777619);
+    // Pitch, velocity and length, the length at 960 PPQ like the start: a note shortened by a 64th is a change.
+    h = Math.imul(h ^ (e.note[0] * 1024 + e.note[3]), 16777619);
+    h = Math.imul(h ^ Math.round(e.note[2] * 960), 16777619);
   }
   return `${evs.length}.${(h >>> 0).toString(36)}`;
 }

@@ -214,6 +214,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     localMovesRef.current.push(label);
     return true;
   }, [flash, setSong, landMoves]);
+  const editRef = useRef(edit); editRef.current = edit;
   const registerClip = useCallback((c: ClipMeta) => setClips((x) => (x.some((y) => y.id === c.id) ? x : [...x, c])), []);
   // Live meters for the studio surfaces; a fader drag moves the voice directly and commits once on release.
   const getLevels = useCallback(() => engineRef.current?.getLevels() ?? null, []);
@@ -228,6 +229,9 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     w.__audio = () => engineRef.current?.health() ?? null;   // dropouts, graphs alive, rebuild cost
     w.__engine = () => engineRef.current;
     w.__facts = () => factsRef.current;
+    // The bars probe edits the record the way a studio surface does (tests/bars.probe.mjs).
+    (w as { __edit?: unknown }).__edit = (ops: unknown[], label: string) => editRef.current(ops, label);
+    (w as { __song?: unknown }).__song = () => songRef.current;
     (w as { __engineModule?: () => unknown }).__engineModule = () => import("@/lib/engine");
     // The desk probe (tests/desk.probe.mjs): the seed through the offline replica of the room, and its numbers.
     (w as { __deskModule?: () => unknown }).__deskModule = () => import("@/lib/engine/deskProbe");

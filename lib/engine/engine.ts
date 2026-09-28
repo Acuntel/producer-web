@@ -2,17 +2,20 @@
 // plays, loop regions, jump to a section, the visible playhead, and the rig's health.
 import * as Tone from "tone";
 import type { Song } from "../song/types";
-import { Rig, type Clips, type Health, type Applied } from "./rig";
+import { Rig, type Clips, type Health, type Applied, type LandAt } from "./rig";
 import { locate, loopBounds, type SectionSpan, type Schedule } from "./schedule";
+import { boundaryFor, onlyMuteSolo, type Boundary } from "./boundary";
+import { Lander, moveClock, sectionSpans, type Landing } from "./landing";
+export type { Landing };
 import { loadClipsFor, clipKeysFor } from "./clips";
 import { getKit, kitIdFor, type Kit } from "./kits";
 import { onAsset, pin } from "./assets";
 import { Latest, wrapToBar } from "./steady";
 import { ensureStudioContext } from "./context";
-import { ledgerSources, recordLanding, assetDue } from "./ledger";
+import { ledgerSources, recordLanding, assetDue, type LandingRow } from "./ledger";
 
-// master = the bars' smoothed level; peak = the loudest sample in the last frame, per channel, in dBFS.
-export type Levels = { master: [number, number]; peak: [number, number]; spectrum: Float32Array | null; tracks: Record<string, number> };
+import { levelsOf, type Levels } from "./levels";
+export type { Levels };
 export type Position = { section: string; sectionId: string; index: number; barInSection: number; beatInBar: number; absBar: number; beat: number };
 // What a DAW shows in its corner: dropouts, and how many rigs are actually alive on the transport (one is right;
 // more than one means an older build of the record is still playing underneath the current one).
@@ -42,6 +45,10 @@ export class Engine {
   private lastRebuildMs = 0;
   private folded: Health = { events: 0, late: 0, minMarginMs: Infinity };   // counts from rigs already torn down
   private lastSection = -1;
+  private laidSong: Song | null = null;   // what is on the rig now: a change's boundary is read against it
+  private lastLanding: LandingRow | null = null;
+  private lander: Lander;                  // the one change waiting for its boundary (latest wins)
+  private jumps: Lander;                   // the one jump waiting for its phrase (latest wins, apart from changes)
   playing = false;
   onSection: ((name: string, index: number, total: number) => void) | null = null;
 
@@ -52,6 +59,7 @@ export class Engine {
     // A sound the record names arrives (a restore, a cut, a late decode): the record is laid again and
     // only the tracks that play it change. A new sound under the same key replaces the old one.
     onAsset((e) => this.arrived(e.key, e.type === "clip-replaced"));
+    this.lander = new Lander(this.transport); this.jumps = new Lander(this.transport);
   }
 
   private arrived(key: string, replaced: boolean) {
@@ -59,7 +67,7 @@ export class Engine {
     if (!song || !this.rig || !clipKeysFor(song).includes(key)) return;
     if (this.clips.has(key) && !replaced) return;
     this.clips.delete(key);
-    void this.update(song, { jobId: `arrived:${key}` });
+    void this.update(song, { jobId: `arrived:${key}`, boundary: "bar" });
   }
 
   private get transport() { return Tone.getTransport(); }
@@ -74,46 +82,73 @@ export class Engine {
     // Whatever a load built before the session opened comes down first: two rigs on one
     // transport is the whole record playing twice, a beat apart.
     this.teardown();
-    this.lay(newest ?? song, "start", performance.now());
+    this.lay(newest ?? song, "start", performance.now(), "now");
     this.transport.start();
     performance.mark("producer:transport");
     this.playing = true;
   }
 
-  pause() { this.transport.pause(); this.playing = false; }
-  resume() { this.transport.start(); this.playing = true; }
+  /** Pause at once. The loops stop with it (a GrainPlayer does not follow the transport). */
+  pause() { const t = this.transport.context.now(); this.transport.pause(t); this.rig?.pauseLoops(t); this.playing = false; }
+  /** Resume where it paused, and every loop that should be sounding there starts at its phase. */
+  resume() {
+    const t = this.transport.context.now();
+    const beat = this.transport.ticks / this.transport.PPQ;
+    this.transport.start(t);
+    if (this.rig && this.laidSong) this.rig.catchUp(this.laidSong, beat, t);
+    this.playing = true;
+  }
   /** Stop: no new notes, the desk fades down over 40 ms, and only then does the rig come down, so a
    *  ringing tail is faded rather than cut. The rig leaves the live count at once; nothing new plays on it. */
   stop() {
     this.stops++;
     this.transport.stop(); this.transport.cancel(); this.playing = false;
+    this.lander.cancel(); this.jumps.cancel();
     const r = this.detach(); if (!r) return;
     r.board.fadeOut(STOP_FADE_SEC);
     window.setTimeout(() => r.dispose(), Math.ceil(STOP_FADE_SEC * 1000) + 30);
   }
 
-  /** A change, applied while it plays. Before the session opens this only remembers the record.
-   *  Latest wins: if a newer record arrives while this one is loading, this one is never laid. */
-  async update(song: Song, opts?: { jobId?: string }) {
+  /** A change, landed on its boundary (boundary.ts): content on the next bar, structure on the next
+   *  phrase, the mixer on the next beat, mute and solo at once. Resolves once it is loaded and scheduled;
+   *  `landed` settles when it is in the audio. Before the session opens this only remembers the record. */
+  async update(song: Song, opts?: { jobId?: string; boundary?: Boundary }): Promise<Landing | null> {
     const calledAt = performance.now();
     const ticket = this.latest.take(song);
     await this.prepare(song, ticket);
-    if (!this.latest.current(ticket) || !this.rig) return;
-    this.lay(song, opts?.jobId, calledAt);
+    if (!this.latest.current(ticket) || !this.rig) return null;
+    // The voices this change needs are built now, before its boundary, so the landing only swaps them in.
+    for (const _ of this.rig.stage(song, this.clips, this.kit ?? undefined, this.kitId)) { /* built */ }
+    const b = opts?.boundary ?? (onlyMuteSolo(this.laidSong, song) ? "now" : boundaryFor(this.laidSong, song));
+    return this.lander.land(b, () => this.latest.current(ticket) && !!this.rig, (land) => this.lay(song, opts?.jobId, calledAt, b, land));
   }
 
+  /** Jump to a section, on the next phrase (at once when stopped). Loops sound from the jump at their phase. */
   goto(sectionIdOrName: string): boolean {
     const s = this.sections.find((x) => x.id === sectionIdOrName || x.name.toLowerCase() === sectionIdOrName.toLowerCase());
     if (!s) return false;
-    this.transport.ticks = Math.round(s.startBeat * this.transport.PPQ);
+    this.jumpTo(s.startBeat);
     return true;
   }
 
   gotoBar(absBar: number) {
     const beat = Math.max(0, (absBar - 1) * 4);
     if (beat >= this.totalBeats) return false;
-    this.transport.ticks = Math.round(beat * this.transport.PPQ);
+    this.jumpTo(beat);
     return true;
+  }
+
+  private jumpTo(beat: number) {
+    const tr = this.transport; const target = Math.round(beat * tr.PPQ);
+    if (tr.state !== "started") { tr.ticks = target; return; }
+    const calledAt = performance.now();
+    void this.jumps.land("phrase", () => !!this.rig, (land) => {
+      if (!land) { tr.ticks = target; return { landsAtBar: Math.floor(beat / 4) + 1, landsAtTime: null }; }
+      moveClock(tr, target, land.at);
+      if (this.rig && this.laidSong) this.rig.catchUp(this.laidSong, beat, land.at);
+      recordLanding({ jobId: "goto", boundary: "phrase", calledAt, landedAt: performance.now(), landsAtBar: Math.floor(land.beat / 4) + 1, landsAtTime: land.at, beatInBar: Math.round((land.beat % 4) * 1000) / 1000, partsChanged: [], voicesRebuilt: [], notReady: [] });
+      return { landsAtBar: Math.floor(land.beat / 4) + 1, landsAtTime: land.at };
+    });
   }
 
   getBeat(): number | null {
@@ -130,17 +165,7 @@ export class Engine {
   }
 
   /** Live meters in dB (about -100 silent, 0 full) and the master spectrum (dB per bin). Null before the rig exists. */
-  getLevels(): Levels | null {
-    const r = this.rig; if (!r) return null;
-    const m = r.analysis.meter.getValue();
-    const master: [number, number] = Array.isArray(m) ? [Number(m[0]), Number(m[1] ?? m[0])] : [Number(m), Number(m)];
-    const tracks: Record<string, number> = {};
-    for (const [id, tm] of r.analysis.tracks) { const v = tm.getValue(); tracks[id] = Array.isArray(v) ? Number(v[0]) : Number(v); }
-    const pk = (a: Float32Array) => { let p = 0; for (let i = 0; i < a.length; i++) { const v = Math.abs(a[i]); if (v > p) p = v; } return p > 0 ? 20 * Math.log10(p) : -100; };
-    const w = r.analysis.wave?.getValue();
-    const peak: [number, number] = Array.isArray(w) ? [pk(w[0]), pk(w[1] ?? w[0])] : w ? [pk(w), pk(w)] : master;
-    return { master, peak, spectrum: r.analysis.fft.getValue(), tracks };
-  }
+  getLevels(): Levels | null { return this.rig ? levelsOf(this.rig.analysis) : null; }
 
   /** Dropouts and leaks, summed over every rig alive on the transport. */
   health(): EngineHealth {
@@ -189,37 +214,60 @@ export class Engine {
     this.kit = kit; this.kitId = kitId;
   }
 
-  // One pass of the record onto the rig, keeping the groove position (clamped to the new length).
-  private lay(song: Song, jobId?: string, calledAt = performance.now()) {
+  // One pass of the record onto the rig, keeping the groove position (clamped to the new length). With
+  // `land`, it is inside the boundary's callback: everything happens at that audio time.
+  private lay(song: Song, jobId: string | undefined, calledAt: number, boundary: Boundary, land?: LandAt) {
     const t0 = performance.now();
-    if (!this.rig) { this.rig = new Rig(this.transport); liveRigs.add(this.rig); if (this.talking) this.rig.board.talk(true, true); }
-    const pos = this.transport.ticks;
-    // Due now: every sound this record plays. One that is not ready is silence where it belongs.
+    if (!this.rig) { this.rig = new Rig(this.transport); liveRigs.add(this.rig); if (this.talking) this.rig.board.talk(true, true); this.rig.onFirstFire = (k, t) => this.firstFire(k, t); }
+    const tr = this.transport; const ppq = tr.PPQ;
+    // Due now: every sound this record plays. One that is not ready is held back until it arrives.
     const keys = clipKeysFor(song); const notReady = keys.filter((k) => !this.clips.has(k));
     for (const k of keys) assetDue(k, this.clips.has(k));
     if (this.kitId) assetDue(`kit:${this.kitId}`, !!this.kit);
-    const applied = this.rig.apply(song, this.clips, this.kit ?? undefined, this.kitId);
-    this.rebuilds++; this.lastRebuildMs = Math.round(performance.now() - t0);
-    const ppq = this.transport.PPQ;
-    const loop = loopBounds(song, this.sections, this.totalBeats);
+    // The loop region first, so the tick the transport processes next is read against it.
+    const spans = sectionSpans(song);
+    const loop = loopBounds(song, spans.starts, spans.total);
     const start = Math.round(loop.start * ppq), end = Math.round(Math.max(loop.start + 1, loop.end) * ppq);
-    this.transport.loop = true;
-    this.transport.loopStart = `${start}i`;
-    this.transport.loopEnd = `${end}i`;
+    // At a wrap, the transport goes on to the old loop's end tick and wraps there only if the new loop ends by then.
+    let pos = land ? Math.round(land.beat * ppq) : tr.ticks;
+    if (land?.wrapNext !== undefined) pos = land.wrapNext >= end ? start : land.wrapNext;
+    tr.loop = true; tr.loopStart = `${start}i`; tr.loopEnd = `${end}i`;
     // A shorter record or a new loop moves the playhead by whole bars, on the same beat of the bar.
     const at = wrapToBar(pos, start, end, 4 * ppq);
-    if (at !== pos) this.transport.ticks = at;
+    if (at !== pos) { if (land) moveClock(tr, at, land.at); else tr.ticks = at; }
+    const where: LandAt | undefined = land ? { at: land.at, beat: at / ppq } : undefined;
+    const applied = this.rig.apply(song, this.clips, this.kit ?? undefined, this.kitId, where);
+    if (where && at !== pos) this.rig.catchUp(song, at / ppq, where.at);
+    this.laidSong = song;
+    this.rebuilds++; this.lastRebuildMs = Math.round(performance.now() - t0);
     if (!this.watch) this.watch = window.setInterval(() => this.tellSection(), 200);
-    this.landed(jobId, calledAt, applied, notReady);
+    return this.landed(jobId, calledAt, boundary, applied, notReady, where);
   }
 
-  // Where this change is first heard: the transport's position at the moment new parts start firing
-  // (now() while playing, the playhead when stopped). Today that is wherever the playhead happens to be.
-  private landed(jobId: string | undefined, calledAt: number, applied: Applied, notReady: string[]) {
+  // Where this change is first heard: the boundary's audio time, and where that time sits on the
+  // transport's grid (measured from the transport, not assumed). At once: now() while playing, the playhead when stopped.
+  private landed(jobId: string | undefined, calledAt: number, boundary: Boundary, applied: Applied, notReady: string[], where?: LandAt) {
     const tr = this.transport; const ppq = tr.PPQ;
-    const time = tr.state === "started" ? tr.now() : null;
-    const beat = (time !== null ? tr.getTicksAtTime(time) : tr.ticks) / ppq;
-    recordLanding({ jobId, boundary: "now", calledAt, landedAt: performance.now(), landsAtBar: Math.floor(beat / 4) + 1, landsAtTime: time, beatInBar: Math.round((beat % 4) * 1000) / 1000, partsChanged: applied.partsChanged, voicesRebuilt: applied.voicesRebuilt, notReady });
+    const time = where ? where.at : tr.state === "started" ? tr.now() : null;
+    const beat = where ? where.beat : (time !== null ? tr.getTicksAtTime(time) : tr.ticks) / ppq;
+    const landsAtBar = Math.floor(beat / 4) + 1;
+    // Read back: the tick the transport maps the boundary's time to (folded into the loop when it wraps there).
+    let measured: number | null = null;
+    if (where) {
+      let t = Math.round(tr.getTicksAtTime(where.at));
+      const ls = tr.toTicks(tr.loopStart), le = tr.toTicks(tr.loopEnd);
+      if (tr.loop && t >= le - 0.5) t = ls + (t - le);
+      measured = Math.round((((t / ppq) % 4) + 4) % 4 * 1000) / 1000;
+    }
+    this.lastLanding = recordLanding({ jobId, boundary, calledAt, landedAt: performance.now(), landsAtBar, landsAtTime: time, beatInBar: Math.round((((beat % 4) + 4) % 4) * 1000) / 1000, partsChanged: applied.partsChanged, voicesRebuilt: applied.voicesRebuilt, notReady: [...notReady, ...applied.held], measuredBeatInBar: measured, firstHits: {} });
+    return { landsAtBar, landsAtTime: time };
+  }
+
+  // The first hit of a part laid anew, in beats after its landing's boundary.
+  private firstFire(key: string, time: number) {
+    const row = this.lastLanding;
+    if (!row || row.landsAtTime === null || !row.partsChanged.includes(key) || !row.firstHits || key in row.firstHits) return;
+    row.firstHits[key] = Math.round(((time - row.landsAtTime) * this.transport.bpm.getValueAtTime(time) / 60) * 1000) / 1000;
   }
 
   private tellSection() {
@@ -240,7 +288,7 @@ export class Engine {
     this.folded.events += r.health.events; this.folded.late += r.health.late;
     if (r.health.minMarginMs < this.folded.minMarginMs) this.folded.minMarginMs = r.health.minMarginMs;
     liveRigs.delete(r);
-    this.rig = null;
+    this.rig = null; this.laidSong = null;
     this.lastSection = -1;
     return r;
   }
@@ -248,3 +296,4 @@ export class Engine {
   // Before a session starts nothing is sounding, so a rig left by a load comes down at once.
   private teardown() { this.detach()?.dispose(); }
 }
+

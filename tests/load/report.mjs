@@ -24,11 +24,14 @@ export function coldMetrics(s) {
   };
 }
 
+// Content and structure land on a bar line (beat 1); a mixer move on a beat; mute and solo at once (not counted).
 export function playMetrics(s, bpm) {
   const beatMs = 60000 / (bpm || 120);
-  const lands = (s.ledger?.landings ?? []).filter((l) => l.boundary && l.jobId !== "start");
-  const off = lands.map((l) => Math.round((l.beatInBar ?? 0) * beatMs));
-  return { landings: lands.length, onBeatOne: lands.filter((l) => (l.beatInBar ?? 1) < 0.01).length, msAfterBarLine: off, late: s.ledger?.counters?.late ?? null };
+  const all = (s.ledger?.landings ?? []).filter((l) => l.boundary && l.jobId !== "start");
+  const lands = all.filter((l) => l.boundary === "bar" || l.boundary === "phrase");
+  const off = lands.map((l) => Math.round((l.measuredBeatInBar ?? l.beatInBar ?? 0) % 4 * beatMs));
+  const onOne = lands.filter((l) => { const b = l.measuredBeatInBar ?? l.beatInBar ?? 1; return Math.min(b, 4 - b) < 0.01; }).length;
+  return { landings: lands.length, onBeatOne: onOne, msAfterBarLine: off, atOnce: all.filter((l) => l.boundary === "now").length, onBeat: all.filter((l) => l.boundary === "beat").length, late: s.ledger?.counters?.late ?? null };
 }
 
 export function idleMetrics(s, t0, t1) {
@@ -61,7 +64,7 @@ export function printTable(m) {
   if (d?.swap) lines.push(row("Pad swap discontinuity", `${d.swap.ratio}x the pad's own largest step`, "no spike (1.5x at most)", g.swapClean));
   if (d?.wrap) lines.push(row("Master after the loop wrap", `${d.wrap.deltaDb} dB against the first pass`, "base (within 0.5 dB)", g.wrapAtBase));
   if (d?.snap) lines.push(row("A move during the outro fade", `${d.snap.deltaDb} dB against no move`, "no snapback (within 1 dB)", g.noSnapback));
-  if (m.play) lines.push(row("Where a change lands", `${m.play.onBeatOne} of ${m.play.landings} on beat 1; ms after the bar line ${m.play.msAfterBarLine.join(", ")}`, "beat 1, 10 of 10", m.play.landings ? m.play.onBeatOne === m.play.landings : null));
+  if (m.play) lines.push(row("Where a change lands (bar and phrase)", `${m.play.onBeatOne} of ${m.play.landings} on beat 1; ms after the bar line ${m.play.msAfterBarLine.join(", ")}; ${m.play.atOnce} at once, ${m.play.onBeat} on a beat`, "beat 1, 10 of 10", m.play.landings ? m.play.onBeatOne === m.play.landings : null));
   if (m.cold) {
     lines.push(row("Native nodes, seed (studio context)", `${m.cold.studioNodes} (peak ${m.cold.studioNodesPeak})`, "under 600", m.cold.studioNodes !== null ? m.cold.studioNodes < 600 : null));
     lines.push(row("Realtime AudioContexts", m.cold.realtimeContexts, "1", m.cold.realtimeContexts === 1));

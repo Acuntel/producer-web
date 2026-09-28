@@ -55,8 +55,8 @@ async function main() {
   console.log(`[ritual]    voice said: ${await lastLine("producer-line")}`);
 
   await type("build me a groove");
-  await waitFor(`(() => { try { return JSON.parse(localStorage.getItem('producer.song.v4')).tracks.length >= 3; } catch { return false; } })()`, 30000, "the hands to land a groove");
-  const tracks = await js(`JSON.parse(localStorage.getItem('producer.song.v4')).tracks.map((t) => t.role).join(',')`);
+  await waitFor(`(() => { try { return (window.__song ? window.__song() : JSON.parse(localStorage.getItem('producer.song.v4'))).tracks.length >= 3; } catch { return false; } })()`, 30000, "the hands to land a groove");
+  const tracks = await js(`(window.__song ? window.__song() : JSON.parse(localStorage.getItem('producer.song.v4'))).tracks.map((t) => t.role).join(',')`);
   console.log(`[ritual] 4. groove landed: ${tracks}; report: ${(await lastLine("producer-line")).slice(0, 90)}`);
 
   await type("let me hear it");
@@ -80,7 +80,10 @@ async function main() {
 
   await type("make the bass darker");
   await waitFor(`(() => { const els = [...document.querySelectorAll('[data-role="producer-line"] p')]; return els.some((e) => /Darker now/.test(e.textContent)); })()`, 30000, "the hands' report");
-  const bass = await js(`(() => { const s = JSON.parse(localStorage.getItem('producer.song.v4')); const b = s.tracks.find((t) => t.role === 'bass'); return b ? (b.transpose ?? 0) + ' / ' + (b.synth?.cutoff ?? 'default') : 'no bass'; })()`);
+  // The report streams before the reply's ops are applied: give the ops a moment to land on the record.
+  const bassNow = `(() => { const s = (window.__song ? window.__song() : JSON.parse(localStorage.getItem('producer.song.v4'))); const b = s.tracks.find((t) => t.role === 'bass'); return b ? (b.transpose ?? 0) + ' / ' + (b.synth?.cutoff ?? 'default') : 'no bass'; })()`;
+  await waitFor(`${bassNow} === "-2 / 240"`, 10000, "the darker bass ops").catch(() => null);
+  const bass = await js(bassNow);
   console.log(`[ritual] 8. darker bass: transpose / cutoff = ${bass}; cards: ${(await cards()).slice(0, 200)}`);
   assert.equal(bass, "-2 / 240", "the mock hands' ops should have applied");
   // 9. Grab: the Voice hands a cut to the studio, no Hands; with nothing pulled in yet the producer says so.
@@ -109,7 +112,7 @@ async function orderOfWork({ call, js, waitFor, type, status }) {
   await waitFor(`!!document.querySelector('[data-role="new-project"]') && !!document.querySelector('input[aria-label="Message the producer"]')`, 30000, "the landing again");
   await type("new project");
   await waitFor(`[...document.querySelectorAll('[data-role="producer-line"] p')].some((e) => /Who are we chasing/.test(e.textContent))`, 30000, "the greeting");
-  const song = async () => JSON.parse(await js(`localStorage.getItem('producer.song.v4')`));
+  const song = async () => JSON.parse(await js(`JSON.stringify(window.__song ? window.__song() : JSON.parse(localStorage.getItem('producer.song.v4')))`));
   const ritual = async () => JSON.parse(await js(`JSON.stringify(window.__ritual())`));
   const line = (re, ms, label) => waitFor(`[...document.querySelectorAll('[data-role="producer-line"] p')].map((e) => e.textContent).find((t) => ${re}.test(t)) ?? ''`, ms, label);
   // A person in the room lets the producer finish a sentence before the next one, so the harness does too.
@@ -163,7 +166,7 @@ async function orderOfWork({ call, js, waitFor, type, status }) {
 
   // 4. The beat comes to the vocal, at the source tempo.
   await say("Let's go. To the beat.");
-  await waitFor(`(() => { const s = JSON.parse(localStorage.getItem('producer.song.v4')); return ['kick', 'clap', 'hat', 'bass'].every((id) => s.tracks.some((t) => t.id === id)); })()`, 30000, "the beat");
+  await waitFor(`(() => { const s = (window.__song ? window.__song() : JSON.parse(localStorage.getItem('producer.song.v4'))); return ['kick', 'clap', 'hat', 'bass'].every((id) => s.tracks.some((t) => t.id === id)); })()`, 30000, "the beat");
   const s4 = await song(); const r4 = await ritual();
   console.log(`[ritual] O4. beat: ${s4.tracks.map((t) => t.id).join(", ")} at ${s4.bpm} BPM, transport ${r4.transportBpm}, source ${r4.source.bpm}, soloed ${s4.tracks.filter((t) => t.solo).length}`);
   assert.equal(s4.bpm, r4.source.bpm, "the beat is at the source tempo"); assert.equal(r4.transportBpm, 128); assert.ok(s4.tracks.every((t) => !t.solo));

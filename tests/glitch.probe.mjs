@@ -38,7 +38,7 @@ await waitFor(`/playing/.test(document.querySelector('[data-role="status"]')?.in
 await js(`(() => {
   window.__lt = []; new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__lt.push({ d: Math.round(e.duration), t: Math.round(e.startTime) }); }).observe({ entryTypes: ["longtask"] });
   const P = Object.getPrototypeOf(window.__engine()); const orig = P.update; window.__updates = [];
-  P.update = async function (s) { const t0 = performance.now(); await orig.call(this, s); window.__updates.push(Math.round(performance.now() - t0)); };
+  P.update = async function (...a) { const t0 = performance.now(); const r = await orig.apply(this, a); window.__updates.push(Math.round(performance.now() - t0)); return r; };
   return true; })()`);
 const health = async () => JSON.parse(await js(`JSON.stringify(window.__audio())`));
 const longTasks = async () => JSON.parse(await js(`JSON.stringify(window.__lt.splice(0))`));
@@ -50,7 +50,8 @@ const line = (label, h0, h1, lt, ups) => {
   if (worst.length) console.log(`[glitch]   worst blocks: ${worst.join(", ")} (page time)`);
 };
 
-const song = JSON.parse(await js(`localStorage.getItem('producer.song.v4')`));
+// The record on the stage (the seed is only written to this device once a change is committed).
+const song = JSON.parse(await js(`JSON.stringify(window.__song ? window.__song() : JSON.parse(localStorage.getItem('producer.song.v4')))`));
 console.log(`[glitch] record: ${song.title}, ${song.bpm} BPM, ${song.tracks.length} tracks, ${song.sections.length} sections`);
 // 1. Untouched: eight seconds of playback with nothing changing, with the profiler on it so a
 // block is named rather than guessed at.

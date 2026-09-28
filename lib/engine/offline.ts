@@ -45,7 +45,9 @@ export async function renderInSteps(secs: number, channels: number, sampleRate: 
   const block = 128 / ctx.sampleRate;
   t0 = performance.now();
   while (clock._duration - clock._currentTime >= 0) {
-    clock.emit("tick");
+    // The render's own callbacks run with its context global, like every build step: a node a callback
+    // makes (a drum hit's source, a new voice of a PolySynth) belongs to the render, never to the room.
+    inside(() => clock.emit("tick"));
     clock._currentTime += block;
     if (performance.now() - t0 > SLICE_MS) { await yieldThread(); t0 = performance.now(); }
   }
