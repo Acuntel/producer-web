@@ -45,6 +45,19 @@ const addSpend = (g) => {
 };
 
 async function runCold() {
+  // --repeat N: N more cold loads, each in a fresh Chrome, so "every key decodes exactly once" is 10 of 10.
+  const repeat = Number(opt("repeat", "0"));
+  if (repeat > 0) {
+    const all = [];
+    for (let i = 0; i < repeat; i++) {
+      const { p, g } = await page(`cold${i}`);
+      const a = await cold(p, g, `${BASE}/?e2e=1&mock=1`, AFTER); const m = coldMetrics(a); all.push(m);
+      log(`cold ${i + 1}/${repeat}: decodes/key ${m.maxDecodesPerKey}, press to transport ${m.pressToTransportMs} ms, ${m.order}, contexts ${m.realtimeContexts}, late ${m.late}`);
+      addSpend(g); p.close();
+    }
+    metrics.coldRepeat = { runs: all.length, maxDecodesPerKey: Math.max(...all.map((m) => m.maxDecodesPerKey ?? 99)), onceEach: all.filter((m) => m.maxDecodesPerKey === 1).length, orders: all.map((m) => m.order), pressToTransportMs: all.map((m) => m.pressToTransportMs), contexts: all.map((m) => m.realtimeContexts) };
+    results.runs.coldRepeat = all; save();
+  }
   const { p, g } = await page("cold");
   const a = await cold(p, g, `${BASE}/?e2e=1&mock=1`, AFTER);
   results.runs.cold = a; metrics.cold = coldMetrics(a); log(`cold: ${JSON.stringify(metrics.cold)}`);

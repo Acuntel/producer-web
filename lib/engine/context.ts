@@ -2,15 +2,20 @@
 // buffer, and on a busy laptop that is what crackles: the audio thread misses a 3 ms deadline and the
 // device plays a hole. A playback-sized buffer rides out a busy audio thread, and a 0.2 s lookahead rides
 // out a busy main thread. A spoken change landing 0.2 s later is not heard as late; a crackle is.
+// The context itself is the studio's one native context (lib/audio/studio.ts, 44.1 kHz by default), shared
+// with the producer's voice and the mic. The one Tone made when it was imported is disposed here, so only
+// the studio's context stays open.
 import * as Tone from "tone";
+import { studioContext } from "../audio/studio";
 
 let ready = false;
 
-/** Make the playback context the global one, once, before any node or transport exists. Browser only. */
+/** Make the studio's context Tone's global one, once, before any node or transport exists. Browser only. */
 export function ensureStudioContext(): void {
   if (ready || typeof window === "undefined") return;
   ready = true;
-  Tone.setContext(new Tone.Context({ latencyHint: "playback", lookAhead: 0.2 }));
+  // Tone accepts a native context (its worklet nodes take the native constructor for one).
+  Tone.setContext(new Tone.Context({ context: studioContext() as never, latencyHint: "playback", lookAhead: 0.2 }), true);
 }
 
 // The reverb's impulse: decaying stereo noise, darkened as it rings (the old Freeverb's damping at 2.8 kHz),

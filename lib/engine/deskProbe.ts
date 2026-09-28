@@ -7,7 +7,7 @@ import { SEED_SONG, SEED_TECH_HOUSE, SEED_HARD_HOUSE } from "../song/seeds";
 import { Rig } from "./rig";
 import { renderReplica, type ReplicaAction } from "./replica";
 import { scheduleEvents, loopBounds } from "./schedule";
-import { getKit, kitStyleFor } from "./kits";
+import { getKit, kitIdFor } from "./kits";
 import { loadClipsFor, clipKeysFor } from "./clips";
 import { ensureStudioContext } from "./context";
 import * as M from "./deskMetrics";
@@ -26,7 +26,7 @@ type Scene = { song: Song; secs: number; startBeat?: number; loop?: boolean; mov
 async function play(sc: Scene): Promise<{ chs: Float32Array[]; tap: Float32Array[]; beatSec: number }> {
   ensureStudioContext();
   const kit = await getKit(sc.song.lane, sc.song.kit, sc.song.bpm);
-  const kitId = `${sc.song.kit ?? "synth"}|${kitStyleFor(sc.song.lane, sc.song.bpm)}`;
+  const kitId = kitIdFor(sc.song.lane, sc.song.kit, sc.song.bpm);
   const clips = await loadClipsFor(clipKeysFor(sc.song), "desk");
   let rig: Rig | null = null;
   const moves: ReplicaAction[] = (sc.moves ?? []).map((m) => ({ at: m.at, run: () => { rig?.apply(m.song, clips, kit, kitId); } }));

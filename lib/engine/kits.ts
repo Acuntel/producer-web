@@ -4,6 +4,7 @@
 // cheap to render, bright where records are bright.
 import { laneHomeBpm } from "../brain/laneNames";
 import { assetRequested, assetDecoded, assetReady } from "./ledger";
+import { kitKey } from "./keys";
 
 export type KitStyle = "tech-house" | "hard-house";
 export type KitSound = "kick" | "clap" | "snare" | "hat" | "openhat" | "perc";
@@ -20,18 +21,25 @@ export function kitStyleFor(lane: string, bpm?: number): KitStyle {
   return tempo >= 136 ? "hard-house" : "tech-house";
 }
 
+/** The id a record's kit goes by in the rig and the ledger: `<kit>|<style>|v<n>`. */
+export const kitIdFor = (lane: string, kit?: string, bpm?: number) => kitKey(kit && kit !== "synth" ? kit : "synth", kitStyleFor(lane, bpm)).slice(4);
+
 // The kit a song plays: `kit` undefined or "synth" = the synthesized kit for the lane;
 // anything else names a library kit (or a lane) from public/samples, sound by sound
-// falling back to the synthesized kit. A failed library load never blocks playback.
+// falling back to the synthesized kit. A failed library load never blocks playback, and a sound that
+// failed to load is never kept as a fallback: the next ask tries the library again.
 export function getKit(lane: string, kit?: string, bpm?: number): Promise<Kit> {
   const style = kitStyleFor(lane, bpm);
   if (!kit || kit === "synth") return synthKit(style);
-  const key = `${kit}|${style}`;
+  const key = kitKey(kit, style);
   let p = sampled.get(key);
   if (!p) {
-    assetRequested(`kit:${key}`, "kit");
-    p = import("./samples").then((m) => m.sampleKit(kit, style)).then((r) => { assetReady(`kit:${key}`, "http"); return r.kit; }).catch(() => { sampled.delete(key); return synthKit(style); });
-    sampled.set(key, p);
+    assetRequested(key, "kit");
+    const made: Promise<Kit> = import("./samples").then((m) => m.sampleKit(kit, style)).then((r) => {
+      if (r.failed.length) sampled.delete(key); else assetReady(key, "http");
+      return r.kit;
+    }).catch(() => { sampled.delete(key); return synthKit(style); });
+    p = made; sampled.set(key, p);
   }
   return p;
 }
@@ -40,7 +48,7 @@ export function synthKit(style: KitStyle): Promise<Kit> {
   const key = style === "hard-house" ? "hard-house" : "tech-house";
   let p = cache.get(key);
   if (!p) {
-    const id = `kit:synth|${key}`;
+    const id = kitKey("synth", key);
     assetRequested(id, "kit");
     p = renderKit(key).then((k) => { assetDecoded(id); assetReady(id, "render"); return k; });
     cache.set(key, p);
@@ -48,23 +56,35 @@ export function synthKit(style: KitStyle): Promise<Kit> {
   return p;
 }
 
+// The kit's noise comes from a seed of its own (the kit and the sound), so a hat or a clap is the same
+// sound on every reload and in every render. It was Math.random, a new hat each time.
+let rng: () => number = Math.random;
+function seeded(label: string): () => number {
+  let h = 2166136261; for (let i = 0; i < label.length; i++) h = Math.imul(h ^ label.charCodeAt(i), 16777619);
+  let a = h >>> 0;
+  return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+
 async function renderKit(style: "tech-house" | "hard-house"): Promise<Kit> {
   const hard = style === "hard-house";
+  const seed = (sound: string) => `synth|${style}|${sound}`;
   const [kick, clap, snare, hat, openhat, perc] = await Promise.all([
-    render(0.6, (ctx, out) => kickVoice(ctx, out, hard)),
-    render(0.45, (ctx, out) => clapVoice(ctx, out)),
-    render(0.3, (ctx, out) => snareVoice(ctx, out)),
-    render(0.12, (ctx, out) => hatVoice(ctx, out, 0.055)),
-    render(0.5, (ctx, out) => hatVoice(ctx, out, 0.32)),
-    render(0.15, (ctx, out) => percVoice(ctx, out)),
+    render(0.6, seed("kick"), (ctx, out) => kickVoice(ctx, out, hard)),
+    render(0.45, seed("clap"), (ctx, out) => clapVoice(ctx, out)),
+    render(0.3, seed("snare"), (ctx, out) => snareVoice(ctx, out)),
+    render(0.12, seed("hat"), (ctx, out) => hatVoice(ctx, out, 0.055)),
+    render(0.5, seed("openhat"), (ctx, out) => hatVoice(ctx, out, 0.32)),
+    render(0.15, seed("perc"), (ctx, out) => percVoice(ctx, out)),
   ]);
   return { kick, clap, snare, hat, openhat, perc };
 }
 
-async function render(secs: number, build: (ctx: OfflineAudioContext, out: AudioNode) => void): Promise<AudioBuffer> {
+async function render(secs: number, seed: string, build: (ctx: OfflineAudioContext, out: AudioNode) => void): Promise<AudioBuffer> {
   const ctx = new OfflineAudioContext(1, Math.ceil(secs * SR), SR);
   const out = ctx.createGain(); out.connect(ctx.destination);
-  build(ctx, out);
+  // The build is synchronous, so the seeded stream is this sound's alone while it runs.
+  rng = seeded(seed);
+  try { build(ctx, out); } finally { rng = Math.random; }
   const buf = await ctx.startRendering();
   // Normalize to -1 dBFS peak so every kit sound arrives at a known level.
   const d = buf.getChannelData(0);
@@ -84,7 +104,7 @@ function noise(ctx: OfflineAudioContext, secs: number, color: "white" | "pink" =
   const d = b.getChannelData(0);
   let b0 = 0, b1 = 0, b2 = 0;
   for (let i = 0; i < d.length; i++) {
-    const w = Math.random() * 2 - 1;
+    const w = rng() * 2 - 1;
     if (color === "white") d[i] = w;
     else { b0 = 0.99765 * b0 + w * 0.099046; b1 = 0.963 * b1 + w * 0.2965164; b2 = 0.57 * b2 + w * 1.0526913; d[i] = (b0 + b1 + b2 + w * 0.1848) * 0.25; }
   }

@@ -30,15 +30,18 @@ export async function guard(page) {
     if (msg.method === "Network.requestWillBeSent") net.set(p.requestId, { url: p.request.url, method: p.request.method, t: p.timestamp });
     if (msg.method === "Network.responseReceived") {
       const r = net.get(p.requestId); if (!r) return;
-      const path = new URL(r.url).pathname; r.status = p.response.status; r.fromCache = !!p.response.fromDiskCache;
+      const path = new URL(r.url).pathname; r.status = p.response.status; r.fromCache = !!p.response.fromDiskCache || !!p.response.fromMemoryCache || !!p.response.fromPrefetchCache;
       if (MODEL.test(path) && r.method !== "GET" && r.status < 500) {
         const h = Object.fromEntries(Object.entries(p.response.headers ?? {}).map(([k, v]) => [k.toLowerCase(), v]));
         bump(h["x-producer-mock"] === "1" ? spend.mocked : spend.paid, path);
       }
     }
     if (msg.method === "Network.loadingFinished") { const r = net.get(p.requestId); if (r) r.bytes = p.encodedDataLength; }
+    if (msg.method === "Network.requestServedFromCache") { const r = net.get(p.requestId); if (r) r.fromCache = true; }
     if (msg.method === "WebAudio.contextCreated") audio.contexts.set(p.context.contextId, { type: p.context.contextType, sr: p.context.sampleRate, alive: true, nodes: 0, peak: 0 });
     if (msg.method === "WebAudio.contextWillBeDestroyed") { const c = audio.contexts.get(p.contextId); if (c) c.alive = false; }
+    // A closed context (Tone's own, disposed when the studio's is installed) is no longer open.
+    if (msg.method === "WebAudio.contextChanged") { const c = audio.contexts.get(p.context.contextId); if (c) { c.state = p.context.contextState; if (c.state === "closed") c.alive = false; } }
     if (msg.method === "WebAudio.audioNodeCreated") { const c = audio.contexts.get(p.node.contextId); if (c) { c.nodes++; c.peak = Math.max(c.peak, c.nodes); } audio.nodes.set(p.node.nodeId, p.node.contextId); }
     if (msg.method === "WebAudio.audioNodeWillBeDestroyed") { const cid = audio.nodes.get(p.nodeId) ?? p.contextId; const c = audio.contexts.get(cid); if (c) c.nodes--; audio.nodes.delete(p.nodeId); }
   });

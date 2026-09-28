@@ -19,6 +19,8 @@ export function coldMetrics(s) {
     realtimeContexts: s.realtime.length, studioNodes: studio?.nodes ?? null, studioNodesPeak: studio?.peak ?? null, renderCapacity: s.capacity,
     late: s.ledger?.counters?.late ?? null, lateStarts: s.load?.late ?? null, dueBeforeReady: (s.ledger?.dueBeforeReady ?? []).length,
     playback: s.ledger?.counters?.playback ?? null,
+    samplesBytes: (s.samples ?? []).reduce((a, r) => a + (r.fromCache ? 0 : r.bytes || 0), 0), samplesRequests: (s.samples ?? []).length,
+    samplesFromCache: (s.samples ?? []).filter((r) => r.fromCache).length,
   };
 }
 
@@ -67,6 +69,8 @@ export function printTable(m) {
     lines.push(row("Greeting vs record order (cold)", m.cold.order, "identical 10 of 10", null));
     lines.push(row("Late notes (rig counter)", m.cold.late, "0", m.cold.late === 0));
   }
+  if (m.coldRepeat) lines.push(row("Cold loads with every key decoded once", `${m.coldRepeat.onceEach} of ${m.coldRepeat.runs}`, "all of them", m.coldRepeat.onceEach === m.coldRepeat.runs));
+  if (m.warm) lines.push(row("Warm reload bytes for /samples", `${m.warm.samplesBytes} B over ${m.warm.samplesRequests} requests (${m.warm.samplesFromCache} from cache)`, "0", m.warm.samplesBytes === 0));
   if (m.reload) lines.push(row("Press to transport, reopened sample-kit record", `${m.reload.pressToTransportMs} ms`, "under 300 ms", m.reload.pressToTransportMs !== null ? m.reload.pressToTransportMs < 300 : null));
   if (m.spend) lines.push(row("Paid calls in this mock run", `${m.spendPaid} (mocked ${JSON.stringify(m.spend.mocked)}, voice stubbed ${m.spend.speakStubbed}, blocked ${JSON.stringify(m.spend.blocked)})`, "0", m.spendPaid === 0));
   console.log(lines.join("\n"));

@@ -5,7 +5,8 @@ import type { Song } from "../song/types";
 import { Rig, type Clips, type Health, type Applied } from "./rig";
 import { locate, loopBounds, type SectionSpan, type Schedule } from "./schedule";
 import { loadClipsFor, clipKeysFor } from "./clips";
-import { getKit, kitStyleFor, type Kit } from "./kits";
+import { getKit, kitIdFor, type Kit } from "./kits";
+import { onAsset, pin } from "./assets";
 import { Latest, wrapToBar } from "./steady";
 import { ensureStudioContext } from "./context";
 import { ledgerSources, recordLanding, assetDue } from "./ledger";
@@ -24,7 +25,7 @@ const STOP_FADE_SEC = 0.04;   // stop fades the desk down this long before the r
 /** Decode the clips a record names and render its drum kit, before anyone presses anything. Both land in
  *  the caches the engine reads, so the first press finds them ready. Safe to call as often as you like. */
 export async function warmFor(song: Song): Promise<void> {
-  await Promise.all([getKit(song.lane, song.kit, song.bpm), loadClipsFor(clipKeysFor(song), "warm")]);
+  await Promise.all([getKit(song.lane, song.kit, song.bpm), loadClipsFor(clipKeysFor(song), "warm", "T0")]);
 }
 
 export class Engine {
@@ -48,6 +49,17 @@ export class Engine {
   constructor() {
     ensureStudioContext();
     ledgerSources({ health: () => this.health(), context: () => Tone.getContext().rawContext });
+    // A sound the record names arrives (a restore, a cut, a late decode): the record is laid again and
+    // only the tracks that play it change. A new sound under the same key replaces the old one.
+    onAsset((e) => this.arrived(e.key, e.type === "clip-replaced"));
+  }
+
+  private arrived(key: string, replaced: boolean) {
+    const song = this.latest.newest;
+    if (!song || !this.rig || !clipKeysFor(song).includes(key)) return;
+    if (this.clips.has(key) && !replaced) return;
+    this.clips.delete(key);
+    void this.update(song, { jobId: `arrived:${key}` });
   }
 
   private get transport() { return Tone.getTransport(); }
@@ -165,9 +177,10 @@ export class Engine {
   // older load finishing late cannot take away what the newer record is about to play.
   private async prepare(song: Song, ticket: number) {
     const ids = clipKeysFor(song);
+    pin(ids);
     const missing = ids.filter((id) => !this.clips.has(id));
-    if (missing.length) { const loaded = await loadClipsFor(missing, "prepare"); for (const [k, v] of loaded) this.clips.set(k, v); }
-    const kitId = `${song.kit ?? "synth"}|${kitStyleFor(song.lane, song.bpm)}`;
+    if (missing.length) { const loaded = await loadClipsFor(missing, "prepare", "T1"); for (const [k, v] of loaded) this.clips.set(k, v); }
+    const kitId = kitIdFor(song.lane, song.kit, song.bpm);
     const kit = kitId !== this.kitId || !this.kit ? await getKit(song.lane, song.kit, song.bpm) : this.kit;
     if (!this.latest.current(ticket)) return;
     // Only what this record references is held here; a voice still playing an old clip keeps its own reference.

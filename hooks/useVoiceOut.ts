@@ -4,6 +4,7 @@
 // bytes arrive, so speech starts as soon as the first sentence closes. The next
 // sentence is fetched while the current one plays. stop() is barge-in.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { studioContext } from "@/lib/audio/studio";
 
 const RATE = 24000;
 type Deps = { duck?: (on: boolean) => void; playing?: () => boolean };
@@ -37,7 +38,8 @@ export function useVoiceOut(d: Deps = {}) {
   // (-6 dB) and a limiter at -8 dBFS: together they never reach full scale, where the sum used to clip.
   // A playback-sized buffer, like the desk, so the voice does not crackle when the laptop is busy.
   const outRef = useRef<AudioNode | null>(null);
-  const ctx = () => { if (!ctxRef.current) ctxRef.current = new AudioContext({ latencyHint: "playback" }); if (ctxRef.current.state === "suspended") void ctxRef.current.resume().catch(() => {}); return ctxRef.current; };
+  // The studio's own context (lib/audio/studio.ts): one clock and one device buffer for the voice and the record.
+  const ctx = () => { if (!ctxRef.current) ctxRef.current = studioContext(); if (ctxRef.current.state === "suspended") void ctxRef.current.resume().catch(() => {}); return ctxRef.current; };
   const bus = (c: AudioContext) => {
     if (outRef.current) return outRef.current;
     const g = c.createGain(); g.gain.value = 0.5;
@@ -163,7 +165,7 @@ export function useVoiceOut(d: Deps = {}) {
     if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
   }, []);
 
-  useEffect(() => () => { stop(); void ctxRef.current?.close().catch(() => {}); }, [stop]);
+  useEffect(() => () => { stop(); }, [stop]);   // the context is the studio's and outlives this hook
 
   return { speak, stop, speaking, current, warm: () => { ctx(); } };
 }

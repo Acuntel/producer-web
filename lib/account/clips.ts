@@ -4,7 +4,7 @@
 // registered here by the same key the song carries, so the record can always be made whole again.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Song } from "@/lib/song/types";
-import { clipKeysFor } from "@/lib/engine";
+import { clipKeysFor } from "@/lib/engine/keys";
 import { staysOnDevice } from "@/lib/sources/splice";
 
 export type ClipRow = { id: string; clip_key: string; name: string; storage_path: string; mime: string | null; duration_sec: number | null; bpm: number | null; key: string | null; bytes: number | null };

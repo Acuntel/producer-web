@@ -12,6 +12,7 @@ const SPEND_TARGET = 5;   // dollars per record at list prices; the masterprompt
 import { movesFromOps, type LaneMove } from "@/lib/song/moves";
 import { stripWake, quickGate, classify } from "@/lib/brain/attend";
 import type { Engine, Position } from "@/lib/engine";
+import { clipKeysFor } from "@/lib/engine/keys";
 import type { MusicFacts } from "@/lib/ears";
 import { logMove, attachWindow, tasteSummary, logPair } from "@/lib/taste";
 import { logMoveScore, referenceDelta, scoreLine } from "@/lib/scorecard";
@@ -94,10 +95,11 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const verifyingRef = useRef(false);
   useEffect(() => { songRef.current = song; }, [song]); useEffect(() => { messagesRef.current = messages; }, [messages]); useEffect(() => { pausedRef.current = paused; }, [paused]);
 
+  const savedRef = useRef(false);   // a saved record replaces the seed on mount: the seed is never warmed for it
   useEffect(() => {
     try {
       const s = migrateSong(JSON.parse(localStorage.getItem(SONG_KEY) ?? "null"));
-      if (s) setSongState(s);
+      if (s) { savedRef.current = true; setSongState(s); }
       const m = localStorage.getItem(CHAT_KEY); if (m) setMessages(JSON.parse(m));
       const r = localStorage.getItem(REF_KEY); if (r) { const ref = JSON.parse(r); setReference(ref); referenceRef.current = ref; }
     } catch {}
@@ -232,8 +234,15 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     // Where a listen spends its time, so a stutter is traced and not guessed at.
     void import("@/lib/engine").then((m) => { (window as unknown as { __ears?: () => unknown }).__ears = () => m.hearTiming; });
   }, [getLevels]);
-  // The kit, the seed's clips and the voice route all warm while the landing is up, so the press has nothing left to wait for.
-  useEffect(() => { void import("@/lib/engine").then((m) => m.warmFor(songRef.current)).catch(() => {}); void fetch("/api/speak").catch(() => {}); }, []);
+  // The kit and the first section's clips warm while the landing is up, keyed on the record that is
+  // committed (its id, kit and sounds), never on a ref that may still hold the seed. The voice route warms once.
+  const warmKey = `${song.id ?? song.title}|${song.kit ?? "synth"}|${song.lane}|${song.bpm}|${clipKeysFor(song).join(",")}`;
+  useEffect(() => {
+    if (savedRef.current && song === SEED_SONG) return;
+    const s = song; void import("@/lib/engine").then((m) => m.warmFor(s)).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [warmKey]);
+  useEffect(() => { void fetch("/api/speak").catch(() => {}); }, []);
   const setVolume = useCallback(async (id: string, db: number, commit: boolean) => {
     const res = applyOps(songRef.current, [{ op: "set", track: id, path: "volume", value: db }]);
     if (!res.applied) return;
