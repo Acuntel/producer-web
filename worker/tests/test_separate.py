@@ -3,7 +3,7 @@ import os
 import numpy as np
 import soundfile as sf
 import pytest
-import analysis, hearing, jobs, roformer, separate, supa
+import analysis, hearing, jobs, roformer, separate, supa, vocalpass
 from models import Job, Source
 
 SR = 44100
@@ -50,8 +50,14 @@ def test_the_stems_job_uploads_the_voice_before_anything_else(tmp_path, fake_mod
     monkeypatch.setattr(supa, "upload", lambda path, file, mime: uploads.append((path, mime)) or path)
     monkeypatch.setattr(supa, "update_job", lambda job_id, **f: updates.append(f))
     monkeypatch.setattr(supa, "insert_clips", lambda rows: [{"storage_path": r["storage_path"], "id": str(i)} for i, r in enumerate(rows)])
-    monkeypatch.setattr(hearing, "hear", lambda wav, stems, facts: {"report": "", "embeddings": {}})
+    heard_with = []
+    monkeypatch.setattr(hearing, "hear", lambda wav, stems, facts, lyrics=None: heard_with.append(lyrics) or {"report": "", "embeddings": {}})
     monkeypatch.setattr(hearing, "clap_embed", lambda y, sr: np.zeros(4))
+    vmap = {"version": 1, "source": {"bpm": 120, "beatSec": 0.5, "downbeats": []}, "words": {"language": "en"}, "sections": [], "hook": 0,
+            "phrases": [{"id": 0, "start": 1.0, "end": 2.0, "stressOnset": 1.0, "text": "la la", "hookScore": 0.5}]}
+    built = []
+    monkeypatch.setattr(vocalpass.vocalmap, "build", lambda v, m, f: built.append(v) or vmap)
+    monkeypatch.setattr(supa, "upsert", lambda table, rows, on: True)
     wav = tone_mix(str(tmp_path / "src.wav"), 20.0)
     facts = analysis.analyze(wav); facts["name"] = "test"
     job = Job(job_id="j1", owner="u1", source=Source(query="x"))
@@ -60,5 +66,26 @@ def test_the_stems_job_uploads_the_voice_before_anything_else(tmp_path, fake_mod
     assert names[0] == "preview-vocals.flac"
     assert names.index("vocals.flac") < min(names.index(n) for n in names if n in ("drums.mp3", "bass.mp3", "other.mp3"))
     assert dict(uploads)["u1/stems/j1/vocals.flac"] == "audio/flac"
+    assert dict(uploads)["u1/stems/j1/vocal-map.json"] == "application/json"
     assert {s["stem"] for s in final["stems"]} >= {"vocals", "drums", "bass", "other"}
     assert final["separator"] == "kim-mel-band-roformer"
+    assert built and built[0].endswith("vocals.flac"), "the vocal map is made from the lossless vocal"
+    assert final["vocalMap"] is vmap and heard_with[0]["lines"] == [{"at": 1.0, "text": "la la"}], "the ears reuse the map's words"
+    assert final["vocalRows"]["phrases"] == 1 and final["vocalRows"]["written"]
+
+
+def test_a_learn_job_keeps_numbers_and_uploads_nothing(tmp_path, fake_model, monkeypatch):
+    uploads, clips = [], []
+    monkeypatch.setattr(supa, "upload", lambda path, file, mime: uploads.append(path) or path)
+    monkeypatch.setattr(supa, "update_job", lambda job_id, **f: None)
+    monkeypatch.setattr(supa, "insert_clips", lambda rows: clips.extend(rows) or [])
+    monkeypatch.setattr(supa, "upsert", lambda table, rows, on: True)
+    monkeypatch.setattr(hearing, "hear", lambda wav, stems, facts, lyrics=None: {"report": "heard", "embeddings": {}})
+    monkeypatch.setattr(vocalpass.vocalmap, "build", lambda v, m, f: {"version": 1, "source": {"bpm": 120, "beatSec": 0.5}, "sections": [], "phrases": [], "hook": None})
+    wav = tone_mix(str(tmp_path / "src.wav"), 20.0)
+    facts = analysis.analyze(wav); facts["name"] = "test"
+    job = Job(job_id="j2", owner="u1", source=Source(query="x", learn=True, family="house"))
+    final = jobs.separate_and_publish(job, str(tmp_path), wav, "test", facts, None, {}, lambda k: None, {})
+    assert uploads == [] and clips == [], "a learn job uploads no audio and registers no clip"
+    assert final["learn"] and final["stems"] == [] and final["oneshots"] == [] and final["hearing"]["report"] == "heard"
+    assert final["vocalMap"]["version"] == 1 and final["vocalRows"]["family"] == "house"

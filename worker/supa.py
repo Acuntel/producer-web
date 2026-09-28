@@ -111,16 +111,39 @@ def cache_find(raw_fp: list[int], duration: float) -> dict | None:
     return None
 
 
-def cache_put(key: str, raw_fp: list[int], duration: float, owner: str, base_path: str, result: dict, source_url: str | None = None, identity: str | None = None) -> None:
-    # Copy the finished files to the shared area so any user can read them, then record the result.
-    shared = f"shared/records/{key}"
-    for kind, items in (("stems", result.get("stems") or []), ("oneshots", result.get("oneshots") or [])):
-        for it in items:
-            src = it["path"]; dst = f"{shared}/{os.path.basename(src)}"
-            rr = requests.post(f"{URL}/storage/v1/object/copy", headers=_h({"Content-Type": "application/json"}), data=json.dumps({"bucketId": BUCKET, "sourceKey": src, "destinationKey": dst}), timeout=60)
-            if rr.ok: it["path"] = dst
-    body = {"fingerprint": key, "base_path": shared, "raw": raw_fp, "duration_sec": round(duration, 2), "result": {k: v for k, v in result.items() if k in ("facts", "stems", "oneshots", "hearing", "name")}, "first_owner": owner, "source_urls": [source_url] if source_url else [], "identity": identity or None}
+NUMBERS = ("facts", "hearing", "vocalMap", "name", "identity", "separator")
+
+
+def numbers_of(result: dict | None) -> dict:
+    """What the shared cache may hold of a result: the numbers, never a path to audio (docs/MASTERPROMPT_PRODUCER.md
+    section 7). A row written before the cache went numbers-only still names stems under shared/records/; they are
+    dropped here, so no job ever hands one user's pulled audio to another."""
+    return {k: v for k, v in (result or {}).items() if k in NUMBERS}
+
+
+def cache_put(key: str, raw_fp: list[int], duration: float, owner: str, result: dict, source_url: str | None = None, identity: str | None = None) -> None:
+    """Record what the worker understood about a record (facts, hearing, vocal map), keyed by its fingerprint, so the
+    next ask for it gets the numbers at once. No audio is copied anywhere: the stems stay under the owner's own path.
+    base_path is empty because nothing shared lives at a path any more."""
+    body = {"fingerprint": key, "base_path": "", "raw": raw_fp, "duration_sec": round(duration, 2), "result": numbers_of(result), "first_owner": owner, "source_urls": [source_url] if source_url else [], "identity": identity or None}
     requests.post(f"{URL}/rest/v1/record_cache", headers=_h({"Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal"}), data=json.dumps(body), timeout=30)
+
+
+def cache_refresh(key: str, result: dict) -> None:
+    """A cached record's numbers replaced by a newer pass's (a row that predates the vocal map). The row's result
+    then names no audio at all; the objects it used to name stay in storage until Brady decides (SOURCES_AUDIT)."""
+    requests.patch(f"{URL}/rest/v1/record_cache?fingerprint=eq.{key}", headers=_h({"Content-Type": "application/json", "Prefer": "return=minimal"}), data=json.dumps({"result": numbers_of(result), "base_path": ""}), timeout=30)
+
+
+def upsert(table: str, rows: list[dict], on_conflict: str) -> bool:
+    """Rows into a DNA table, merged on its key. A table that does not exist yet (a migration not applied) is a
+    printed line, never a failed job."""
+    if not rows or not URL: return False
+    keys = sorted({k for r in rows for k in r})
+    rows = [{k: r.get(k) for k in keys} for r in rows]
+    r = requests.post(f"{URL}/rest/v1/{table}?on_conflict={on_conflict}", headers=_h({"Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal"}), data=json.dumps(rows), timeout=30)
+    if not r.ok: print(f"upsert {table} failed", r.status_code, r.text[:200], flush=True)
+    return r.ok
 
 
 def cache_add_url(key: str, url: str) -> None:
@@ -129,19 +152,3 @@ def cache_add_url(key: str, url: str) -> None:
     if not r.ok or not r.json(): return
     urls = list(dict.fromkeys((r.json()[0].get("source_urls") or []) + [url]))[:20]
     requests.patch(f"{URL}/rest/v1/record_cache?fingerprint=eq.{key}", headers=_h({"Content-Type": "application/json", "Prefer": "return=minimal"}), data=json.dumps({"source_urls": urls}), timeout=10)
-
-
-def adopt_cached(owner: str, project_id: str | None, name: str, cached: dict) -> dict:
-    """Register the shared files as this user's clips (rows only; the files stay shared)."""
-    res = dict(cached.get("result") or {})
-    rows = []
-    facts = res.get("facts") or {}
-    for it in res.get("stems") or []:
-        rows.append({"owner": owner, "project_id": project_id, "name": f"{name} · {it['stem']}", "storage_path": it["path"], "mime": "audio/mpeg", "duration_sec": facts.get("durationSec"), "bpm": facts.get("bpm"), "key": facts.get("key"), "source": {"kind": "stem", "stem": it["stem"], "from": name, "cached": True}})
-    for it in res.get("oneshots") or []:
-        rows.append({"owner": owner, "project_id": project_id, "name": f"{name} · {it['role']}", "storage_path": it["path"], "mime": "audio/wav", "duration_sec": it.get("durationSec"), "source": {"kind": "oneshot", "role": it.get("role"), "from": name, "fundamentalHz": it.get("fundamentalHz"), "centroidHz": it.get("centroidHz"), "embedding": it.get("embedding"), "cached": True}})
-    clips = insert_clips(rows) if rows else []
-    by_path = {c["storage_path"]: c["id"] for c in clips}
-    for it in res.get("stems") or []: it["clipId"] = by_path.get(it["path"])
-    for it in res.get("oneshots") or []: it["clipId"] = by_path.get(it["path"])
-    return res
