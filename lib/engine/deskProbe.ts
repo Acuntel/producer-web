@@ -13,6 +13,8 @@ import { ensureStudioContext } from "./context";
 import * as M from "./deskMetrics";
 import { CHOKE_SEC } from "./hits";
 import { PRESCALE } from "./ceiling";
+import { TrackMeter } from "./meters";
+import { LightChorus, Drive } from "./fx";
 
 const SR = 44100;
 const START = 0.2;   // Engine.start starts the transport at now(), one lookahead after the press
@@ -189,4 +191,31 @@ export async function deskProbe(scenes: string[] = [...DESK_SCENES], which: Song
     noSnapback: res.snap ? Math.abs(res.snap.deltaDb) <= 1 : null,
   };
   return { ...res, gates, ms, totalMs: Math.round(performance.now() - t0), sampleRate: SR };
+}
+
+/** For the node-budget probe: how many native nodes one Tone device or one track's voice builds. Harness only. */
+export async function nodeCost(): Promise<Record<string, number>> {
+  const { makeVoice } = await import("./voices");
+  const { makeBoard } = await import("./board");
+  ensureStudioContext();
+  const raw = Tone.getContext().rawContext as unknown as Record<string, unknown>;
+  const names = ["createGain", "createConstantSource", "createBiquadFilter", "createDelay", "createStereoPanner", "createWaveShaper", "createOscillator", "createAnalyser", "createChannelSplitter", "createChannelMerger", "createConvolver", "createDynamicsCompressor", "createBufferSource"];
+  let n = 0;
+  const orig = new Map<string, unknown>();
+  const proto = Object.getPrototypeOf(raw) as Record<string, unknown>;
+  for (const k of names) { const f = proto[k] as (...a: unknown[]) => unknown; if (typeof f !== "function") continue; orig.set(k, f); proto[k] = function (this: unknown, ...a: unknown[]) { n++; return f.apply(this, a); }; }
+  const cost = (make: () => { dispose: () => void } | void): number => { const before = n; const x = make(); const c = n - before; try { (x as { dispose?: () => void } | undefined)?.dispose?.(); } catch { /* fine */ } return c; };
+  const out: Record<string, number> = {};
+  try {
+    const board = makeBoard(undefined, true); out.board = n; 
+    const kit = await getKit(SEED_SONG.lane, SEED_SONG.kit, SEED_SONG.bpm);
+    for (const tr of SEED_SONG.tracks) out[`voice:${tr.id}`] = cost(() => makeVoice(tr, board.buses, undefined, kit));
+    out.meter = cost(() => new Tone.Meter({ smoothing: 0.75 })); out.trackMeter = cost(() => new TrackMeter());
+    out.lightChorus = cost(() => new LightChorus()); out.drive = cost(() => new Drive(0.3));
+    out.filter = cost(() => new Tone.Filter(1000, "lowpass")); out.biquad = cost(() => new Tone.BiquadFilter(1000, "lowpass"));
+    out.distortion = cost(() => new Tone.Distortion(0.3)); out.monoSynth = cost(() => new Tone.MonoSynth()); out.polySynth = cost(() => new Tone.PolySynth(Tone.Synth));
+    out.chorus = cost(() => new Tone.Chorus(0.6, 3.5, 0.4)); out.signal = cost(() => new Tone.Signal(1)); out.panner = cost(() => new Tone.Panner(0.1));
+    board.dispose();
+  } finally { for (const [k, f] of orig) proto[k] = f; }
+  return out;
 }

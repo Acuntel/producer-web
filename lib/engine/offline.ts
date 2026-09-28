@@ -24,7 +24,7 @@ const SLICE_MS = 6;   // work done before the thread goes back to the live sched
 
 // Give the thread back. A posted message runs after the tasks already queued (the live scheduler's
 // tick among them) and, unlike a timer, is never clamped to 4 ms, so the render is not slowed down.
-function yieldThread(): Promise<void> {
+export function yieldThread(): Promise<void> {
   return new Promise((resolve) => { const ch = new MessageChannel(); ch.port1.onmessage = () => { ch.port1.close(); resolve(); }; ch.port2.postMessage(0); });
 }
 
@@ -52,4 +52,14 @@ export async function renderInSteps(secs: number, channels: number, sampleRate: 
     if (performance.now() - t0 > SLICE_MS) { await yieldThread(); t0 = performance.now(); }
   }
   return (await (ctx.rawContext as unknown as OfflineAudioContext).startRendering()) as AudioBuffer;
+}
+
+/** Run a build generator a slice at a time, giving the thread back every few milliseconds. False when
+ *  `alive` stops holding (a newer record took over), and the rest is left unbuilt. */
+export async function drain(gen: Generator<unknown>, alive: () => boolean, sliceMs = 8): Promise<boolean> {
+  let t0 = performance.now();
+  for (let r = gen.next(); !r.done; r = gen.next()) {
+    if (performance.now() - t0 > sliceMs) { await yieldThread(); t0 = performance.now(); if (!alive()) return false; }
+  }
+  return alive();
 }

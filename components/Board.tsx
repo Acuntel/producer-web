@@ -17,6 +17,7 @@ type Reads = {
   getPosition?: () => Position | null;
   getSchedule?: () => Schedule | null;
   getHealth?: () => EngineHealth | null;
+  setMetering?: (on: boolean) => void;
 };
 
 const HOLD_MS = 1400;
@@ -53,6 +54,13 @@ export function Board({ song, playing, facts, moves = [], ...reads }: { song: So
   }, [song]);
   const modelRef = useRef(model); modelRef.current = model;
   const shown = song.tracks.length > 0;
+
+  // The meters exist only while this board is on screen and the page is visible (they are audio-thread work).
+  useEffect(() => {
+    const set = () => live.current.reads.setMetering?.(document.visibilityState === "visible");
+    set(); document.addEventListener("visibilitychange", set);
+    return () => { document.removeEventListener("visibilitychange", set); live.current.reads.setMetering?.(false); };
+  }, []);
 
   useEffect(() => {
     const cv = canvas.current, wrap = box.current;

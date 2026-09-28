@@ -4,6 +4,8 @@
 import { useRef, useState } from "react";
 import type { Note } from "@/lib/song/types";
 import { trackPitch, smoothFrames, framesToNotes } from "@/lib/engine/hum";
+import { studioContext } from "@/lib/audio/studio";
+import { tapInput, type Tap } from "@/lib/audio/recorder";
 
 export type HumResult = { notes: Note[]; beats: number; frames: number; samples: Float32Array; sampleRate: number };
 
@@ -17,13 +19,15 @@ export function useHum() {
     let stream: MediaStream;
     try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true } }); }
     catch { return null; }
-    const ctx = new AudioContext();
+    // The studio's own context and its input tap (lib/audio/recorder.ts): no second context, no ScriptProcessor.
+    const ctx = studioContext();
+    if (ctx.state === "suspended") await ctx.resume().catch(() => {});
     const src = ctx.createMediaStreamSource(stream);
-    const proc = ctx.createScriptProcessor(2048, 1, 1);
     const chunks: Float32Array[] = [];
     let capturing = false;
-    proc.onaudioprocess = (e) => { if (capturing) chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
-    src.connect(proc); proc.connect(ctx.destination);
+    let tap: Tap;
+    try { tap = await tapInput(ctx, src, { chunk: (s) => { if (capturing) chunks.push(s); } }); }
+    catch { stream.getTracks().forEach((t) => t.stop()); return null; }
     const beatMs = 60000 / bpm;
     setRecording(true);
     for (let i = countInBeats; i > 0; i--) { setCountIn(i); await wait(beatMs); }
@@ -33,8 +37,7 @@ export function useHum() {
     stopRef.current = () => { cancelled = true; };
     await wait(beats * beatMs);
     capturing = false;
-    proc.disconnect(); src.disconnect(); stream.getTracks().forEach((t) => t.stop());
-    await ctx.close();
+    tap.stop(); src.disconnect(); stream.getTracks().forEach((t) => t.stop());
     setRecording(false);
     stopRef.current = null;
     if (cancelled) return null;

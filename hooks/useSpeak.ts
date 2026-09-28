@@ -8,6 +8,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { scribeAvailable } from "@/lib/voice/scribe";
 import { makeRecognizer, type RecognitionLike } from "@/lib/voice/recognition";
 import type { LevelRef } from "./useLevelFrame";
+import { studioContext } from "@/lib/audio/studio";
+import { tapInput, type Tap } from "@/lib/audio/recorder";
 
 export type SpeakStatus = "idle" | "holding" | "sending" | "blocked" | "nodevice" | "unsupported";
 type Deps = { onFinal: (text: string, ms: number) => void; onPress?: () => void };
@@ -32,7 +34,7 @@ export function useSpeak(d: Deps) {
   const dRef = useRef(d); dRef.current = d;
   const holdingRef = useRef(false);
   const streamRef = useRef<MediaStream | null>(null);
-  const ctxRef = useRef<AudioContext | null>(null);
+  const tapRef = useRef<Tap | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const pendingRef = useRef<string[]>([]);
   const partialRef = useRef("");
@@ -48,27 +50,26 @@ export function useSpeak(d: Deps) {
   }, []);
   const warmToken = useCallback(() => { tokenRef.current = fetchToken(); tokenAtRef.current = Date.now(); }, [fetchToken]);
 
-  // The microphone, opened once, kept for the session.
+  // The microphone, opened once, kept for the session, in the studio's own context through its input tap
+  // (lib/audio/recorder.ts): no second context and no ScriptProcessor on the page's thread.
   const ensureMic = useCallback(async (): Promise<boolean> => {
-    if (streamRef.current && ctxRef.current) { if (ctxRef.current.state === "suspended") await ctxRef.current.resume().catch(() => {}); return true; }
+    const ctx = studioContext();
+    if (ctx.state === "suspended") await ctx.resume().catch(() => {});
+    if (streamRef.current && tapRef.current) return true;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
-      const ctx = new AudioContext();
       const src = ctx.createMediaStreamSource(stream);
-      const proc = ctx.createScriptProcessor(2048, 1, 1);
-      proc.onaudioprocess = (e) => {
-        const data = e.inputBuffer.getChannelData(0);
-        let sum = 0; for (let i = 0; i < data.length; i += 8) sum += data[i] * data[i];
-        const rms = Math.sqrt(sum / (data.length / 8));
-        levelRef.current = Math.min(1, rms * 6);
-        if (!holdingRef.current) return;
-        const chunk = b64(downsample(data, ctx.sampleRate, 16000));
-        const ws = wsRef.current;
-        if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ message_type: "input_audio_chunk", audio_base_64: chunk, sample_rate: 16000 }));
-        else pendingRef.current.push(chunk);
-      };
-      src.connect(proc); proc.connect(ctx.destination);
-      streamRef.current = stream; ctxRef.current = ctx;
+      tapRef.current = await tapInput(ctx, src, {
+        level: (rms) => { levelRef.current = Math.min(1, rms * 6); },
+        chunk: (data) => {
+          if (!holdingRef.current) return;
+          const chunk = b64(downsample(data, ctx.sampleRate, 16000));
+          const ws = wsRef.current;
+          if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ message_type: "input_audio_chunk", audio_base_64: chunk, sample_rate: 16000 }));
+          else pendingRef.current.push(chunk);
+        },
+      });
+      streamRef.current = stream;
       return true;
     } catch (e) {
       const name = e instanceof Error ? e.name : "";
@@ -154,7 +155,7 @@ export function useSpeak(d: Deps) {
   }, [finish]);
 
   useEffect(() => { void scribeAvailable().then((ok) => { setEngine(ok ? "scribe" : "webspeech"); if (ok) warmToken(); }); }, [warmToken]);
-  useEffect(() => () => { closeWs(); streamRef.current?.getTracks().forEach((t) => t.stop()); void ctxRef.current?.close().catch(() => {}); }, [closeWs]);
+  useEffect(() => () => { closeWs(); tapRef.current?.stop(); streamRef.current?.getTracks().forEach((t) => t.stop()); }, [closeWs]);
 
   return { status, level: levelRef as LevelRef, interim, engine, press, release, holding: status === "holding" };
 }

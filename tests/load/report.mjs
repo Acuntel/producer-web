@@ -6,6 +6,8 @@ import { commitsIn } from "./instrument.mjs";
 
 const r1 = (x) => (x === null || x === undefined || !Number.isFinite(x) ? null : Math.round(x * 10) / 10);
 
+const holes = (line) => { if (!line || line.length < 2) return line ? [] : null; const out = []; for (let i = 1; i < line.length; i++) out.push(Math.round((line[i].at - line[i - 1].end) * 1000)); return out; };
+
 export function coldMetrics(s) {
   const boot = s.marks["producer:boot"]?.[0] ?? null, tr = s.marks["producer:transport"]?.[0] ?? null, voice = s.marks["producer:voice"]?.[0] ?? null;
   const assets = s.ledger?.assets ?? [];
@@ -17,8 +19,16 @@ export function coldMetrics(s) {
     order: voice === null || tr === null ? "no greeting" : voice <= tr ? `greeting first by ${tr - voice} ms` : `record first by ${voice - tr} ms`,
     maxDecodesPerKey: s.ledger?.maxDecodesPerKey ?? null, decodedTwice: twice, sameBytesDecodedTwice: Object.values(hashes).filter((n) => n > 1).length,
     realtimeContexts: s.realtime.length, studioNodes: studio?.nodes ?? null, studioNodesPeak: studio?.peak ?? null, renderCapacity: s.capacity,
+    // The graph itself: every node minus the ones a played hit leaves until the garbage collector takes them
+    // (a buffer source and its gain per drum hit, per noise burst, per voice chunk).
+    graphNodes: studio ? studio.nodes - 2 * (studio.types?.AudioBufferSource ?? 0) : null, nodeTypes: studio?.types ?? null,
+    graphAtPress: s.atPress?.length ? Math.max(...s.atPress.map((c) => c.nodes)) : null,
     late: s.ledger?.counters?.late ?? null, lateStarts: s.load?.late ?? null, dueBeforeReady: (s.ledger?.dueBeforeReady ?? []).length,
     playback: s.ledger?.counters?.playback ?? null,
+    // From the press to the second bar line: every main-thread block over 50 ms (the scheduler's budget).
+    longTasksPressToBar2: boot !== null && tr !== null ? (s.load?.lt ?? []).filter((x) => x.t >= boot && x.t < tr + (8 * 60000) / (s.bpm || 120) && x.d > 50).map((x) => x.d) : null,
+    // Holes inside the greeting and between its sentences, in ms (every piece is scheduled on the audio clock).
+    greetingHolesMs: holes(s.speech?.[0]),
     samplesBytes: (s.samples ?? []).reduce((a, r) => a + (r.fromCache ? 0 : r.bytes || 0), 0), samplesRequests: (s.samples ?? []).length,
     samplesFromCache: (s.samples ?? []).filter((r) => r.fromCache).length,
   };
@@ -66,13 +76,20 @@ export function printTable(m) {
   if (d?.snap) lines.push(row("A move during the outro fade", `${d.snap.deltaDb} dB against no move`, "no snapback (within 1 dB)", g.noSnapback));
   if (m.play) lines.push(row("Where a change lands (bar and phrase)", `${m.play.onBeatOne} of ${m.play.landings} on beat 1; ms after the bar line ${m.play.msAfterBarLine.join(", ")}; ${m.play.atOnce} at once, ${m.play.onBeat} on a beat`, "beat 1, 10 of 10", m.play.landings ? m.play.onBeatOne === m.play.landings : null));
   if (m.cold) {
-    lines.push(row("Native nodes, seed (studio context)", `${m.cold.studioNodes} (peak ${m.cold.studioNodesPeak})`, "under 600", m.cold.studioNodes !== null ? m.cold.studioNodes < 600 : null));
+    lines.push(row("Native nodes, seed (studio context)", `${m.cold.graphAtPress} at the press; ${m.cold.graphNodes} playing, less the hits' sources (${m.cold.studioNodes} alive before collection, peak ${m.cold.studioNodesPeak})`, "under 600", m.cold.graphNodes !== null ? m.cold.graphNodes < 600 : null));
+    if (m.cold.renderCapacity?.length) lines.push(row("Render capacity, studio context", `${m.cold.renderCapacity.map((c) => `${c.capacity}% at ${c.sr} Hz`).join(", ")}; underruns ${m.cold.playback?.underrunEvents ?? "n/a"}`, "measured", null));
     lines.push(row("Realtime AudioContexts", m.cold.realtimeContexts, "1", m.cold.realtimeContexts === 1));
     lines.push(row("Decodes per key per load (cold)", `${m.cold.maxDecodesPerKey}${m.cold.decodedTwice.length ? ` (${m.cold.decodedTwice.join(", ")})` : ""}`, "exactly 1", m.cold.maxDecodesPerKey !== null ? m.cold.maxDecodesPerKey <= 1 : null));
     lines.push(row("Greeting vs record order (cold)", m.cold.order, "identical 10 of 10", null));
+    lines.push(row("Long tasks over 50 ms, press to bar 2", m.cold.longTasksPressToBar2 === null ? null : `${m.cold.longTasksPressToBar2.length}${m.cold.longTasksPressToBar2.length ? ` (${m.cold.longTasksPressToBar2.join(", ")} ms)` : ""}`, "0", m.cold.longTasksPressToBar2 ? m.cold.longTasksPressToBar2.length === 0 : null));
     lines.push(row("Late notes (rig counter)", m.cold.late, "0", m.cold.late === 0));
   }
-  if (m.coldRepeat) lines.push(row("Cold loads with every key decoded once", `${m.coldRepeat.onceEach} of ${m.coldRepeat.runs}`, "all of them", m.coldRepeat.onceEach === m.coldRepeat.runs));
+  if (m.coldRepeat) {
+    lines.push(row("Cold loads with every key decoded once", `${m.coldRepeat.onceEach} of ${m.coldRepeat.runs}`, "all of them", m.coldRepeat.onceEach === m.coldRepeat.runs));
+    const firsts = m.coldRepeat.orders.map((o) => o.split(" ")[0]); const same = firsts.every((f) => f === firsts[0]);
+    lines.push(row("Start order over the cold loads", `${firsts.filter((f) => f === firsts[0]).length} of ${firsts.length} ${firsts[0]} first`, "identical, all of them", same));
+    lines.push(row("Loads with no long task, press to bar 2", `${m.coldRepeat.noLongTask} of ${m.coldRepeat.runs}`, "all of them", m.coldRepeat.noLongTask === m.coldRepeat.runs));
+  }
   if (m.warm) lines.push(row("Warm reload bytes for /samples", `${m.warm.samplesBytes} B over ${m.warm.samplesRequests} requests (${m.warm.samplesFromCache} from cache)`, "0", m.warm.samplesBytes === 0));
   if (m.reload) lines.push(row("Press to transport, reopened sample-kit record", `${m.reload.pressToTransportMs} ms`, "under 300 ms", m.reload.pressToTransportMs !== null ? m.reload.pressToTransportMs < 300 : null));
   if (m.spend) lines.push(row("Paid calls in this mock run", `${m.spendPaid} (mocked ${JSON.stringify(m.spend.mocked)}, voice stubbed ${m.spend.speakStubbed}, blocked ${JSON.stringify(m.spend.blocked)})`, "0", m.spendPaid === 0));

@@ -58,6 +58,7 @@ export default function App() {
   const hum = useHum();
   const account = useAccount();
   const studio = useStudio(voiceOut.speak, (bpm, beats) => hum.record(bpm, beats), (s, m) => snapshotRef.current(s, m), {
+    prefetchVoice: voiceOut.prefetch,
     analyze: (i) => actionsRef.current.analyze(i), vocal: (p, l, ms) => actionsRef.current.vocal(p, l, ms), findSound: (b) => actionsRef.current.findSound(b),
     hear: (sec) => actionsRef.current.hear(sec), identify: () => actionsRef.current.identify(), tracklist: (i) => actionsRef.current.tracklist(i), ritual: (a) => actionsRef.current.ritual(a),
   });
@@ -89,6 +90,9 @@ export default function App() {
   useCritic({ song: studio.song, facts: studio.facts, reference: studio.reference, paused: !!studio.rollout, send: studio.send, started: studio.started });
   // The harness can hand the studio a vocal stem it made itself and watch where the phrase lands.
   useEffect(() => { if (harnessMode()) (window as unknown as { __vocal?: unknown }).__vocal = (said: string | null, where: string | null, job: unknown) => stems.dropVocal(said, where, job as never); }, [stems]);
+  // The sentence-hole probe says a line through the producer's voice and reads where each sentence landed.
+  const speakRef = useRef(voiceOut.speak); speakRef.current = voiceOut.speak;
+  useEffect(() => { if (harnessMode()) (window as unknown as { __say?: unknown }).__say = (t: string) => speakRef.current(t); }, []);
 
   const titles = useMemo(() => [...projects.projects.map((p) => p.title), ...studio.library.map((s) => s.song.title)], [projects.projects, studio.library]);
   const convo = useConversation({ studio, voice: voiceOut, screen: view === "stage" ? "stage" : view, projects: titles, onLanding: (c) => landingRef.current(c), grab: stems.grab, vocal: stems.vocalFrom, ritual });
@@ -100,7 +104,8 @@ export default function App() {
   // Harness mode opens on the stage with the seed record and starts the session itself
   // (headless Chrome runs with autoplay allowed, so no gesture is needed).
   const bootedRef = useRef(false);
-  useEffect(() => { if (typed && view === "stage" && !started && !studio.starting && !bootedRef.current) { bootedRef.current = true; void studio.boot(); } }, [typed, view, started, studio]);
+  // It presses once the stage is ready (armed, greeting fetched), the way a person presses after the page is up.
+  useEffect(() => { if (typed && view === "stage" && !started && !studio.starting && !bootedRef.current) { bootedRef.current = true; void studio.whenArmed().then(() => studio.boot()); } }, [typed, view, started, studio]);
   const gate = account.ready && account.enabled && !account.user && !account.guest;
   const device = useMemo(() => { const cloud = new Set(projects.projects.map((p) => p.title)); return account.user ? studio.library.filter((s) => !cloud.has(s.song.title)) : studio.library; }, [account.user, projects.projects, studio.library]);
 
@@ -167,7 +172,7 @@ export default function App() {
           <section className="mt-4 grid min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,40%)] lg:grid-rows-1">
             <div className="flex max-h-[46dvh] min-h-0 min-w-0 flex-col gap-3 lg:max-h-none">
               <Board song={song} playing={playing} facts={studio.facts} moves={studio.moves}
-                getLevels={studio.getLevels} getPosition={studio.getPosition} getSchedule={studio.getSchedule} getHealth={studio.getHealth} />
+                getLevels={studio.getLevels} getPosition={studio.getPosition} getSchedule={studio.getSchedule} getHealth={studio.getHealth} setMetering={studio.setMetering} />
               <div className="scroll-y flex shrink-0 flex-col gap-3">
               {song.tracks.length === 0 && !convo.work.length && (
                 <div className="rounded-3xl border border-line/50 bg-s1/50 px-5 py-6 text-center">

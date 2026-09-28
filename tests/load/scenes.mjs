@@ -10,7 +10,9 @@ const pageNow = (page) => page.js("performance.now()");
 /** Everything a summary needs, read in one go. */
 export async function snapshot(page, g) {
   const samples = g.requests().filter((r) => /\/samples\//.test(r.url)).map((r) => ({ url: r.url.replace(/^https?:\/\/[^/]+/, ""), status: r.status ?? null, bytes: r.bytes ?? 0, fromCache: !!r.fromCache }));
-  return { ledger: await ledger(page), load: await load(page), marks: await marks(page), now: await pageNow(page), realtime: g.realtime().map((c) => ({ sr: c.sr, nodes: c.nodes, peak: c.peak })), capacity: await g.capacity().catch(() => []), samples, exceptions: [...new Set(page.exceptions)].slice(0, 12) };
+  const speech = await page.js(`JSON.stringify(window.__speech ?? [])`).then(JSON.parse).catch(() => []);
+  const bpm = await page.js(`window.__song ? window.__song().bpm : null`).catch(() => null);
+  return { ledger: await ledger(page), load: await load(page), marks: await marks(page), now: await pageNow(page), speech, bpm, realtime: g.realtime().map((c) => ({ sr: c.sr, nodes: c.nodes, peak: c.peak, types: c.types ?? {} })), capacity: await g.capacity().catch(() => []), samples, exceptions: [...new Set(page.exceptions)].slice(0, 12) };
 }
 
 /** A page load that lands on the stage and starts the seed by itself (?e2e=1), then waits. */
@@ -18,8 +20,13 @@ export async function cold(page, g, url, afterMs, reload = false) {
   g.resetAudio(); g.resetNet();
   if (reload) await page.call("Page.reload", { ignoreCache: false }); else await page.call("Page.navigate", { url });
   await page.waitFor(`performance.getEntriesByName("producer:transport")[0]?.startTime ?? null`, 60000, "the transport");
+  // The graph at the press: armed and laid, before its first note leaves any transient node behind. The
+  // garbage collector runs first, so a node counts only while something still holds it.
+  await page.call("HeapProfiler.collectGarbage").catch(() => null); await sleep(150);
+  const atPress = g.realtime().map((c) => ({ nodes: c.nodes, types: { ...(c.types ?? {}) } }));
   await sleep(afterMs);
-  return snapshot(page, g);
+  await page.call("HeapProfiler.collectGarbage").catch(() => null); await sleep(300);
+  return { ...(await snapshot(page, g)), atPress };
 }
 
 /** The order of work on a fresh record, by typed voice, ending on a record with a chop and a real kit playing. */

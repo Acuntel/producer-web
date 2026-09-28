@@ -27,6 +27,8 @@ const AFTER = Number(opt("after", "15000"));
 const IDLE = Number(opt("idle", "60000"));
 const OUT = opt("out", process.env.LOAD_OUT ?? join(tmpdir(), "producer-load"));
 const LABEL = opt("label", `${MODE}-${new Date().toISOString().replace(/[:.]/g, "-")}`);
+// --sr device: the other side of the sample-rate A/B (the studio at the device's own rate, not 44.1 kHz).
+const SR = opt("sr", null) ? `&sr=${opt("sr", null)}` : "";
 mkdirSync(OUT, { recursive: true });
 const log = (m) => console.log(`[load] ${m}`);
 const results = { label: LABEL, mode: MODE, base: BASE, loadavg: loadavg(), runs: {} };
@@ -51,15 +53,15 @@ async function runCold() {
     const all = [];
     for (let i = 0; i < repeat; i++) {
       const { p, g } = await page(`cold${i}`);
-      const a = await cold(p, g, `${BASE}/?e2e=1&mock=1`, AFTER); const m = coldMetrics(a); all.push(m);
-      log(`cold ${i + 1}/${repeat}: decodes/key ${m.maxDecodesPerKey}, press to transport ${m.pressToTransportMs} ms, ${m.order}, contexts ${m.realtimeContexts}, late ${m.late}`);
+      const a = await cold(p, g, `${BASE}/?e2e=1&mock=1${SR}`, AFTER); const m = coldMetrics(a); all.push(m);
+      log(`cold ${i + 1}/${repeat}: decodes/key ${m.maxDecodesPerKey}, press to transport ${m.pressToTransportMs} ms, ${m.order}, contexts ${m.realtimeContexts}, late ${m.late}, long tasks press to bar 2 ${JSON.stringify(m.longTasksPressToBar2)}, greeting holes ${JSON.stringify(m.greetingHolesMs)}`);
       addSpend(g); p.close();
     }
-    metrics.coldRepeat = { runs: all.length, maxDecodesPerKey: Math.max(...all.map((m) => m.maxDecodesPerKey ?? 99)), onceEach: all.filter((m) => m.maxDecodesPerKey === 1).length, orders: all.map((m) => m.order), pressToTransportMs: all.map((m) => m.pressToTransportMs), contexts: all.map((m) => m.realtimeContexts) };
+    metrics.coldRepeat = { noLongTask: all.filter((m) => m.longTasksPressToBar2 && m.longTasksPressToBar2.length === 0).length, holes: all.map((m) => m.greetingHolesMs), longTasks: all.map((m) => m.longTasksPressToBar2), runs: all.length, maxDecodesPerKey: Math.max(...all.map((m) => m.maxDecodesPerKey ?? 99)), onceEach: all.filter((m) => m.maxDecodesPerKey === 1).length, orders: all.map((m) => m.order), pressToTransportMs: all.map((m) => m.pressToTransportMs), contexts: all.map((m) => m.realtimeContexts) };
     results.runs.coldRepeat = all; save();
   }
   const { p, g } = await page("cold");
-  const a = await cold(p, g, `${BASE}/?e2e=1&mock=1`, AFTER);
+  const a = await cold(p, g, `${BASE}/?e2e=1&mock=1${SR}`, AFTER);
   results.runs.cold = a; metrics.cold = coldMetrics(a); log(`cold: ${JSON.stringify(metrics.cold)}`);
   const b = await cold(p, g, null, AFTER, true);
   results.runs.warm = b; metrics.warm = coldMetrics(b); log(`warm reload: ${JSON.stringify(metrics.warm)}`);
@@ -68,7 +70,7 @@ async function runCold() {
 
 async function runPlay() {
   const { p, g } = await page("play");
-  await p.call("Page.navigate", { url: `${BASE}/?e2e=1&typed=1&landing=1&mock=1&guest=1&economy=1` });
+  await p.call("Page.navigate", { url: `${BASE}/?e2e=1&typed=1&landing=1&mock=1&guest=1&economy=1${SR}` });
   await orderOfWork(p, log);
   await p.js(`window.__ledgerReset && window.__ledgerReset(), true`);
   await moves(p, log);
@@ -77,14 +79,14 @@ async function runPlay() {
   metrics.play = playMetrics(s, bpm); log(`play: ${JSON.stringify(metrics.play)}`);
   // The record that was just made, opened again the way a reload lands on it: a sample-kit record.
   await sleep(1500);
-  const r = await cold(p, g, `${BASE}/?e2e=1&mock=1`, AFTER);
+  const r = await cold(p, g, `${BASE}/?e2e=1&mock=1${SR}`, AFTER);
   results.runs.reload = r; metrics.reload = coldMetrics(r); log(`reopened record: ${JSON.stringify(metrics.reload)}`);
   addSpend(g); p.close(); save();
 }
 
 async function runIdle() {
   const { p, g } = await page("idle");
-  await p.call("Page.navigate", { url: `${BASE}/?e2e=1&typed=1&landing=1&mock=1&guest=1&economy=1` });
+  await p.call("Page.navigate", { url: `${BASE}/?e2e=1&typed=1&landing=1&mock=1&guest=1&economy=1${SR}` });
   await orderOfWork(p, log);
   await sleep(3000);
   await p.js(`window.__ledgerReset && window.__ledgerReset(), true`);

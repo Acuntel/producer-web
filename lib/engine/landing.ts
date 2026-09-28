@@ -4,7 +4,8 @@
 import * as Tone from "tone";
 import type { Song } from "../song/types";
 import type { SectionSpan } from "./schedule";
-import type { LandAt } from "./rig";
+import type { LandAt, Applied } from "./rig";
+import { recordLanding, type LandingRow } from "./ledger";
 import { nextBoundary, type Boundary } from "./boundary";
 
 type Transport = ReturnType<typeof Tone.getTransport>;
@@ -56,4 +57,28 @@ export function sectionSpans(song: Song): { starts: SectionSpan[]; total: number
 export function moveClock(tr: Transport, ticks: number, at: number) {
   const clock = (tr as unknown as { _clock?: { setTicksAtTime?: (t: number, time: number) => void } })._clock;
   if (clock?.setTicksAtTime) clock.setTicksAtTime(ticks, at); else tr.ticks = ticks;
+}
+
+/** The ledger's landing row: the boundary's audio time, and where that time sits on the transport's grid,
+ *  read back from the transport (folded into the loop when it wraps there). At once: now() while playing,
+ *  the playhead when stopped. */
+export function landingRow(tr: Transport, r: { jobId?: string; calledAt: number; boundary: Boundary; applied: Applied; notReady: string[]; where?: LandAt }): LandingRow {
+  const ppq = tr.PPQ;
+  const time = r.where ? r.where.at : tr.state === "started" ? tr.now() : null;
+  const beat = r.where ? r.where.beat : (time !== null ? tr.getTicksAtTime(time) : tr.ticks) / ppq;
+  let measured: number | null = null;
+  if (r.where) {
+    let t = Math.round(tr.getTicksAtTime(r.where.at));
+    const ls = tr.toTicks(tr.loopStart), le = tr.toTicks(tr.loopEnd);
+    if (tr.loop && t >= le - 0.5) t = ls + (t - le);
+    measured = Math.round((((t / ppq) % 4) + 4) % 4 * 1000) / 1000;
+  }
+  const fold = (b: number) => Math.round((((b % 4) + 4) % 4) * 1000) / 1000;
+  return recordLanding({ jobId: r.jobId, boundary: r.boundary, calledAt: r.calledAt, landedAt: performance.now(), landsAtBar: Math.floor(beat / 4) + 1, landsAtTime: time, beatInBar: fold(beat), partsChanged: r.applied.partsChanged, voicesRebuilt: r.applied.voicesRebuilt, notReady: [...r.notReady, ...r.applied.held], measuredBeatInBar: measured, firstHits: {} });
+}
+
+/** The first hit of a part laid anew, in beats after its landing's boundary (never negative when it is on time). */
+export function noteFirstHit(row: LandingRow | null, key: string, time: number, bpm: number) {
+  if (!row || row.landsAtTime === null || !row.partsChanged.includes(key) || !row.firstHits || key in row.firstHits) return;
+  row.firstHits[key] = Math.round(((time - row.landsAtTime) * bpm / 60) * 1000) / 1000;
 }

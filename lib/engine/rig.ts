@@ -8,8 +8,9 @@
 import * as Tone from "tone";
 import type { Song, Track } from "../song/types";
 import { scheduleEvents, loopBounds, type Ev, type Schedule } from "./schedule";
-import { makeVoice, voiceSignature, type Voice } from "./voices";
+import { makeVoice, voiceSignature, automatedOn, type Voice } from "./voices";
 import { makeBoard, type Board, type Analysis } from "./board";
+import { TrackMeter } from "./meters";
 import { clipBuffer } from "./clips";
 import type { Kit } from "./kits";
 import { hitsAddress } from "./steady";
@@ -25,7 +26,7 @@ export type Clips = Map<string, AudioBuffer>;
 export type Health = { events: number; late: number; minMarginMs: number };
 
 type Transport = ReturnType<typeof Tone.getTransport>;
-type Entry = { voice: Voice; sig: string; meter: Tone.Meter; grain?: Tone.GrainPlayer; sound: string | null; heard: boolean };
+type Entry = { voice: Voice; sig: string; meter: TrackMeter | null; grain?: Tone.GrainPlayer; sound: string | null; heard: boolean };
 /** What one apply changed: the parts laid anew and the voices built anew, and the tracks held back because
  *  their sound is not decoded yet (they keep what they had, and are laid again when it arrives). */
 export type Applied = { partsChanged: string[]; voicesRebuilt: string[]; held: string[] };
@@ -47,7 +48,7 @@ export class Rig {
   private entries = new Map<string, Entry>();
   private parts = new Map<string, { part: Tone.Part; hash: string }>();
   private staged = new Map<string, Entry>();   // voices built ahead of a boundary, taken by the apply that lands it
-  private laid = false;
+  private laid = false; private metered = false;
   defer: Defer = wallDefer;
   /** Told the first time a part laid anew fires, with its audio time: the ledger checks it is on its boundary. */
   onFirstFire: ((key: string, time: number) => void) | null = null;
@@ -57,7 +58,7 @@ export class Rig {
   }
 
   get analysis(): Analysis { return this.board.analysis; }
-  get voiceById(): Map<string, Voice> { const m = new Map<string, Voice>(); for (const [id, e] of this.entries) m.set(id, e.voice); return m; }
+  get voiceById(): Map<string, Voice> { return new Map([...this.entries].map(([id, e]) => [id, e.voice])); }
 
   /** Put this song on the rig: diff the voices, relay the schedule, ramp the desk. Never rebuilds what still fits.
    *  Synchronous. With `land`, every change is made at that audio time (the boundary a scheduleOnce callback
@@ -75,11 +76,13 @@ export class Rig {
     // A part whose hits have not changed is left exactly where it is. A fader move or a filter
     // sweep therefore costs nothing at all here, and a mute relays one track instead of fourteen.
     const kept = new Set<string>();
+    // A part that leaves stops at the landing's own tick and is let go after, outside the scheduler's callback.
+    const drop = (part: Tone.Part) => { try { part.stop(tick(beatAt)); } catch { /* already gone */ } this.defer(0.3, () => { try { part.dispose(); } catch { /* already gone */ } }); };
     const lay = (key: string, hash: string, make: () => Tone.Part) => {
       kept.add(key);
       const have = this.parts.get(key);
       if (have && have.hash === hash) return;
-      if (have) { try { have.part.stop(); have.part.dispose(); } catch { /* already gone */ } }
+      if (have) drop(have.part);
       applied.partsChanged.push(key);
       const part = make(); part.start(0);
       this.parts.set(key, { part, hash });
@@ -179,7 +182,7 @@ export class Rig {
     // Whatever this record no longer has: its schedule comes down.
     for (const [key, p] of [...this.parts]) {
       if (kept.has(key)) continue;
-      try { p.part.stop(); p.part.dispose(); } catch {}
+      drop(p.part);
       this.parts.delete(key);
       // A loop with no span left from here stops at the boundary instead of running out its old length.
       if (key.startsWith("span:")) { try { this.entries.get(key.slice(5))?.grain?.stop(at + FADE_SEC); } catch { /* not playing */ } }
@@ -243,12 +246,12 @@ export class Rig {
     this.entries.set(tr.id, this.build(tr, song, buf, kit, this.sigOf(tr, song, buf, kitId), kitId));
   }
 
-  private sigOf(tr: Track, song: Song, buf: AudioBuffer | undefined, kitId: string) { return `${voiceSignature(tr, { kitId, bpm: song.bpm })}|${buf ? "b" : "-"}`; }
+  private sigOf(tr: Track, song: Song, buf: AudioBuffer | undefined, kitId: string) { return `${voiceSignature(tr, { kitId, bpm: song.bpm, automated: automatedOn(song, tr.id) })}|${buf ? "b" : "-"}`; }
 
   private build(tr: Track, song: Song, buf: AudioBuffer | undefined, kit: Kit | undefined, sig: string, kitId = ""): Entry {
-    const voice = makeVoice(tr, this.board.buses, buf, kit, this.live);
-    const meter = new Tone.Meter({ smoothing: 0.75 });
-    if (this.live) { voice.out.connect(meter); this.board.analysis.tracks.set(tr.id, meter); }
+    const voice = makeVoice(tr, this.board.buses, buf, kit, automatedOn(song, tr.id));
+    const meter = this.metered ? new TrackMeter() : null;
+    if (meter) { voice.out.connect(meter.input); this.board.analysis.tracks.set(tr.id, meter); }
     // Warped audio loops: a GrainPlayer stretched to the song tempo, living with its voice.
     let grain: Tone.GrainPlayer | undefined;
     const c = tr.clip;
@@ -273,7 +276,17 @@ export class Rig {
     this.defer(Math.max(0, at + FADE_SEC - this.transport.context.currentTime) + 0.05, () => this.bury(e));
   }
 
-  private bury(e: Entry) { try { e.grain?.dispose(); } catch {} try { e.voice.dispose(); } catch {} try { e.meter.dispose(); } catch {} }
+  private bury(e: Entry) { try { e.grain?.dispose(); } catch {} try { e.voice.dispose(); } catch {} try { e.meter?.dispose(); } catch {} }
+
+  /** Meters on or off, for the desk and every voice: they exist only while something shows them. */
+  metering(on: boolean) {
+    const want = on && this.live; if (want === this.metered) return;
+    this.metered = want; this.board.metering(want);
+    for (const [id, e] of this.entries) {
+      if (want && !e.meter) { e.meter = new TrackMeter(); e.voice.out.connect(e.meter.input); this.board.analysis.tracks.set(id, e.meter); }
+      else if (!want && e.meter) { try { e.meter.dispose(); } catch {} e.meter = null; this.board.analysis.tracks.delete(id); }
+    }
+  }
 
   dispose() {
     for (const p of this.parts.values()) { try { p.part.stop(); p.part.dispose(); } catch {} }

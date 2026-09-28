@@ -420,17 +420,17 @@ export function useStems(d: Deps) {
 
   /** Twelve seconds from the middle of any audio file as a small wav (a capture can be minutes long). */
   const middleCut = useCallback(async (file: Blob, seconds = 12): Promise<Blob> => {
-    const { audioBufferToWav } = await import("@/lib/engine");
-    const ctx = new AudioContext();
-    try {
-      const buf = await ctx.decodeAudioData(await file.arrayBuffer());
+    // Decoded by the store's one decoder (no second realtime context for a capture).
+    const { audioBufferToWav, decodeBytes } = await import("@/lib/engine");
+    {
+      const buf = await decodeBytes(await file.arrayBuffer());
       const sr = buf.sampleRate, want = Math.min(buf.length, Math.round(seconds * sr));
       const from = Math.max(0, Math.floor((buf.length - want) / 2));
       const out = new OfflineAudioContext(1, want, sr).createBuffer(1, want, sr);
       const mono = out.getChannelData(0);
       for (let c = 0; c < buf.numberOfChannels; c++) { const src = buf.getChannelData(c); for (let i = 0; i < want; i++) mono[i] += src[from + i] / buf.numberOfChannels; }
       return audioBufferToWav(out);
-    } finally { void ctx.close(); }
+    }
   }, []);
   /** What record is this: name it from the sound in about a second. */
   const identifyClip = useCallback(async (file: Blob): Promise<Identity | null> => {

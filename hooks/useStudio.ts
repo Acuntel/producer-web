@@ -13,6 +13,7 @@ import { movesFromOps, type LaneMove } from "@/lib/song/moves";
 import { stripWake, quickGate, classify } from "@/lib/brain/attend";
 import type { Engine, Position } from "@/lib/engine";
 import { clipKeysFor } from "@/lib/engine/keys";
+import { studioContext } from "@/lib/audio/studio";
 import type { MusicFacts } from "@/lib/ears";
 import { logMove, attachWindow, tasteSummary, logPair } from "@/lib/taste";
 import { logMoveScore, referenceDelta, scoreLine } from "@/lib/scorecard";
@@ -43,9 +44,13 @@ const isE2E = () => typeof window !== "undefined" && /[?&](e2e|voice)=1/.test(wi
 
 export type SnapshotMeta = { label?: string; newProject?: boolean; facts?: unknown; chat?: { role: "user" | "assistant"; content: string }[]; blank?: boolean };
 
-export type StudioActions = { analyze?: (input: { url?: string; query?: string; from?: "local" | "web" }) => Promise<void> | void; vocal?: (prompt: string, lyrics?: string, lengthMs?: number) => Promise<void> | void; findSound?: (beats: number) => Promise<void> | void; hear?: (sectionId?: string) => Promise<string | null>; identify?: () => Promise<string | null>; tracklist?: (input: { url?: string; query?: string }) => Promise<void> | void; ritual?: (a: BrainAction) => Promise<unknown> | void };
+export type StudioActions = { prefetchVoice?: (text: string) => Promise<unknown> | void; analyze?: (input: { url?: string; query?: string; from?: "local" | "web" }) => Promise<void> | void; vocal?: (prompt: string, lyrics?: string, lengthMs?: number) => Promise<void> | void; findSound?: (beats: number) => Promise<void> | void; hear?: (sectionId?: string) => Promise<string | null>; identify?: () => Promise<string | null>; tracklist?: (input: { url?: string; query?: string }) => Promise<void> | void; ritual?: (a: BrainAction) => Promise<unknown> | void };
 
-export function useStudio(say: (t: string) => void, recordHum: (bpm: number, beats: number) => Promise<{ notes: Note[] } | null>, onSnapshot?: (s: Song, meta: SnapshotMeta) => void, actions?: StudioActions) {
+// The press: the greeting starts VOICE_LEAD after it and the record joins RECORD_LEAD after that, both on
+// the studio's audio clock, so the order of the first sounds is the same on every reload.
+const VOICE_LEAD = 0.05, RECORD_LEAD = 0.1;
+
+export function useStudio(say: (t: string, o?: { at?: number }) => void, recordHum: (bpm: number, beats: number) => Promise<{ notes: Note[] } | null>, onSnapshot?: (s: Song, meta: SnapshotMeta) => void, actions?: StudioActions) {
   const onSnapshotRef = useRef(onSnapshot); onSnapshotRef.current = onSnapshot;
   const actionsRef = useRef(actions); actionsRef.current = actions;
   const newProjectRef = useRef(false);
@@ -96,6 +101,7 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   useEffect(() => { songRef.current = song; }, [song]); useEffect(() => { messagesRef.current = messages; }, [messages]); useEffect(() => { pausedRef.current = paused; }, [paused]);
 
   const savedRef = useRef(false);   // a saved record replaces the seed on mount: the seed is never warmed for it
+  const armedRef = useRef<Promise<unknown>>(Promise.resolve());   // the record armed and the greeting fetched
   useEffect(() => {
     try {
       const s = migrateSong(JSON.parse(localStorage.getItem(SONG_KEY) ?? "null"));
@@ -131,14 +137,18 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     setMoves((prev) => [...prev.filter((x) => Date.now() - x.at < 4000 && !m.some((y) => y.trackId === x.trackId)), ...m].slice(-12));
     const aud = m.find((x) => x.auditionClipId); if (aud?.auditionClipId) void engineRef.current?.previewClip(aud.auditionClipId);
   }, []);
+  const meteringRef = useRef(false);
   const getEngine = useCallback(async () => {
     if (!engineRef.current) {
       const { Engine } = await import("@/lib/engine");
       engineRef.current = new Engine();
       engineRef.current.onSection = (_n, idx) => setNowSection(idx);
+      engineRef.current.setMetering(meteringRef.current);
     }
     return engineRef.current;
   }, []);
+  // The board asks for meters while it is on screen; the engine builds them only then.
+  const setMetering = useCallback((on: boolean) => { meteringRef.current = on; engineRef.current?.setMetering(on); }, []);
 
   // The ears on our own render. Only changed sections re-render (cache); sequenced so stale results never win.
   // One listen at a time, and the newest version wins. Two renders racing was the studio competing
@@ -240,10 +250,13 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   }, [getLevels]);
   // The kit and the first section's clips warm while the landing is up, keyed on the record that is
   // committed (its id, kit and sounds), never on a ref that may still hold the seed. The voice route warms once.
+  // Before the press the record is armed too: its voices built a step at a time and laid on the stopped
+  // transport (Engine.arm), and the greeting's first sentence is fetched, so the press only starts things.
   const warmKey = `${song.id ?? song.title}|${song.kit ?? "synth"}|${song.lane}|${song.bpm}|${clipKeysFor(song).join(",")}`;
   useEffect(() => {
     if (savedRef.current && song === SEED_SONG) return;
     const s = song; void import("@/lib/engine").then((m) => m.warmFor(s)).catch(() => {});
+    if (!started) armedRef.current = Promise.all([getEngine().then((e) => e.arm(s)).catch(() => {}), Promise.resolve(actionsRef.current?.prefetchVoice?.(greetingLine())).catch(() => {})]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [warmKey]);
   useEffect(() => { void fetch("/api/speak").catch(() => {}); }, []);
@@ -527,31 +540,31 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     return () => window.clearInterval(t);
   }, [started, paused, rollout, send]);
 
+  // The line the stage opens with, the same one the press says and the arm fetches ahead.
+  const greetingLine = () => isBlank(songRef.current)
+    ? "New record. Who are we chasing tonight? An artist, a song, or a feeling."
+    : resumeRef.current ? `We are back. Last time: ${resumeRef.current} Where do we pick up?`
+    : messagesRef.current.length > 0 ? "We are back. Tell me what you are hearing." : "We are live. That is our groove. Name a vibe, or just say surprise me.";
   const boot = useCallback(async () => {
     if (starting) return;
     if (!started) {
       setStarting(true); performance.mark("producer:boot");   // the press, for the first-sound probe
       try {
-        const blank = isBlank(songRef.current);
-        const greeting = blank
-          ? "New record. Who are we chasing tonight? An artist, a song, or a feeling."
-          : resumeRef.current ? `We are back. Last time: ${resumeRef.current} Where do we pick up?`
-          : messagesRef.current.length > 0 ? "We are back. Tell me what you are hearing." : "We are live. That is our groove. Name a vibe, or just say surprise me.";
+        const greeting = greetingLine();
         resumeRef.current = null;
         // One greeting per session on screen: earlier boot greetings (a reload, a second start) are replaced, never stacked.
         const isGreeting = (t: string) => /^(New record\. Who are we chasing|We are back\.|We are live\. That is our groove)/.test(t);
         setMessages((m) => { const kept = [...m]; while (kept.length && kept[kept.length - 1].role === "assistant" && isGreeting(kept[kept.length - 1].content)) kept.pop(); return [...kept, { role: "assistant", content: greeting }]; });
-        // The greeting goes first and the record joins underneath it: the transport waits for the first word,
-        // or 0.8 s at most, so a cold voice never holds the music past the two-second mark.
-        const spoke = new Promise<void>((res) => window.addEventListener("producer:voice", () => res(), { once: true }));
-        say(greeting);
+        // A fixed order on one clock: the context resumes inside the press, the greeting (fetched ahead) starts
+        // at t0 and the record joins underneath it a moment later. Nothing waits on a race.
         const eng = await getEngine();
-        void import("@/lib/engine").then((m) => m.warmFor(songRef.current)).catch(() => {});
-        await Promise.race([spoke, new Promise<void>((res) => window.setTimeout(res, 800))]);
-        await eng.start(songRef.current);
+        const c = studioContext(); if (c.state === "suspended") await c.resume().catch(() => {});
+        const t0 = c.currentTime + VOICE_LEAD;
+        say(greeting, { at: t0 });
+        await eng.start(songRef.current, { at: t0 + RECORD_LEAD });
         setStarted(true); setPaused(false);
-        // The listen yields to the scheduler every few ms now, so it no longer has to wait out the first bar.
-        refreshEars(songRef.current);
+        // The first listen waits out the first two bars, so the start has the thread to itself.
+        refreshEars(songRef.current, Math.round((8 * 60 / songRef.current.bpm) * 1000) + 500);
       } finally { setStarting(false); }
       return;
     }
@@ -572,6 +585,8 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const getPosition = useCallback((): Position | null => engineRef.current?.getPosition() ?? null, []);
   const duck = useCallback((on: boolean) => { engineRef.current?.duck(on); }, []);
   const liveEngine = useCallback(() => engineRef.current, []);
+  /** Settles when the record is armed and the greeting fetched (4 s at most): what a person sees before they press. */
+  const whenArmed = useCallback(() => Promise.race([armedRef.current, new Promise((r) => window.setTimeout(r, 4000))]), []);
   const onLaid = useCallback((f: (() => void) | null) => { laidRef.current = f; }, []);
   const onMoveLanded = useCallback((f: ((id: string) => void) | null) => { movedRef.current = f; }, []);
   const jump = useCallback(async (sectionId: string) => { const eng = await getEngine(); if (eng.goto(sectionId)) flash(`Jumped to ${songRef.current.sections.find((s) => s.id === sectionId)?.name ?? sectionId}`); }, [flash, getEngine]);
@@ -583,5 +598,5 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
 
   return { song, messages, busy, started, starting, paused, nowSection, library, clips, facts, hearing, reference, deltaText, listenHint, toast, lastMoveId, rendering, ab, score, canUndo, canRedo, rollout, notSaved,
     boot, send, sendVoice, ignored, ignoredCount, thatWasForMe, loadChat, newSession, setReferenceBuffer, moves, previewClip, brainDown, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, getSchedule, getHealth, setVolume, toggleTrack,
-    play, pause, append, tryLocal, spend, cost, getPosition, duck, liveEngine, onLaid, onMoveLanded };
+    play, pause, append, tryLocal, spend, cost, getPosition, duck, liveEngine, onLaid, onMoveLanded, whenArmed, setMetering };
 }

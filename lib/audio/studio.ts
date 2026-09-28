@@ -27,9 +27,22 @@ export function studioRate(): number | undefined {
   return STUDIO_RATE;
 }
 
+// Tone frees every finished note's source and oscillator in a requestIdleCallback with no timeout. A page
+// that plays and paints every frame is rarely idle, and under load it never is, so finished nodes stayed
+// connected by the hundred. An idle callback asked for with no timeout gets one here (two seconds), so they
+// are always let go. Callbacks that name their own timeout keep it.
+function boundIdle() {
+  const w = window as unknown as { requestIdleCallback?: (cb: IdleRequestCallback, o?: IdleRequestOptions) => number; __idleBound?: boolean };
+  if (!w.requestIdleCallback || w.__idleBound) return;
+  const orig = w.requestIdleCallback.bind(window);
+  w.requestIdleCallback = (cb, o) => orig(cb, o?.timeout ? o : { ...(o ?? {}), timeout: 2000 });
+  w.__idleBound = true;
+}
+
 /** The studio's context, made on first ask. Browser only. It starts suspended until a press resumes it. */
 export function studioContext(): AudioContext {
   if (ctx) return ctx;
+  boundIdle();
   const rate = studioRate();
   const made = new AudioContext(rate ? { latencyHint: "playback", sampleRate: rate } : { latencyHint: "playback" });
   ctx = made;

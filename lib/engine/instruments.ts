@@ -3,6 +3,7 @@
 // returns the trigger the rig calls with an explicit audio time.
 import * as Tone from "tone";
 import type { Note, Role, SynthParams, Wave } from "../song/types";
+import { LightChorus } from "./fx";
 
 export type Trigger = (n: Note, time: number, bpm: number) => void;
 type Env = { attack: number; decay: number; sustain: number; release: number };
@@ -38,16 +39,16 @@ export function synthVoice(role: Role, p: SynthParams, head: Tone.ToneAudioNode,
       const tune0 = 48 * Math.pow(2, (p.drumTune ?? 0) / 12);
       const body = new Tone.MembraneSynth({ pitchDecay: 0.035, octaves: 5.5, oscillator: { type: "sine" }, envelope: { attack: 0.001, decay: p.drumDecay ?? 0.32, sustain: 0 } }).connect(head);
       const click = new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.02, sustain: 0 } });
-      const clickHp = new Tone.Filter(3000, "highpass").connect(head); click.connect(clickHp);
+      const clickHp = new Tone.BiquadFilter(3000, "highpass").connect(head); click.connect(clickHp);
       disp.push(body, click, clickHp);
       trigger = (n, t) => { body.triggerAttackRelease(tune0, (p.drumDecay ?? 0.32) + 0.05, t, vel(n)); click.triggerAttackRelease(0.02, t, vel(n) * 0.5); };
       break;
     }
     case "clap": {
       const s = new Tone.NoiseSynth({ noise: { type: "pink" }, envelope: { attack: 0.001, decay: p.drumDecay ?? 0.16, sustain: 0 } });
-      const bp = new Tone.Filter(1900, "bandpass"); bp.Q.value = 0.6;
+      const bp = new Tone.BiquadFilter(1900, "bandpass"); bp.Q.value = 0.6;
       const air = new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.08, sustain: 0 } });
-      const airHp = new Tone.Filter(5000, "highpass");
+      const airHp = new Tone.BiquadFilter(5000, "highpass");
       s.connect(bp); bp.connect(head); air.connect(airHp); airHp.connect(head); disp.push(s, bp, air, airHp);
       trigger = (n, t) => { s.triggerAttackRelease(0.14, t, vel(n)); s.triggerAttackRelease(0.1, t + 0.012, vel(n) * 0.7); air.triggerAttackRelease(0.08, t + 0.004, vel(n) * 0.35); };
       break;
@@ -55,7 +56,7 @@ export function synthVoice(role: Role, p: SynthParams, head: Tone.ToneAudioNode,
     case "snare": case "perc": {
       const dec = p.drumDecay ?? (role === "perc" ? 0.09 : 0.18);
       const s = new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: dec, sustain: 0 } });
-      const bp = new Tone.Filter(role === "perc" ? 4200 : 2400, "bandpass"); bp.Q.value = role === "perc" ? 1.2 : 0.7;
+      const bp = new Tone.BiquadFilter(role === "perc" ? 4200 : 2400, "bandpass"); bp.Q.value = role === "perc" ? 1.2 : 0.7;
       const tone = new Tone.Synth({ oscillator: { type: "triangle" }, envelope: { attack: 0.001, decay: dec * 0.7, sustain: 0, release: 0.01 } });
       s.connect(bp); bp.connect(head); tone.connect(head); disp.push(s, bp, tone);
       trigger = (n, t) => { s.triggerAttackRelease(dec, t, vel(n)); tone.triggerAttackRelease(role === "perc" ? 1400 : 190, dec * 0.7, t, vel(n) * (role === "perc" ? 0.25 : 0.4)); };
@@ -65,9 +66,9 @@ export function synthVoice(role: Role, p: SynthParams, head: Tone.ToneAudioNode,
       // Two noise layers: a sizzle above 7 kHz and a resonant metallic ring, so hats read as hats, not static.
       const dec = p.drumDecay ?? (role === "hat" ? 0.07 : 0.32);
       const sizzle = new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: dec, sustain: 0, release: 0.02 } });
-      const hp = new Tone.Filter(7000, "highpass");
+      const hp = new Tone.BiquadFilter(7000, "highpass");
       const ring = new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: dec * 0.8, sustain: 0, release: 0.02 } });
-      const bp = new Tone.Filter(8200 * Math.pow(2, (p.drumTune ?? 0) / 12), "bandpass"); bp.Q.value = 5;
+      const bp = new Tone.BiquadFilter(Math.min(8200 * Math.pow(2, (p.drumTune ?? 0) / 12), head.context.sampleRate * 0.495), "bandpass"); bp.Q.value = 5;
       const ringVol = new Tone.Volume(3);
       sizzle.connect(hp); hp.connect(head); ring.connect(bp); bp.connect(ringVol); ringVol.connect(head); disp.push(sizzle, hp, ring, bp, ringVol);
       trigger = (n, t) => { sizzle.triggerAttackRelease(dec, t, vel(n)); ring.triggerAttackRelease(dec * 0.8, t, vel(n)); };
@@ -97,7 +98,7 @@ export function synthVoice(role: Role, p: SynthParams, head: Tone.ToneAudioNode,
     }
     case "chords": case "pad": {
       const s = p.wave === "epiano" || p.wave === "organ" ? keyboardVoice(p.wave, p, env) : new Tone.PolySynth(Tone.Synth, { oscillator: oscOf(p, ROLE_WAVE[role] ?? "sawtooth", ROLE_UNISON[role]), envelope: env({ attack: role === "pad" ? 0.4 : 0.005, decay: 0.5, sustain: 0.65, release: 0.9 }) });
-      const ch = new Tone.Chorus(0.6, 3.5, 0.4).start(); s.connect(ch); ch.connect(head); disp.push(s, ch);
+      const ch = new LightChorus(0.6, 3.5, 0.4); s.connect(ch); ch.connect(head); disp.push(s, ch);
       // A quiet sub-octave sine under chords gives the mids a floor without mud.
       const body = new Tone.PolySynth(Tone.Synth, { oscillator: { type: "sine" }, envelope: env({ attack: role === "pad" ? 0.4 : 0.005, decay: 0.5, sustain: 0.65, release: 0.9 }) });
       const bodyVol = new Tone.Volume(-14); body.connect(bodyVol); bodyVol.connect(head); disp.push(body, bodyVol);

@@ -11,6 +11,7 @@ import type { Track, Note, Role, AutoParam } from "../song/types";
 import type { Kit, KitSound } from "./kits";
 import { synthVoice } from "./instruments";
 import { hitter, reversedOf } from "./hits";
+import { Drive, hzOf } from "./fx";
 
 export type Voice = {
   trigger: (n: Note, time: number, bpm: number) => void;
@@ -59,12 +60,28 @@ function baseOf(track: Track) {
   };
 }
 
+/** The devices a track uses. A voice builds only these (the node budget), so switching one on or off is a
+ *  new voice, swapped at its boundary; a move within a device is a ramp. */
+export function devicesOf(track: Track, automated?: ReadonlySet<AutoParam>) {
+  const b = baseOf(track); const fx = track.fx ?? {}; const a = (p: AutoParam) => !!automated?.has(p);
+  return { width: (typeof fx.width === "number" && fx.width !== 0.5) || a("width"), pan: !!fx.pan || a("pan"), delay: b.delayWet > 0 || a("delay.wet"), drive: b.drive > 0 || a("drive"), send: b.reverb > 0 || a("reverb") };
+}
+
+/** The parameters a song automates on a track anywhere in it: their devices must exist to be moved. */
+export function automatedOn(song: { sections: { automation?: { track: string; param: AutoParam }[] }[] }, trackId: string): Set<AutoParam> {
+  const out = new Set<AutoParam>();
+  for (const sec of song.sections) for (const a of sec.automation ?? []) if (a.track === trackId) out.add(a.param);
+  return out;
+}
+
 /** What makes this a different instrument. Same signature, same voice: the change ramps instead of rebuilding. */
-export function voiceSignature(track: Track, ctx?: { kitId?: string; bpm?: number }): string {
+export function voiceSignature(track: Track, ctx?: { kitId?: string; bpm?: number; automated?: ReadonlySet<AutoParam> }): string {
   const p = track.synth ?? {}; const fx = track.fx ?? {}; const c = track.clip;
   const sampled = DRUM_ROLES.includes(track.role) || track.role === "audio";
+  const dv = devicesOf(track, ctx?.automated);
   return JSON.stringify([
     track.role,
+    [dv.width, dv.pan, dv.delay, dv.drive, dv.send],
     // A sampled voice plays a buffer, so tuning and decay are per hit and never rebuild it;
     // a synthesized one bakes them into its envelopes.
     sampled ? { wave: p.wave, octave: p.octave } : p,
@@ -78,10 +95,10 @@ export function voiceSignature(track: Track, ctx?: { kitId?: string; bpm?: numbe
   ]);
 }
 
-// A voice that will be tuned later keeps every rampable device in its chain even when the device is
-// off, bypassed by a zero wet. A voice rendered once offline builds only what it uses: the bypassed
-// devices are transparent, so the sound is identical, and eight section renders do not pay for them.
-export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: Kit, live = true): Voice {
+// A voice builds only the devices its track uses (devicesOf, part of its signature): a device switched on
+// or off is a new voice at the boundary, and the seed runs on a fraction of the nodes it did when every
+// voice carried every device bypassed by a zero wet. The sound is identical: a bypassed device is transparent.
+export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: Kit, automated?: ReadonlySet<AutoParam>): Voice {
   const { role } = track;
   const p = track.synth ?? {};
   const fx = track.fx ?? {};
@@ -92,20 +109,23 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: 
   // Insert chain (built back to front): filter -> drive -> crush -> eq -> delay -> pan -> width -> volume.
   const volume = new Tone.Volume(base.volume).connect(dest); disp.push(volume);
   let head: Tone.ToneAudioNode = volume;
-  const widener = live || typeof fx.width === "number" ? new Tone.StereoWidener(base.width) : null;
+  const dv = devicesOf(track, automated);
+  const widener = dv.width ? new Tone.StereoWidener(base.width) : null;
   if (widener) { widener.connect(head); head = widener; disp.push(widener); }
-  const panner = live || fx.pan ? new Tone.Panner(base.pan) : null;
+  const panner = dv.pan ? new Tone.Panner(base.pan) : null;
   if (panner) { panner.connect(head); head = panner; disp.push(panner); }
-  const delay = live || base.delayWet > 0 ? new Tone.FeedbackDelay(base.delayTime, base.delayFeedback) : null;
+  const delay = dv.delay ? new Tone.FeedbackDelay(base.delayTime, base.delayFeedback) : null;
   if (delay) { delay.wet.value = base.delayWet; delay.connect(head); head = delay; disp.push(delay); }
   if (fx.eq) { const eq = new Tone.EQ3(fx.eq.low, fx.eq.mid, fx.eq.high); eq.connect(head); head = eq; disp.push(eq); }
   if (fx.comp) { const c = new Tone.Compressor(fx.comp.threshold, fx.comp.ratio); c.connect(head); head = c; disp.push(c); }
   // The crusher is an AudioWorklet (JavaScript on the audio thread), so it exists only on a track that crushes.
   const crush = base.crush > 0 ? new Tone.BitCrusher(Math.max(4, Math.min(12, base.crush))) : null;
   if (crush) { crush.wet.value = base.crush > 0 ? 1 : 0; crush.connect(head); head = crush; disp.push(crush); }
-  const drive = live || base.drive > 0 ? new Tone.Distortion(Math.min(1, Math.max(0.001, base.drive))) : null;
+  const drive = dv.drive ? new Drive(Math.min(1, Math.max(0.001, base.drive))) : null;
   if (drive) { drive.wet.value = base.drive > 0 ? 1 : 0; drive.connect(head); head = drive; disp.push(drive); }
-  const filter = new Tone.Filter(base.cutoff, fx.filter?.type ?? "lowpass"); filter.Q.value = base.q;
+  // A plain biquad: Tone.Filter wraps one in two gains and four signals (ten native nodes), this is one.
+  const filter = new Tone.BiquadFilter({ frequency: Math.min(base.cutoff, volume.context.sampleRate * 0.495), type: fx.filter?.type ?? "lowpass", Q: base.q });
+  const cutoff = hzOf(filter.frequency, volume.context.sampleRate);
   filter.connect(head); head = filter; disp.push(filter);
   // A zero-delay wall: standardized-audio-context walks every downstream path for a cycle on each new connect
   // and stops only at a DelayNode, so every note start into the gate cost 7 to 12 ms. Behind it, under 0.1 ms.
@@ -113,14 +133,14 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: 
   const gate = new Tone.Gain(1); gate.connect(head); head = gate; disp.push(gate);
 
   // The reverb send always exists at the track's amount, so "more space on the pad" is a ramp.
-  const send = live || base.reverb > 0 ? new Tone.Gain(base.reverb) : null;
+  const send = dv.send ? new Tone.Gain(base.reverb) : null;
   if (send) { volume.connect(send); send.connect(buses.reverb); disp.push(send); }
 
   const vel = (n: Note) => Math.min(1, n[3] / 127);
   type Sig = { cancelAndHoldAtTime: (t: number) => unknown; linearRampToValueAtTime: (v: number, t: number) => unknown; exponentialRampToValueAtTime: (v: number, t: number) => unknown; rampTo: (v: number, r: number, at?: number) => unknown };
   const sigOf = (param: AutoParam): Sig | null => {
     switch (param) {
-      case "filter.cutoff": return filter.frequency as unknown as Sig;
+      case "filter.cutoff": return cutoff as unknown as Sig;
       case "filter.q": return filter.Q as unknown as Sig;
       case "volume": return volume.volume as unknown as Sig;
       case "pan": return (panner?.pan ?? null) as unknown as Sig | null;

@@ -9,7 +9,10 @@ const BLOCK = /^\/api\/(stt|music|stems|find|identify|match|learn)(\/|$)/;
 const WRITES = /^\/api\/(dna|account|usage)(\/|$)/;
 const EXTERNAL = /huggingface|hf\.co|jsdelivr/;
 
-export async function guard(page) {
+// opts.speakDelayMs / opts.speakSeconds: the voice answers after a delay with that much PCM (a slow voice
+// route, for the sentence-hole probe). The default is 0.4 s of silence at once.
+export async function guard(page, opts = {}) {
+  const speakBody = opts.speakSeconds ? Buffer.alloc(Math.round(24000 * 2 * opts.speakSeconds)).toString("base64") : SILENT_PCM;
   const spend = { speakStubbed: 0, speakChars: 0, blocked: {}, mocked: {}, paid: {}, external: 0 };
   const bump = (o, k) => { o[k] = (o[k] ?? 0) + 1; };
   const net = new Map();
@@ -21,7 +24,11 @@ export async function guard(page) {
       const answer = (code, type, body, headers = []) => page.call("Fetch.fulfillRequest", { requestId: p.requestId, responseCode: code, responseHeaders: [{ name: "Content-Type", value: type }, ...headers], body });
       if (EXTERNAL.test(u.hostname)) { spend.external++; return answer(503, "text/plain", Buffer.from("blocked by the probe").toString("base64")); }
       if (path.startsWith("/api/speak")) {
-        if (method === "POST") { spend.speakStubbed++; try { spend.speakChars += (JSON.parse(p.request.postData ?? "{}").text ?? "").length; } catch { /* no body */ } return answer(200, "audio/pcm; rate=24000", SILENT_PCM, [{ name: "Cache-Control", value: "no-store" }]); }
+        if (method === "POST") {
+          spend.speakStubbed++; try { spend.speakChars += (JSON.parse(p.request.postData ?? "{}").text ?? "").length; } catch { /* no body */ }
+          if (opts.speakDelayMs) await new Promise((r) => setTimeout(r, opts.speakDelayMs));
+          return answer(200, "audio/pcm; rate=24000", speakBody, [{ name: "Cache-Control", value: "no-store" }]);
+        }
         return page.call("Fetch.fulfillRequest", { requestId: p.requestId, responseCode: 204, responseHeaders: [] });
       }
       if (BLOCK.test(path) || (WRITES.test(path) && method !== "GET")) { bump(spend.blocked, path); return answer(503, "application/json", Buffer.from('{"error":"blocked by the probe"}').toString("base64")); }
@@ -42,8 +49,8 @@ export async function guard(page) {
     if (msg.method === "WebAudio.contextWillBeDestroyed") { const c = audio.contexts.get(p.contextId); if (c) c.alive = false; }
     // A closed context (Tone's own, disposed when the studio's is installed) is no longer open.
     if (msg.method === "WebAudio.contextChanged") { const c = audio.contexts.get(p.context.contextId); if (c) { c.state = p.context.contextState; if (c.state === "closed") c.alive = false; } }
-    if (msg.method === "WebAudio.audioNodeCreated") { const c = audio.contexts.get(p.node.contextId); if (c) { c.nodes++; c.peak = Math.max(c.peak, c.nodes); } audio.nodes.set(p.node.nodeId, p.node.contextId); }
-    if (msg.method === "WebAudio.audioNodeWillBeDestroyed") { const cid = audio.nodes.get(p.nodeId) ?? p.contextId; const c = audio.contexts.get(cid); if (c) c.nodes--; audio.nodes.delete(p.nodeId); }
+    if (msg.method === "WebAudio.audioNodeCreated") { const c = audio.contexts.get(p.node.contextId); if (c) { c.nodes++; c.peak = Math.max(c.peak, c.nodes); c.types = c.types ?? {}; c.types[p.node.nodeType] = (c.types[p.node.nodeType] ?? 0) + 1; } audio.nodes.set(p.node.nodeId, { cid: p.node.contextId, type: p.node.nodeType }); }
+    if (msg.method === "WebAudio.audioNodeWillBeDestroyed") { const n = audio.nodes.get(p.nodeId); const c = audio.contexts.get(n?.cid ?? p.contextId); if (c) { c.nodes--; if (n && c.types?.[n.type]) c.types[n.type]--; } audio.nodes.delete(p.nodeId); }
   });
   await page.call("Network.enable", { maxTotalBufferSize: 100_000_000 });
   await page.call("WebAudio.enable");
