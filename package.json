@@ -26,6 +26,7 @@
     "bars": "node tests/bars.probe.mjs http://localhost:3111",
     "holes": "node tests/holes.probe.mjs http://localhost:3111",
     "arrival": "node tests/arrival.probe.mjs http://localhost:3111",
+    "draft": "node tests/draft.probe.mjs http://localhost:3111",
     "stub": "node tests/stub-proxy.mjs 3112 http://127.0.0.1:3111"
   },
   "dependencies": {

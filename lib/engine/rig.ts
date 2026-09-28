@@ -189,7 +189,9 @@ export class Rig {
     }
 
     // Tempo rides rather than jumps, from the boundary's own time, so a tempo move is a push and not a stutter.
-    if (this.laid && this.transport.bpm.getValueAtTime(at) !== song.bpm) this.transport.bpm.rampTo(song.bpm, 0.05, at);
+    // A landing that runs late (a starved thread) must not set a ramp point in the past: Tone cancels the tempo events after it,
+    // and the clock, still holding one of them, throws in getTicksAtTime (seen at load 284, tests/draft.probe.mjs p8-battery-3).
+    if (this.laid && this.transport.bpm.getValueAtTime(at) !== song.bpm) this.transport.bpm.rampTo(song.bpm, 0.05, Math.max(at, this.transport.context.currentTime + 0.01));
     else if (!this.laid) this.transport.bpm.value = song.bpm;
     this.laid = true;
     return applied;
