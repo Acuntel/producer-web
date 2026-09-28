@@ -33,17 +33,17 @@ export function useTake(d: Deps) {
     entry.readyMs = Math.round(performance.now() - t0); entry.readyAt = performance.now(); entry.clipId = id; entry.seconds = Math.round(raw.duration * 100) / 100;
     void audioBufferToWav(raw).arrayBuffer().then((bytes) => putClip({ id, name, type: "audio/wav", bytes, createdAt: Date.now(), durationSec: raw.duration }));
     // Gate between phrases, then tune toward the song's scale, gently.
-    const { gateTake, pitchFrames, sungNotes, corrections, deviation } = await import("@/lib/voice/tune");
+    const { gateTake, pitchFramesAsync, sungNotes, corrections, deviationAsync, yieldThread } = await import("@/lib/voice/tune");
     const song = s.getSong();
-    const gated = gateTake(samples, sr);
-    const { frames, hopSec } = pitchFrames(gated, sr);
+    const gated = gateTake(samples, sr); await yieldThread();
+    const { frames, hopSec } = await pitchFramesAsync(gated, sr);
     const notes = sungNotes(frames, hopSec, song.key);
     const g = new AudioBuffer({ length: gated.length, numberOfChannels: 1, sampleRate: sr }); g.copyToChannel(Float32Array.from(gated), 0);
     const { shiftSegments } = await import("@/lib/audio/stretch");
     const tuned = await shiftSegments(g, corrections(notes, "gentle"));
     const out = tuned.getChannelData(0); let peak = 0; for (const v of out) peak = Math.max(peak, Math.abs(v));
     if (peak > 0.891) for (let i = 0; i < out.length; i++) out[i] *= 0.891 / peak;
-    entry.tuning = { before: deviation(gated, sr, song.key).medianAbsCents, after: deviation(out, sr, song.key).medianAbsCents, notes: notes.length, peak: Math.round(Math.min(peak, 0.891) * 1000) / 1000 };
+    entry.tuning = { before: (await deviationAsync(gated, sr, song.key)).medianAbsCents, after: (await deviationAsync(out, sr, song.key)).medianAbsCents, notes: notes.length, peak: Math.round(Math.min(peak, 0.891) * 1000) / 1000 };
     const tid = cutId(id, 0, tuned.duration, "tuned");
     cacheDecoded(tid, tuned);
     void audioBufferToWav(tuned).arrayBuffer().then((bytes) => putClip({ id: tid, name: `${name}, tuned`, type: "audio/wav", bytes, createdAt: Date.now(), durationSec: tuned.duration }));

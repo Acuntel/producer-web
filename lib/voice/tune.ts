@@ -47,6 +47,30 @@ export function pitchFrames(samples: Float32Array, sr: number): { frames: PitchF
   return { frames: trackPitch(samples, sr, n, hop), hopSec: hop / sr };
 }
 
+/** Give the thread back (a posted message, never clamped like a timer): a long take is tracked a slice at a time. */
+export const yieldThread = () => new Promise<void>((r) => { const c = new MessageChannel(); c.port1.onmessage = () => { c.port1.close(); r(); }; c.port2.postMessage(0); });
+
+/** pitchFrames a few frames at a time, giving the thread back between slices, so tracking a take never holds the
+ *  thread the scheduler and the page need. */
+export async function pitchFramesAsync(samples: Float32Array, sr: number, sliceMs = 8): Promise<{ frames: PitchFrame[]; hopSec: number }> {
+  const hop = Math.round(sr * 0.01), size = Math.round(sr * 0.04);
+  let n = 1; while (n < size) n <<= 1;
+  const frames: PitchFrame[] = [];
+  let t0 = performance.now();
+  for (let i = 0; i + n <= samples.length; i += hop * 4) {
+    for (const f of trackPitch(samples.subarray(i, Math.min(samples.length, i + hop * 3 + n)), sr, n, hop)) frames.push({ ...f, t: f.t + i / sr });
+    if (performance.now() - t0 > sliceMs) { await yieldThread(); t0 = performance.now(); }
+  }
+  return { frames, hopSec: hop / sr };
+}
+
+/** deviation, a slice at a time. */
+export async function deviationAsync(samples: Float32Array, sr: number, key: string): Promise<{ medianAbsCents: number; notes: number }> {
+  const { frames, hopSec } = await pitchFramesAsync(samples, sr);
+  const notes = sungNotes(frames, hopSec, key);
+  return { medianAbsCents: notes.length ? Math.round(median(notes.map((x) => Math.abs(x.cents)))) : 0, notes: notes.length };
+}
+
 /** The shift for each note: gentle moves a note within 70 cents of the scale 80% of the way, hard moves every note
  *  all the way. Between notes the voice is left as sung. */
 export function corrections(notes: SungNote[], mode: "gentle" | "hard" = "gentle"): { at: number; semitones: number }[] {

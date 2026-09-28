@@ -12,6 +12,7 @@ import { parseKey } from "../song/harmony";
 import { renderWindow } from "../engine/window";
 import { rmsEnvelope, stretchEnvelope, alignLag, maskedShare, pitchClasses, edgeDb, hopOf, firstOver } from "./vocalMeasure";
 import { put } from "../engine/assets";
+import { yieldThread } from "../voice/tune";
 
 export type VocalCheck = {
   slot: string; fromBeat: number; toBeat: number; renderMs: number;
@@ -61,6 +62,7 @@ export async function vocalCheck(song: Song, slot: Slot, tracks: string[], cut: 
   const tv = mono(timed);
   const gridSec = grid ? firstOver(tv, sr, 0.05, 0, Math.round(0.25 * beatSec * sr)) ?? 0 : 0;
   const v = mono(voice), o = mono(rest);
+  await yieldThread();
 
   // The envelope of the whole cut, stretched by the fit, says the render holds the right line (its correlation).
   const hop = hopOf(sr);
@@ -86,7 +88,9 @@ export async function vocalCheck(song: Song, slot: Slot, tracks: string[], cut: 
   const endBeat = startBeat + x.lengthBeats;
   const s0 = Math.max(0, Math.floor((startBeat - w.fromBeat) * beatSec * sr)), s1 = Math.min(v.length, Math.ceil((endBeat - w.fromBeat) * beatSec * sr));
   const vs = v.subarray(s0, s1), os = o.subarray(s0, s1);
+  await yieldThread();
   const mask = maskedShare(vs, os, sr);
+  await yieldThread();
   const pcs = pitchClasses(vs, sr);
   const k = parseKey(song.key);
   const scale = k ? (k.mode === "minor" ? MINOR : MAJOR).map((d) => (d + k.pc) % 12) : [];

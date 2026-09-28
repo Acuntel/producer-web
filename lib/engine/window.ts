@@ -15,8 +15,11 @@ export async function renderWindow(song: Song, fromBeat: number, toBeat: number,
   const clips = await loadClipsFor(clipKeysFor(song), "check");
   const kit = await getKit(song.lane, song.kit, song.bpm);
   ensureStudioContext();
+  // Only the tracks it is asked for are built: a voice heard alone lays one part, not the whole record, so the render
+  // is a few milliseconds of the page's thread instead of a whole rig.
   const only = o.audible;
-  const s: Song = { ...song, loop: null, tracks: only ? song.tracks.map((t) => ({ ...t, mute: !only(t), solo: false })) : song.tracks };
+  const keep = only ? new Set(song.tracks.filter(only).map((t) => t.id)) : null;
+  const s: Song = keep ? { ...song, loop: null, tracks: song.tracks.filter((t) => keep.has(t.id)).map((t) => ({ ...t, mute: false, solo: false })), sections: song.sections.map((q) => ({ ...q, active: q.active.filter((id) => keep.has(id)) })) } : { ...song, loop: null };
   const secs = ((toBeat - fromBeat) * 60) / song.bpm + (o.tailSec ?? 0.25);
   return renderInSteps(secs, 2, o.sampleRate ?? 22050, function* (transport) {
     const g = yield* buildGraphInSteps(s, transport, clips, kit);
