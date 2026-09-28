@@ -13,7 +13,7 @@ export const CONTRACT = `## YOUR STUDIO (SongDoc v3; the engine plays it live in
  "version": 3, "title": string, "bpm": number, "key": string, "lane": lane id (see LANES), "kit"?: "synth"|"starter"|kit id (drum sample kit, default synth; see SAMPLES AVAILABLE),
  "humanize": {"swing": 0.50-0.67 (legacy dial, prefer "groove"), "velVar": 0-0.3, "clapLateMs": -20..30, "seed": int, "pocketMs"?: -25..25},
  "groove"?: {"name": "straight"|"swing16"|"swing8"|"mpc16"|"mpc8"|"909"|"sp1200"|"garage-skip"|"custom", "amount": 0-1.3, "velocity"?: -1..1, "random"?: 0-12 ms} | null   (the song groove, a 16-slot timing and accent map like Ableton's Groove Pool; kick, clap and sub always stay straight),
- "master"?: {"volume"?: dB, "eq"?: {"low","mid","high"}, "compThreshold"?: dB, "makeup"?: dB (post-comp gain, default 5), "sidechainDb"?: 0-14 (pump depth on duck:true tracks, default 6; tech-house 5-7, hard-house 8-12, other lanes per their recipe), "sidechainReleaseMs"?: 60-400 (default 120; hard-house 200-300), "limiter"?: dB, "filter"?: {"type":"lowpass"|"highpass","cutoff":Hz}},
+ "master"?: {"volume"?: dB, "eq"?: {"low","mid","high"}, "compThreshold"?: dB, "makeup"?: dB (post-comp gain, default 8.5), "sidechainDb"?: 0-14 (pump depth on duck:true tracks, default 6; tech-house 5-7, hard-house 8-12, other lanes per their recipe), "sidechainReleaseMs"?: 60-400 (default 120; hard-house 200-300), "limiter"?: dB, "filter"?: {"type":"lowpass"|"highpass","cutoff":Hz}},
  "tracks": [{
    "id", "name", "role": "kick"|"clap"|"snare"|"hat"|"openhat"|"perc"|"bass"|"sub"|"chords"|"stab"|"pad"|"lead"|"pluck"|"arp"|"fx"|"audio",
    "volume": dB (0 unity), "duck": bool (sidechained to kick; true for everything but kick/clap), "mute"?, "solo"?,

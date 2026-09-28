@@ -89,7 +89,10 @@ async function runDesk() {
   await p.waitFor(`typeof window.__deskModule === "function"`, 40000, "the desk module");
   const scenes = opt("scenes", "full,velocity,swap,wrap,snap").split(",");
   log(`desk: rendering ${scenes.join(", ")} through the offline replica (this takes a minute or two)`);
-  const d = JSON.parse(await p.js(`window.__deskModule().then((m) => m.deskProbe(${JSON.stringify(scenes)})).then((r) => JSON.stringify(r))`));
+  // --master '{"makeup":6}' tries master settings on the seed without a rebuild.
+  // --seed hard-house measures the other shipped seed.
+  const master = opt("master", null); const seed = opt("seed", null);
+  const d = JSON.parse(await p.js(`window.__deskModule().then((m) => m.deskProbe(${JSON.stringify(scenes)}, ${seed ? JSON.stringify(seed) : "undefined"}, ${master ?? "undefined"})).then((r) => JSON.stringify(r))`));
   results.runs.desk = d; metrics.desk = d; log(`desk: ${JSON.stringify(d)}`);
   addSpend(g); p.close(); save();
 }

@@ -132,7 +132,7 @@ export type Master = {
   eq?: { low: number; mid: number; high: number };
   compThreshold?: number; // dB
   limiter?: number;       // dB ceiling
-  makeup?: number;        // dB after the compressor, default +5 (lib/engine/board.ts)
+  makeup?: number;        // dB after the compressor, default +8.5 (lib/engine/board.ts)
   sidechainDb?: number;   // pump depth on ducked tracks, 0-14 dB, default 6
   sidechainReleaseMs?: number; // 60-400, default 120
   filter?: { type: "lowpass" | "highpass"; cutoff: number };

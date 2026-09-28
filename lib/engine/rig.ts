@@ -7,7 +7,7 @@
 // The offline render drives the same rig once, so the ears hear exactly what plays.
 import * as Tone from "tone";
 import type { Song, Track } from "../song/types";
-import { scheduleEvents, type Ev, type Schedule } from "./schedule";
+import { scheduleEvents, loopBounds, type Ev, type Schedule } from "./schedule";
 import { makeVoice, voiceSignature, type Voice } from "./voices";
 import { makeBoard, type Board, type Analysis } from "./board";
 import { clipBuffer } from "./clips";
@@ -15,6 +15,8 @@ import type { Kit } from "./kits";
 import { hitsAddress } from "./steady";
 import { sampleKey } from "../samples/manifest";
 import { assetHeard } from "./ledger";
+import { ownedAt } from "./automation";
+import { layRiser, layPump, layGap, layResync, EDGE, type DeskCtx } from "./deskParts";
 
 export type Clips = Map<string, AudioBuffer>;
 // The rig's own health: how many note events fired, how many fired late (their time already past when the
@@ -32,12 +34,7 @@ export type Defer = (delaySec: number, fn: () => void) => void;
 const wallDefer: Defer = (delaySec, fn) => { if (typeof window === "undefined") fn(); else window.setTimeout(fn, Math.ceil(delaySec * 1000)); };
 
 const FADE_SEC = 0.015;   // a swapped instrument crosses over in fifteen milliseconds
-
-function hashBeats(beats: number[]): string {
-  let h = 2166136261;
-  for (const b of beats) h = Math.imul(h ^ Math.round(b * 960), 16777619);
-  return `${beats.length}.${(h >>> 0).toString(36)}`;
-}
+const GATE_FLOOR = 0.02;
 
 export class Rig {
   readonly board: Board;
@@ -77,17 +74,22 @@ export class Rig {
       this.parts.set(key, { part, hash });
     };
 
-    this.board.applyMaster(song.master ?? {}, this.laid);
+    // Every change is made at one explicit audio time: now() (the clock plus the lookahead), where the
+    // parts laid below start to sound. A parameter a running automation owns at that moment is skipped.
+    const at = this.transport.context.now();
+    const beatAt = (this.transport.state === "started" ? this.transport.getTicksAtTime(at) : this.transport.ticks) / ppq;
+    const owned = this.laid ? ownedAt(schedule.automation, schedule.sectionStarts, beatAt) : new Map();
+    this.board.applyMaster(song.master ?? {}, this.laid, at, owned.get("master"));
 
     // Voices: every track in the song keeps one, playing or muted, so a mute is a schedule and not a rebuild.
     const wanted = new Set(song.tracks.map((t) => t.id));
-    for (const [id, e] of [...this.entries]) if (!wanted.has(id)) { this.retire(e); this.entries.delete(id); this.board.analysis.tracks.delete(id); }
+    for (const [id, e] of [...this.entries]) if (!wanted.has(id)) { this.retire(e, at); this.entries.delete(id); this.board.analysis.tracks.delete(id); }
     for (const tr of song.tracks) {
       const buf = clipBuffer(clips, tr.clip);
       const sig = this.sigOf(tr, song, buf, kitId);
       const have = this.entries.get(tr.id);
-      if (have && have.sig === sig) { have.voice.tune(tr); continue; }
-      if (have) this.retire(have);
+      if (have && have.sig === sig) { have.voice.tune(tr, at, owned.get(tr.id)); continue; }
+      if (have) this.retire(have, at);
       this.entries.set(tr.id, this.build(tr, song, buf, kit, sig, kitId));
       applied.voicesRebuilt.push(tr.id);
     }
@@ -121,10 +123,13 @@ export class Rig {
         lay(`gate:${tr.id}`, `${e.sig}|${song.bpm}|${step}|${schedule.totalBeats}`, () => {
           const gateEvs: [string, number][] = [];
           for (let b = 0; b < schedule.totalBeats; b += step) gateEvs.push([tick(b), b]);
+          // Open and close are edges of a few milliseconds from wherever the gate is: a stepped gain is a click.
+          const g = e.voice.gate.gain; const open = step * beatSec * 0.55;
           return new Tone.Part((time) => {
-            e.voice.gate.gain.cancelScheduledValues(time);
-            e.voice.gate.gain.setValueAtTime(1, time);
-            e.voice.gate.gain.setValueAtTime(0.02, time + step * beatSec * 0.55);
+            g.cancelAndHoldAtTime(time);
+            g.linearRampToValueAtTime(1, time + EDGE);
+            g.setValueAtTime(1, time + open);
+            g.linearRampToValueAtTime(GATE_FLOOR, time + open + EDGE);
           }, gateEvs);
         });
       }
@@ -139,39 +144,9 @@ export class Rig {
         }, schedule.automation.map((a) => [tick(a.startBeat), a] as [string, Schedule["automation"][number]])));
     }
 
-    // Drop craft: "cut" and "riser" sections get a white-noise riser through the final bars.
-    const riserEvents: [string, number][] = [];
-    for (const s of schedule.sectionStarts) {
-      if (s.fill !== "cut" && s.fill !== "riser") continue;
-      const lenBeats = Math.min(16, s.beats);
-      riserEvents.push([tick(s.startBeat + s.beats - lenBeats - (s.fill === "cut" ? 0.5 : 0)), lenBeats]);
-    }
-    if (riserEvents.length) {
-      lay("riser", `${song.bpm}|${riserEvents.map((r) => r.join("/")).join(",")}`, () => {
-        // Each riser its own voice, its envelope set here once rather than mutated inside the callback,
-        // so two risers that overlap never share (or rewrite) one envelope.
-        const lens = riserEvents.map(([, lenBeats]) => lenBeats * beatSec);
-        const voices = lens.map((len, i) => { const v = this.board.riser(i); v.synth.envelope.attack = Math.max(0.1, len - 0.15); v.synth.envelope.decay = 0.1; v.synth.envelope.sustain = 0; return v; });
-        return new Tone.Part((time, i: number) => {
-          const { synth, hp } = voices[i]; const len = lens[i];
-          hp.frequency.setValueAtTime(500, time); hp.frequency.exponentialRampToValueAtTime(7000, time + len);
-          synth.triggerAttackRelease(len, time, 0.85);
-        }, riserEvents.map(([at], i) => [at, i] as [string, number]));
-      });
-    }
-
-    // The pump: duck the bus at every kick. Depth and release are master params (records: 5-7 dB, 100-120 ms).
-    const m = song.master ?? {};
-    const duckFloor = Math.pow(10, -Math.max(0, Math.min(14, m.sidechainDb ?? 6)) / 20);
-    const duckRelease = Math.min(beatSec * 0.8, Math.max(0.06, (m.sidechainReleaseMs ?? 120) / 1000));
-    const duck = this.board.duck;
-    lay("duck", `${duckFloor.toFixed(3)}|${duckRelease.toFixed(3)}|${hashBeats(schedule.kickBeats)}`, () =>
-      new Tone.Part((time) => {
-        duck.gain.cancelScheduledValues(time);
-        duck.gain.setValueAtTime(1, time);
-        duck.gain.linearRampToValueAtTime(duckFloor, time + 0.012);
-        duck.gain.linearRampToValueAtTime(1, time + 0.012 + duckRelease);
-      }, schedule.kickBeats.map((b) => [tick(b), b] as [string, number])));
+    // The desk's own parts: the riser, the pump, the silent gap before a drop, and automation back to base.
+    const desk: DeskCtx = { lay, tick, beatSec, song, schedule, board: this.board, voice: (id) => this.entries.get(id)?.voice, loopStart: loopBounds(song, schedule.sectionStarts, schedule.totalBeats).start };
+    layRiser(desk); layPump(desk); layGap(desk); layResync(desk);
 
     // Whatever this record no longer has: its schedule comes down.
     for (const [key, p] of [...this.parts]) if (!kept.has(key)) { try { p.part.stop(); p.part.dispose(); } catch {} this.parts.delete(key); }
@@ -221,12 +196,13 @@ export class Rig {
     return { voice, sig, meter, grain, sound, heard: false };
   }
 
-  /** An instrument that is leaving: fade it out under the record, then let it go. */
-  private retire(e: Entry) {
-    try { e.voice.setVolume(-60); } catch { /* already gone */ }
-    try { e.grain?.stop(); } catch { /* never started */ }
+  /** An instrument that is leaving: faded out from the audio time the change lands at, and let go only
+   *  once that fade has played. It was disposed on a 75 ms wall timer, before its fade had even started. */
+  private retire(e: Entry, at: number) {
+    try { e.voice.release(at, FADE_SEC); } catch { /* already gone */ }
+    try { e.grain?.stop(at + FADE_SEC); } catch { /* never started */ }
     const bury = () => { try { e.grain?.dispose(); } catch {} try { e.voice.dispose(); } catch {} try { e.meter.dispose(); } catch {} };
-    this.defer((Math.ceil(FADE_SEC * 1000) + 60) / 1000, bury);
+    this.defer(Math.max(0, at + FADE_SEC - this.transport.context.currentTime) + 0.05, bury);
   }
 
   dispose() {

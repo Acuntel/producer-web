@@ -53,9 +53,11 @@ function trackEvents(song: Song, sec: Section, tr: Track, cursor: number, feel: 
       for (const n of notes) {
         const local = r * loop + n[1];
         if (local < b0 || local >= b1 || local >= secBeats) continue;
-        // fill "cut": kick/bass/sub out for the final 2 beats, everything out for the last half beat.
-        if (cut && local >= secBeats - 2 && ["kick", "bass", "sub"].includes(tr.role)) continue;
-        if (cut && local >= secBeats - 0.5) continue;
+        // fill "cut": kick/bass/sub out for the final 2 beats, everything out for the last half beat, and a
+        // note that starts before its cut ends there instead of ringing on into the gap.
+        const cutAt = cut ? secBeats - (["kick", "bass", "sub"].includes(tr.role) ? 2 : 0.5) : Infinity;
+        if (local >= cutAt) continue;
+        const len = Math.min(n[2], cutAt - local);
         const chance = n[4] ?? tr.chance ?? 1;
         if (chance < 1 && rng() >= chance) continue;
         const hit = applyGroove(local, n[3], groove, rng, feel.beatSec);
@@ -65,7 +67,7 @@ function trackEvents(song: Song, sec: Section, tr: Track, cursor: number, feel: 
         if (tr.role !== "kick") beat += feel.pocket;
         if (dev > 0) vel = Math.max(1, Math.min(127, vel + Math.round((rng() * 2 - 1) * dev)));
         const midi = isDrum(tr.role) || tr.role === "audio" ? n[0] : n[0] + transpose;
-        list.push({ beat: Math.max(0, beat), note: [midi, n[1], n[2], vel] });
+        list.push({ beat: Math.max(0, beat), note: [midi, n[1], len, vel] });
         if (tr.role === "kick") kickBeats.push(beat);
       }
     }

@@ -50,11 +50,12 @@ export function printTable(m) {
     lines.push(row("App commits per second, playing untouched", `${m.idle.appCommitsPerSec} (all roots ${m.idle.reactCommitsPerSec})`, "under 1", m.idle.appCommitsPerSec < 1));
   }
   if (d?.full) {
-    lines.push(row("Seed samples on a flat top", `${d.full.flatTopSamples} (at the old clamp ${d.full.atOldClamp})`, "0", g.noFlatTops));
+    lines.push(row("Seed samples on a flat top", `${d.full.flatTopSamples} (at the old clamp ${d.full.atOldClamp}${d.full.ceilingOvers !== undefined ? `; past the curve ${d.full.ceilingOvers}, ceiling input peak ${d.full.ceilingInPeakDb} dBFS` : ""})`, "0", g.noFlatTops));
     lines.push(row("Seed true peak", `${d.full.truePeakDb} dBTP (sample ${d.full.samplePeakDb})`, "at or below -1 dBFS", g.truePeakUnderMinus1));
     lines.push(row("Seed loudness", `${d.full.lufs} LUFS (drop ${d.full.dropLufs})`, "-10 to -8 LUFS", g.lufsInRange));
+    if (d.full.gapDb !== undefined) lines.push(row("The gap before a drop", `${d.full.gapDb} dBFS RMS (loudest gap)`, "silent (-60 or below)", g.gapSilent));
   }
-  if (d?.velocity) lines.push(row("Drum onset vs its own velocity", `r ${d.velocity.minR} (${Object.entries(d.velocity.tracks).map(([k, v]) => `${k} ${v.r}`).join(", ")})`, "1.0", g.velocityFollows));
+  if (d?.velocity) lines.push(row("Drum onset vs its own velocity", `r ${d.velocity.minR} on the grid (${Object.entries(d.velocity.tracks).map(([k, v]) => `${k} ${v.r}${v.rGroove !== undefined ? `/${v.rGroove} swung` : ""}`).join(", ")})`, "1.0", g.velocityFollows));
   if (d?.swap) lines.push(row("Pad swap discontinuity", `${d.swap.ratio}x the pad's own largest step`, "no spike (1.5x at most)", g.swapClean));
   if (d?.wrap) lines.push(row("Master after the loop wrap", `${d.wrap.deltaDb} dB against the first pass`, "base (within 0.5 dB)", g.wrapAtBase));
   if (d?.snap) lines.push(row("A move during the outro fade", `${d.snap.deltaDb} dB against no move`, "no snapback (within 1 dB)", g.noSnapback));

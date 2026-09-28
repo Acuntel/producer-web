@@ -1,8 +1,9 @@
 // The desk probe: the seed played through the offline replica of the room (replica.ts), and the
 // numbers that say whether the desk is clean (masterprompt section 8.4 and the Phase 2 gate).
 // Loaded only by the harness, through window.__deskModule under ?e2e=1.
+import * as Tone from "tone";
 import type { Song } from "../song/types";
-import { SEED_SONG } from "../song/seeds";
+import { SEED_SONG, SEED_TECH_HOUSE, SEED_HARD_HOUSE } from "../song/seeds";
 import { Rig } from "./rig";
 import { renderReplica, type ReplicaAction } from "./replica";
 import { scheduleEvents, loopBounds } from "./schedule";
@@ -10,6 +11,8 @@ import { getKit, kitStyleFor } from "./kits";
 import { loadClipsFor, clipKeysFor } from "./clips";
 import { ensureStudioContext } from "./context";
 import * as M from "./deskMetrics";
+import { CHOKE_SEC } from "./hits";
+import { PRESCALE } from "./ceiling";
 
 const SR = 44100;
 const START = 0.2;   // Engine.start starts the transport at now(), one lookahead after the press
@@ -18,7 +21,9 @@ const r2 = (x: number) => Math.round(x * 100) / 100;
 
 type Scene = { song: Song; secs: number; startBeat?: number; loop?: boolean; moves?: { at: number; song: Song }[] };
 
-async function play(sc: Scene): Promise<{ chs: Float32Array[]; beatSec: number }> {
+// Four channels come back: the master (0, 1) and what enters the soft ceiling, pre-scaled (2, 3). A
+// sample there at 1 or beyond is past the end of the curve, which a WaveShaper holds flat: a clamp.
+async function play(sc: Scene): Promise<{ chs: Float32Array[]; tap: Float32Array[]; beatSec: number }> {
   ensureStudioContext();
   const kit = await getKit(sc.song.lane, sc.song.kit, sc.song.bpm);
   const kitId = `${sc.song.kit ?? "synth"}|${kitStyleFor(sc.song.lane, sc.song.bpm)}`;
@@ -26,7 +31,12 @@ async function play(sc: Scene): Promise<{ chs: Float32Array[]; beatSec: number }
   let rig: Rig | null = null;
   const moves: ReplicaAction[] = (sc.moves ?? []).map((m) => ({ at: m.at, run: () => { rig?.apply(m.song, clips, kit, kitId); } }));
   const buf = await renderReplica(sc.secs, SR, (r) => {
-    rig = new Rig(r.transport, undefined, false);
+    const native = r.ctx.rawContext as unknown as OfflineAudioContext;
+    const merger = native.createChannelMerger(4); merger.connect(native.destination);
+    const into = (node: Tone.ToneAudioNode, first: number) => { const sp = native.createChannelSplitter(2); node.connect(sp); sp.connect(merger, 0, first); sp.connect(merger, 1, first + 1); };
+    const main = new Tone.Gain(1); into(main, 0);
+    rig = new Rig(r.transport, main, false);
+    into(rig.board.ceilingIn, 2);
     rig.defer = r.defer;
     rig.apply(sc.song, clips, kit, kitId);
     const tr = r.transport, ppq = tr.PPQ;
@@ -35,8 +45,8 @@ async function play(sc: Scene): Promise<{ chs: Float32Array[]; beatSec: number }
       tr.loop = true; tr.loopStart = `${Math.round(lb.start * ppq)}i`; tr.loopEnd = `${Math.round(lb.end * ppq)}i`;
     }
     tr.start(START, `${Math.round((sc.startBeat ?? 0) * ppq)}i`);
-  }, moves);
-  return { chs: [buf.getChannelData(0), buf.getChannelData(1)], beatSec: 60 / sc.song.bpm };
+  }, moves, { channels: 4 });
+  return { chs: [buf.getChannelData(0), buf.getChannelData(1)], tap: [buf.getChannelData(2), buf.getChannelData(3)], beatSec: 60 / sc.song.bpm };
 }
 
 const solo = (song: Song, id: string, sections: string[]): Song => ({ ...song, loop: null, arrangement: sections, tracks: song.tracks.map((t) => ({ ...t, solo: t.id === id, mute: false })) });
@@ -49,30 +59,64 @@ const beatsBefore = (song: Song, sectionId: string) => {
 /** The whole seed: flat tops, the old clamp, peaks, loudness of the song and of its drop. */
 async function full(song: Song) {
   const total = scheduleEvents(song).totalBeats; const beatSec = 60 / song.bpm;
-  const { chs } = await play({ song: { ...song, loop: null }, secs: START + total * beatSec + 2 });
+  const { chs, tap } = await play({ song: { ...song, loop: null }, secs: START + total * beatSec + 2 });
   const drop = beatsBefore(song, "drop"); const dropBars = song.sections.find((s) => s.id === "drop")?.bars ?? 16;
-  const ft = M.flatTops(chs);
+  // A clamp repeats one value exactly; a smooth low peak bent by the soft ceiling can repeat to within
+  // 1e-6 over three samples, so the run is counted at 1e-7 (under two float steps at this level).
+  const ft = M.flatTops(chs, 3, 0.25, 1e-7, SR);
+  const overs = M.atOrAbove(tap, 1);
+  // The gap before each drop: a cut section's last half beat, after the edge ramp, must be silence.
+  const gaps = scheduleEvents(song).sectionStarts.filter((s) => s.fill === "cut").map((s) => { const end = START + (s.startBeat + s.beats) * beatSec; return r2(M.rmsDb(chs, SR, end - 0.5 * beatSec + 0.04, end - 0.01)); });   // clear of the edge ramps and the compressors' 12 ms lookahead
   return {
-    seconds: r2(chs[0].length / SR), flatTopSamples: ft.samples, flatTopRuns: ft.runs, longestFlatTop: ft.longest,
+    gapDb: gaps.length ? Math.max(...gaps) : null,
+    ceilingOvers: overs, ceilingInPeakDb: r2(M.db(M.samplePeak(tap) / PRESCALE)),
+    seconds: r2(chs[0].length / SR), flatTopSamples: ft.samples, flatTopRuns: ft.runs, longestFlatTop: ft.longest, flatTopAt: ft.at,
     atOldClamp: M.atLevel(chs, OLD_CLAMP), samplePeakDb: r2(M.db(M.samplePeak(chs))), truePeakDb: r2(M.db(M.truePeak(chs))),
     lufs: r2(M.lufs(chs, SR)), dropLufs: r2(M.lufs(chs, SR, START + drop * beatSec, START + (drop + dropBars * 4) * beatSec)),
   };
 }
 
-/** Each drum soloed through the groove: every onset's level against its own velocity. */
+type VelRun = { hits: number; r: number | null; rPrev: number | null; latencyMs: number; worst: { beat: number; vel: number; db: number; off: number }[] };
+const r3 = (x: number) => (Number.isFinite(x) ? Math.round(x * 1000) / 1000 : null);
+
+/** One drum soloed through the groove section: every onset's level against its own velocity. The voice is
+ *  what is on trial, so the desk's dynamics are kept out of it: the drum sits 24 dB down and the master
+ *  compressor's threshold at 0 dBFS, where neither compressor nor ceiling acts (a compressor's gain at a
+ *  hit depends on the hits before it, which is not the voice's doing), and its sends are off (a reverb
+ *  tail of the last hit is not this hit). Onsets are read after the chain's measured latency. `straight`
+ *  plays it on the grid, where every hit starts on a whole sample: a swung hit starts between samples,
+ *  and the source's interpolation dulls a noise hat's peak by up to a dB, which is not velocity either. */
+async function velocityRun(song: Song, id: string, straight: boolean): Promise<VelRun> {
+  const s0 = solo(song, id, ["groove"]);
+  const s: Song = {
+    ...s0, master: { ...(s0.master ?? {}), compThreshold: 0 },
+    humanize: straight ? { ...s0.humanize, clapLateMs: 0, pocketMs: 0 } : s0.humanize,
+    tracks: s0.tracks.map((t) => (t.id === id ? { ...t, volume: t.volume - 24, fx: { ...(t.fx ?? {}), reverb: 0, delay: undefined }, ...(straight ? { groove: null } : {}) } : t)),
+  };
+  const evs = scheduleEvents(s).perTrack.get(id) ?? [];
+  const beatSec = 60 / s.bpm;
+  const { chs } = await play({ song: s, secs: START + 32 * beatSec + 1 });
+  const ppq = 192;
+  const due = evs.map((e) => START + (Math.round(e.beat * ppq) / ppq) * beatSec);
+  const lat = M.latencyAfter(chs, SR, START - 0.05, due[0] ?? START);
+  const times = due.map((t) => t + lat);
+  // Read each hit just after the one before it has been choked away (hits.ts CHOKE_SEC), so a tail
+  // still fading under the new hit is not counted as the new hit's level.
+  const lv = M.onsetPeaks(chs, SR, times, -(CHOKE_SEC + 0.0005), CHOKE_SEC + 0.0065).map(M.db);
+  const vel = evs.map((e) => M.db(Math.max(0.03, e.note[3] / 127)));
+  // The hits furthest off the line, for a look when r is not 1.
+  const n = lv.length, mx = vel.reduce((a, b) => a + b, 0) / n, my = lv.reduce((a, b) => a + b, 0) / n;
+  const slope = vel.reduce((a, v, i) => a + (v - mx) * (lv[i] - my), 0) / Math.max(1e-9, vel.reduce((a, v) => a + (v - mx) ** 2, 0));
+  const worst = lv.map((y, i) => ({ beat: Math.round(evs[i].beat * 1000) / 1000, vel: evs[i].note[3], db: r2(y), off: r2(y - (my + slope * (vel[i] - mx))) })).sort((x, y) => Math.abs(y.off) - Math.abs(x.off)).slice(0, 3);
+  return { hits: evs.length, r: r3(M.pearson(lv, vel)), rPrev: r3(M.pearson(lv.slice(1), vel.slice(0, -1))), latencyMs: Math.round(lat * 10000) / 10, worst };
+}
+
+/** Each drum on the grid (the gate) and as it grooves (for the record). */
 async function velocity(song: Song, ids = ["kick", "clap", "hat", "tamb"]) {
-  const out: Record<string, { hits: number; r: number | null; rPrev: number | null }> = {};
+  const out: Record<string, VelRun & { rGroove: number | null; grooveWorst: VelRun["worst"] }> = {};
   for (const id of ids) {
-    const s = solo(song, id, ["groove"]);
-    const evs = scheduleEvents(s).perTrack.get(id) ?? [];
-    const beatSec = 60 / s.bpm;
-    const { chs } = await play({ song: s, secs: START + 32 * beatSec + 1 });
-    const ppq = 192;
-    const times = evs.map((e) => START + (Math.round(e.beat * ppq) / ppq) * beatSec);
-    const lv = M.onsetPeaks(chs, SR, times).map(M.db);
-    const vel = evs.map((e) => M.db(Math.max(0.03, e.note[3] / 127)));
-    const r = M.pearson(lv, vel); const rPrev = M.pearson(lv.slice(1), vel.slice(0, -1));
-    out[id] = { hits: evs.length, r: Number.isFinite(r) ? Math.round(r * 1000) / 1000 : null, rPrev: Number.isFinite(rPrev) ? Math.round(rPrev * 1000) / 1000 : null };
+    const grid = await velocityRun(song, id, true), groove = await velocityRun(song, id, false);
+    out[id] = { ...grid, rGroove: groove.r, grooveWorst: groove.worst };
   }
   const rs = Object.values(out).map((x) => x.r).filter((x): x is number => x !== null);
   return { tracks: out, minR: rs.length ? Math.min(...rs) : null };
@@ -122,7 +166,9 @@ export type DeskReport = Awaited<ReturnType<typeof deskProbe>>;
 export const DESK_SCENES = ["full", "velocity", "swap", "wrap", "snap"] as const;
 
 /** Run the scenes asked for (all by default) on the seed and say which gates pass. */
-export async function deskProbe(scenes: string[] = [...DESK_SCENES], song: Song = SEED_SONG) {
+export async function deskProbe(scenes: string[] = [...DESK_SCENES], which: Song | "tech-house" | "hard-house" = SEED_SONG, master?: Song["master"]) {
+  const seed = which === "hard-house" ? SEED_HARD_HOUSE : which === "tech-house" ? SEED_TECH_HOUSE : which;
+  const song: Song = master ? { ...seed, master: { ...(seed.master ?? {}), ...master } } : seed;
   const t0 = performance.now(); const ms: Record<string, number> = {};
   const time = async <T>(k: string, f: () => Promise<T>) => { const a = performance.now(); const v = await f(); ms[k] = Math.round(performance.now() - a); return v; };
   const res = {
@@ -133,9 +179,10 @@ export async function deskProbe(scenes: string[] = [...DESK_SCENES], song: Song 
     snap: scenes.includes("snap") ? await time("snap", () => snap(song)) : null,
   };
   const gates = {
-    noFlatTops: res.full ? res.full.flatTopSamples === 0 : null,
+    noFlatTops: res.full ? res.full.flatTopSamples === 0 && res.full.ceilingOvers === 0 : null,
     truePeakUnderMinus1: res.full ? res.full.truePeakDb <= -1 : null,
     lufsInRange: res.full ? res.full.lufs >= -10 && res.full.lufs <= -8 : null,
+    gapSilent: res.full && res.full.gapDb !== null ? res.full.gapDb <= -60 : null,
     velocityFollows: res.velocity ? (res.velocity.minR ?? 0) >= 0.99 : null,
     swapClean: res.swap ? res.swap.ratio <= 1.5 : null,
     wrapAtBase: res.wrap ? Math.abs(res.wrap.deltaDb) <= 0.5 : null,

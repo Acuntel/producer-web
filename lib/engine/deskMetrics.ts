@@ -6,26 +6,33 @@ import { analyzeLoudness } from "../ears/loudness";
 export const db = (x: number) => 20 * Math.log10(Math.max(Math.abs(x), 1e-12));
 const idx = (sr: number, sec: number, len: number) => Math.max(0, Math.min(len, Math.round(sec * sr)));
 
-export type FlatTops = { samples: number; runs: number; longest: number };
+export type FlatTops = { samples: number; runs: number; longest: number; at: number[] };
 /** Samples sitting on a hard clip: runs of `minRun` or more equal samples above `minAbs`. A soft
  *  curve never repeats a value over three samples of real music; a clamp does it every overload. */
-export function flatTops(chs: Float32Array[], minRun = 3, minAbs = 0.25, eps = 1e-6): FlatTops {
-  let samples = 0, runs = 0, longest = 0;
+export function flatTops(chs: Float32Array[], minRun = 3, minAbs = 0.25, eps = 1e-6, sr = 44100): FlatTops {
+  let samples = 0, runs = 0, longest = 0; const at: number[] = [];
   for (const x of chs) {
     let run = 1;
-    const close = () => { if (run >= minRun) { samples += run; runs++; if (run > longest) longest = run; } run = 1; };
+    const close = (i: number) => { if (run >= minRun) { samples += run; runs++; if (run > longest) longest = run; if (at.length < 8) at.push(Math.round(((i - run) / sr) * 1000) / 1000); } run = 1; };
     for (let i = 1; i < x.length; i++) {
-      if (Math.abs(x[i]) >= minAbs && Math.abs(x[i] - x[i - 1]) <= eps) run++; else close();
+      if (Math.abs(x[i]) >= minAbs && Math.abs(x[i] - x[i - 1]) <= eps) run++; else close(i);
     }
-    close();
+    close(x.length);
   }
-  return { samples, runs, longest };
+  return { samples, runs, longest, at };
 }
 
 /** How many samples sit within eps of a given level: the old desk's -2.85 dBFS clamp, for one. */
 export function atLevel(chs: Float32Array[], level: number, eps = 1e-4): number {
   let n = 0;
   for (const x of chs) for (let i = 0; i < x.length; i++) if (Math.abs(Math.abs(x[i]) - level) <= eps) n++;
+  return n;
+}
+
+/** How many samples sit at or beyond a level (in absolute value). */
+export function atOrAbove(chs: Float32Array[], level: number): number {
+  let n = 0;
+  for (const x of chs) for (let i = 0; i < x.length; i++) if (Math.abs(x[i]) >= level) n++;
   return n;
 }
 
@@ -98,6 +105,15 @@ export function onsetPeaks(chs: Float32Array[], sr: number, times: number[], pre
     for (const x of chs) { const a = idx(sr, t - pre, x.length), b = idx(sr, t + post, x.length); for (let i = a; i < b; i++) { const v = Math.abs(x[i]); if (v > p) p = v; } }
     return p;
   });
+}
+
+/** The chain's latency: the first sample that sounds after `fromSec`, less the time the first hit was
+ *  due. Each DynamicsCompressor on the desk looks ahead about 6 ms, so the output is late by that much
+ *  per compressor, and an onset read at its scheduled time would read the hit before it. */
+export function latencyAfter(chs: Float32Array[], sr: number, fromSec: number, dueSec: number, floor = 1e-3): number {
+  const a = idx(sr, fromSec, chs[0].length);
+  for (let i = a; i < chs[0].length; i++) for (const x of chs) if (Math.abs(x[i]) > floor) return Math.max(0, i / sr - dueSec);
+  return 0;
 }
 
 /** The biggest second difference in a span: a click or a cut is a spike here that the music around it never makes. */
