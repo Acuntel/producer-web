@@ -8,6 +8,7 @@ it (tools/voice/sdr.py kim), and answers we know without the model.
 - time: seconds per audio-minute for each stage, with the load average before and after (over 20 = under load).
 
     OMP_NUM_THREADS=4 python tools/voice/mapcheck.py map [names...]   # build and score the maps
+    python tools/voice/mapcheck.py rebuild [names...]                 # the whole map again, Whisper's words reused
     python tools/voice/mapcheck.py rescore [names...]                 # sections and hook again, models not re-run
     python tools/voice/mapcheck.py plot NAME START END                # the envelope and onsets, for the hand check
     python tools/voice/mapcheck.py words                              # score the words against build/handcheck.json
@@ -41,15 +42,23 @@ def score(name: str, m: dict, meta: dict) -> dict:
     err = [float(np.min(np.abs(truth - x))) for x in d] if len(d) else []
     bars = int(meta["seconds"] / bar) + 1; drop_truth = (bars // 2 + 4) * bar
     drop = next((s for s in m["sections"] if s["label"] == "drop"), None)
+    # Looser, said separately: the hook is a line of the labelled chorus (the same section, within 12 s of the line).
+    in_chorus = bool(hook and any(p["section"] == hook["section"] and abs(p["start"] - hook["start"]) < 12 for p in hit))
     return {"name": name, "phrases": len(ph), "words": m["words"]["count"], "hookText": hook["text"] if hook else None,
-            "hookPass": bool(hook and overlap(label, hook["text"]) >= 0.5), "labelPhrases": len(hit), "labelRank": rank,
+            "hookPass": bool(hook and overlap(label, hook["text"]) >= 0.5), "hookInLabelledChorus": in_chorus, "labelPhrases": len(hit), "labelRank": rank,
             "grid": m["source"]["grid"], "downbeatErrMedianMs": round(1000 * float(np.median(err)), 1) if err else None,
             "downbeatsWithin70ms": round(float(np.mean(np.array(err) < 0.07)), 3) if err else None,
             "dropSec": drop["start"] if drop else None, "dropTruthSec": round(drop_truth, 2), "dropErrBars": round((drop["start"] - drop_truth) / bar, 2) if drop else None,
             "sections": " ".join(f"{s['label']}:{s['startBar']}" for s in m["sections"])}
 
 
-def run_map(names: list[str]) -> None:
+def raw_words(m: dict) -> dict:
+    """The transcription a saved map was made from (Whisper's own times), so a map can be rebuilt without it."""
+    ws = sorted(({"w": w["w"], "start": w.get("asr", w["start"]), "end": w["end"], "p": w["p"]} for p in m["phrases"] for w in p["words"]), key=lambda w: w["start"])
+    return {"model": m["words"]["model"], "language": m["words"]["language"], "words": ws}
+
+
+def run_map(names: list[str], reuse_words: bool = False) -> None:
     import analysis, vocalmap
     os.makedirs(MAPS, exist_ok=True)
     for name in names:
@@ -57,12 +66,13 @@ def run_map(names: list[str]) -> None:
         mix, vocal = os.path.join(MIXES, name, "mix.wav"), os.path.join(SEP, f"{name}.wav")
         load0 = os.getloadavg()[0]; t0 = time.time()
         facts = analysis.analyze(mix); facts["name"] = name; t_facts = time.time() - t0
-        m = vocalmap.build(vocal, mix, facts)
+        prior = os.path.join(MAPS, f"{name}.json")
+        m = vocalmap.build(vocal, mix, facts, raw_words(json.load(open(prior))) if reuse_words and os.path.exists(prior) else None)
         total = time.time() - t0; minutes = meta["seconds"] / 60
         json.dump(m, open(os.path.join(MAPS, f"{name}.json"), "w"))
         stages, prev = {}, 0.0
         for k, v in m["timing"].items(): stages[k] = round((v - prev) / minutes, 1); prev = v
-        row = {"at": time.strftime("%Y-%m-%d %H:%M:%S"), **score(name, m, meta), "audioSec": meta["seconds"], "sec": round(total, 1),
+        row = {"at": time.strftime("%Y-%m-%d %H:%M:%S"), "wordsReused": reuse_words, **score(name, m, meta), "audioSec": meta["seconds"], "sec": round(total, 1),
                "secPerAudioMin": round(total / minutes, 1), "factsSec": round(t_facts, 1), "stageSecPerAudioMin": stages,
                "threads": os.environ.get("OMP_NUM_THREADS"), "loadBefore": round(load0, 2), "loadAfter": round(os.getloadavg()[0], 2), "underLoad": load0 > 20}
         with open(LOG, "a") as f: f.write(json.dumps(row) + "\n")
@@ -91,6 +101,7 @@ def rescore(names: list[str]) -> None:
                 if "asr" in w: w["start"] = w.pop("asr")
         m["words"]["lagSec"] = wordtime.refine(per, [(p["start"], p["end"]) for p in m["phrases"]], ons, st)
         m["sections"] = vocalmap.promote_choruses(m["phrases"], secs)
+        m["hook"] = vocalmap.rank_hooks(m["phrases"], m["sections"])
         json.dump(m, open(path, "w"))
         print(json.dumps({"at": time.strftime("%Y-%m-%d %H:%M:%S"), "rescored": True, **score(name, m, meta)}), flush=True)
 
@@ -138,6 +149,7 @@ def words() -> None:
 if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "map"
     if mode == "map": run_map(sys.argv[2:] or sorted(os.listdir(MIXES)))
+    elif mode == "rebuild": run_map(sys.argv[2:] or sorted(n[:-5] for n in os.listdir(MAPS)), reuse_words=True)
     elif mode == "rescore": rescore(sys.argv[2:] or sorted(n[:-5] for n in os.listdir(MAPS)))
     elif mode == "plot": plot(sys.argv[2], float(sys.argv[3]), float(sys.argv[4]))
     elif mode == "words": words()

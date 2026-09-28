@@ -118,9 +118,11 @@ def test_the_most_repeated_loud_line_is_the_hook():
     by_w, by_m = vocalmap.repeats_of(texts, contours, [2.0, 2.2, 2.0, 2.1, 2.0])
     assert by_w == [1, 3, 1, 3, 3]
     assert by_m[1] == 3 and by_m[2] == 1
-    scores = vocalmap.hook_scores(by_w, by_m, [-20, -18, -19, -18, -22], [0.5, 0.9, 0.5, 0.9, 0.9])
+    scores = vocalmap.hook_scores(by_w, by_m, [-20, -18, -19, -18, -22], [0.5, 0.9, 0.5, 0.9, 0.9], [2.5, 2.2, 2.4, 2.1, 2.0])
     assert int(np.argmax(scores)) == 1
     assert scores[0] < 0.3
+    tail = vocalmap.hook_scores([3, 3], [5, 3], [-20, -20], [0.9, 0.9], [0.8, 2.2])
+    assert tail[1] > tail[0] - 0.2, "a two-word tail does not beat its own line on melody alone"
 
 
 def test_the_anchor_is_the_syllable_on_the_one():
