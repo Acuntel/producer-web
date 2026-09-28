@@ -33,3 +33,32 @@ export async function stretchBuffer(buf: AudioBuffer, f: Fit): Promise<AudioBuff
   node.disconnect();
   return out;
 }
+
+/** `buf` at its own speed with its pitch moved by `segments` (from each `at`, in seconds, `semitones` until the next),
+ *  formants kept: the tuner's per-note corrections in one pass. The node orders its changes by its own clock, so each
+ *  one is handed in while the render is suspended just before it (50 ms ahead, the node's latency to catch up). */
+export async function shiftSegments(buf: AudioBuffer, segments: { at: number; semitones: number }[]): Promise<AudioBuffer> {
+  if (!segments.length) return buf;
+  const make = await load();
+  const ch = buf.numberOfChannels, sr = buf.sampleRate;
+  const ctx = new OfflineAudioContext(ch, buf.length, sr);
+  const node = await make(ctx, { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [ch] });
+  node.connect(ctx.destination);
+  const channels: Float32Array[] = [];
+  for (let c = 0; c < ch; c++) channels.push(Float32Array.from(buf.getChannelData(c)));
+  await node.addBuffers(channels);
+  await node.schedule({ active: true, output: 0, input: 0, rate: 1, semitones: 0, formantCompensation: true, formantBaseHz: 0 });
+  const quantum = 128 / sr, used = new Set<number>();
+  for (const s of [...segments].sort((a, b) => a.at - b.at)) {
+    const q = Math.floor(Math.max(0, s.at - 0.05) / quantum);
+    if (used.has(q) || q * quantum >= buf.duration) continue;
+    used.add(q);
+    void ctx.suspend(q * quantum).then(async () => {
+      await node.schedule({ active: true, output: Math.max(q * quantum, s.at), rate: 1, semitones: s.semitones, formantCompensation: true, formantBaseHz: 0 });
+      await ctx.resume();
+    });
+  }
+  const out = await ctx.startRendering();
+  node.disconnect();
+  return out;
+}

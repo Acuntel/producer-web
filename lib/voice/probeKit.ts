@@ -14,3 +14,6 @@ export { keyShift, fitKey, voiceFit } from "../song/fit";
 export { findPhrases } from "../song/vocal";
 export { learningSummary } from "../learn/placement";
 export { rmsEnvelope, onsetNear, hopOf, firstOver } from "../ears/vocalMeasure";
+export { stretchBuffer, shiftSegments } from "../audio/stretch";
+export { deviation, pitchFrames, sungNotes, corrections, gateTake } from "./tune";
+export { detectRootPitch } from "../engine/pitch";

@@ -8,7 +8,7 @@ import { studioJobs } from "@/lib/jobs/queue";
 
 type Studio = ReturnType<typeof useStudio>;
 type Draft = { run: (name: string | null, o?: { surprise?: boolean; heardAt?: number }) => unknown; next: (steer: null) => unknown; tryName: (t: string, heardAt?: number) => Promise<boolean> } | undefined;
-type Voices = { next: () => Promise<boolean>; take?: (what: "record" | "said") => Promise<void> } | undefined;
+type Voices = { next: () => Promise<boolean>; take?: (what: "record" | "said", ask?: string) => Promise<void> } | undefined;
 type Deps = { studio: () => Studio; speak: (t: string) => Promise<void>; draft: () => Draft; doVocal: (v: { what?: string | null; from?: string | null; where?: string | null }) => Promise<void>; voices?: () => Voices };
 const REFINE_LINE: Record<RefineStep, string> = { drums: "I am working on the drums now.", bass: "I am reworking the bass now.", harmony: "I am reworking the chords now.", hook: "I am writing a new hook now.", craft: "I am working on the arrangement now.", mix: "I am mixing it now.", finish: "I am building it out to a full arrangement now.", fixSection: "I am reworking that section now." };
 
@@ -21,10 +21,10 @@ export function useRouteWords(d: Deps) {
     studioJobs.enqueue({ text: line, origin: "refine", songId: s.getSong().id }, async () => { await s.runAction({ type: "rollout", kind: step, section }, s.getSong(), line); return {}; });
   }, []);
   // A take of his own: the hum recorder today; the take recorder of Phase 10 keeps what he just said.
-  const doTake = useCallback(async (what: "record" | "said") => {
+  const doTake = useCallback(async (what: "record" | "said", ask?: string) => {
     const s = studio();
     const take = voices?.()?.take;
-    if (take) { await take(what); return; }
+    if (take) { await take(what, ask); return; }
     if (what === "record") { await s.runAction({ type: "recordHum", beats: 8, track: "lead" }, s.getSong(), "record me"); return; }
     const line = "Keeping what you just said needs the take recorder, and that is the next piece of work. For now say record me and I will count you in.";
     s.append("assistant", line); await speak(line);
@@ -38,7 +38,7 @@ export function useRouteWords(d: Deps) {
     if (r.kind === "next" && dr) { s.append("user", t); dr.next(null); return true; }
     if (r.kind === "nextVoice") { const v = voices?.(); if (v) { s.append("user", t); void v.next(); return true; } }
     if (r.kind === "voice") { s.append("user", t); void doVocal({ from: r.from, what: r.what, where: r.where }); return true; }
-    if (r.kind === "take") { s.append("user", t); void doTake(r.what); return true; }
+    if (r.kind === "take") { s.append("user", t); void doTake(r.what, t); return true; }
     if (r.kind === "refine") { s.append("user", t); void doRefine(r.step, r.section); return true; }
     return false;
   }, [doVocal, doTake, doRefine]);

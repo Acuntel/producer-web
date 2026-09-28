@@ -8,8 +8,9 @@ class ProducerRecorder extends AudioWorkletProcessor {
     this.port.onmessage = (e) => { if (e.data && typeof e.data.capture === "boolean") this.capture = e.data.capture; };
   }
   process(inputs) {
-    const ch = inputs[0] && inputs[0][0];
-    if (!ch) return true;
+    // An input with nothing playing into it has no channels: that is silence, and time still passes, so a take whose
+    // singer stops before its end still reaches its end.
+    const ch = (inputs[0] && inputs[0][0]) || (this.zeros || (this.zeros = new Float32Array(128)));
     for (let i = 0; i < ch.length; i++) {
       if (this.n === 0) this.start = currentFrame + i;
       this.buf[this.n++] = ch[i];
