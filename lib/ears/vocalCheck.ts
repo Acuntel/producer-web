@@ -10,7 +10,7 @@ import { layout, placementWindow } from "../song/place";
 import { chromaUnder, leadsUnder } from "../song/placing/geometry";
 import { parseKey } from "../song/harmony";
 import { renderWindow } from "../engine/window";
-import { rmsEnvelope, stretchEnvelope, alignLag, maskedShare, pitchClasses, edgeDb, hopOf, onsetNear, firstOver } from "./vocalMeasure";
+import { rmsEnvelope, stretchEnvelope, alignLag, maskedShare, pitchClasses, edgeDb, hopOf, firstOver } from "./vocalMeasure";
 import { put } from "../engine/assets";
 
 export type VocalCheck = {
@@ -62,19 +62,24 @@ export async function vocalCheck(song: Song, slot: Slot, tracks: string[], cut: 
   const gridSec = grid ? firstOver(tv, sr, 0.05, 0, Math.round(0.25 * beatSec * sr)) ?? 0 : 0;
   const v = mono(voice), o = mono(rest);
 
-  // The anchor: the stressed syllable's onset in the render against its downbeat, the same onset rule on both sides
-  // (onsetNear). The envelope of the whole cut, stretched by the fit, says it is the right line (its correlation).
+  // The envelope of the whole cut, stretched by the fit, says the render holds the right line (its correlation).
   const hop = hopOf(sr);
   const ref = stretchEnvelope(rmsEnvelope(cut.getChannelData(0), cut.sampleRate, hop), (hopOf(cut.sampleRate, hop) / hop) / slot.fit.rate);
   const expect = ((startBeat - tFrom) * beatSec + gridSec) / hop;
   const { corr } = alignLag(ref, rmsEnvelope(tv, sr, hop), Math.floor(expect - 0.15 / hop), Math.ceil(expect + 0.15 / hop));
   const target = (x.anchorBeat - tFrom) * beatSec;
-  const srcHop = hopOf(cut.sampleRate, hop);
-  const srcEnv = rmsEnvelope(cut.getChannelData(0), cut.sampleRate, srcHop, 0.005);
-  const srcOnset = onsetNear(srcEnv, srcHop, x.anchorInCut) ?? x.anchorInCut;
-  const want = target + (srcOnset - x.anchorInCut) / slot.fit.rate;
-  // The render is searched over the source's own window, mapped through the fit, so both sides find the same rise.
-  const heard = onsetNear(rmsEnvelope(tv, sr, hop, 0.005), hop, target + gridSec, 0.06 / slot.fit.rate, 0.15 / slot.fit.rate);
+  // The stressed syllable's neighbourhood (200 ms either side on the source, stretched by the fit) is found in the
+  // render by its own shape, within 60 ms of where it belongs: a legato word has no single onset to threshold, but
+  // the shape around it moves as one.
+  const W = 0.2, cm = cut.getChannelData(0), ch = hopOf(cut.sampleRate, hop);
+  const srcEnv = rmsEnvelope(cm, cut.sampleRate, ch, 0.01);
+  const i0 = Math.max(0, Math.round((x.anchorInCut - W) / ch)), i1 = Math.min(srcEnv.length, Math.round((x.anchorInCut + W) / ch));
+  const local = stretchEnvelope(srcEnv.subarray(i0, i1), (ch / hop) / slot.fit.rate);
+  const renEnv = rmsEnvelope(tv, sr, hop, 0.01);
+  const at = (target + gridSec - (x.anchorInCut - i0 * ch) / slot.fit.rate) / hop;
+  const near = alignLag(local, renEnv, Math.floor(at - 0.06 / hop), Math.ceil(at + 0.06 / hop), false);
+  const heard = near.corr > 0 ? near.lag * hop + (x.anchorInCut - i0 * ch) / slot.fit.rate : null;
+  const want = target;
   const errSec = heard === null ? Infinity : heard - gridSec - want;
 
   // The span the voice sings in, inside the window.

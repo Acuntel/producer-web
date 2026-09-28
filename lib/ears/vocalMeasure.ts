@@ -27,8 +27,8 @@ const logc = (e: Float32Array) => { const out = new Float32Array(e.length); let 
 
 /** Where `ref` sits in `sig` (both envelopes on one hop): the lag in hops, searched from `from` to `to`, refined to a
  *  fraction of a hop, and how alike they are there (a normalized correlation, 0 to 1). */
-export function alignLag(ref: Float32Array, sig: Float32Array, from: number, to: number): { lag: number; corr: number } {
-  const a = logc(ref), b = logc(sig);
+export function alignLag(ref: Float32Array, sig: Float32Array, from: number, to: number, log = true): { lag: number; corr: number } {
+  const a = log ? logc(ref) : ref, b = log ? logc(sig) : sig;
   const ma = a.reduce((s, v) => s + v, 0) / Math.max(1, a.length);
   const za = a.map((v) => v - ma); const na = Math.sqrt(za.reduce((s, v) => s + v * v, 0)) || 1;
   const score = (lag: number) => {
