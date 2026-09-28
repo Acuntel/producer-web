@@ -101,13 +101,13 @@ export function slotsFor(v: VoiceSource, song: Song, o: PlaceOptions): Slot[] { 
 
 /** The one line the producer says when a placement lands, and the question after it. */
 export function landedLine(v: VoiceSource, s: Slot, c: VocalCheck | null): string {
-  const n = v.kind === "take" ? "Your take" : v.name;
+  const n = v.kind === "take" ? "your take" : v.name, N = n[0].toUpperCase() + n.slice(1);
   const where: Record<Slot["kind"], string> = {
-    "drop-hook": `${n} comes in on the one of the drop${s.instances.length > 1 ? ", and again in the second drop, doubled" : ""}.`,
-    "lead-in": `${n} leads into the drop, and its last word lands on the one.`,
+    "drop-hook": `${N} comes in on the one of the drop${s.instances.length > 1 ? ", and again in the second drop, doubled" : ""}.`,
+    "lead-in": `${N} leads into the drop, and its last word lands on the one.`,
     "break-verse": `A line from ${n} sits over the breakdown.`,
     "drop-chop": `A chop of ${n} answers the kick on the offbeats of the drop.`,
-    "call-response": `${n} answers the lead in its gap in the drop.`,
+    "call-response": `${N} answers the lead in its gap in the drop.`,
     "build-tag": `A tag from ${n} closes the first phrase of the build.`,
   };
   const why = !c ? " I could not listen back to it, so trust your ears on this one." : c.pass ? "" : ` It is the closest of the ones I tried, because ${!c.anchorOk ? "it lands a little off the beat" : !c.maskOk ? "the beat covers it in places" : !c.keyOk ? "it rubs against the key" : !c.collisionOk ? "the lead still plays over it" : !c.edgeOk ? "the cut is not clean" : "it runs past the section"}.`;
