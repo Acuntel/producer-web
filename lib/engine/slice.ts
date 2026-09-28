@@ -112,19 +112,20 @@ async function existing(id: string): Promise<AudioBuffer | null> {
 
 /** A phrase, cut where it was measured. No onset hunting: the measurement already found the word,
  *  and hunting for a transient inside a sung line lands on the wrong syllable. */
-export async function cutPhraseClip(src: AudioBuffer, startSec: number, lengthSec: number, id: string, name: string): Promise<{ id: string; durationSec: number; buffer: AudioBuffer }> {
+export async function cutPhraseClip(src: AudioBuffer, startSec: number, lengthSec: number, id: string, name: string, o?: { exact?: boolean }): Promise<{ id: string; durationSec: number; buffer: AudioBuffer; startSec: number }> {
   const have = await existing(id);
-  if (have) return { id, durationSec: have.duration, buffer: have };
+  if (have) return { id, durationSec: have.duration, buffer: have, startSec };
   const sr = src.sampleRate;
   // The first channel is enough to find a zero crossing; averaging a whole four-minute stem to mono first
   // was a long task on the thread the scheduler needs.
   const m = src.getChannelData(0);
   let start = Math.max(0, Math.min(m.length - 1, Math.floor(startSec * sr)));
   // Back up at most five milliseconds to a zero crossing so the first word does not click.
-  for (let n = 0; n < Math.floor(0.005 * sr) && start > 1; n++, start--) if (m[start - 1] <= 0 && m[start] > 0) break;
+  // A placed voice is cut exactly where it was asked (its anchor is measured from there); the fade-in keeps it clean.
+  if (!o?.exact) for (let n = 0; n < Math.floor(0.005 * sr) && start > 1; n++, start--) if (m[start - 1] <= 0 && m[start] > 0) break;
   const n = Math.max(Math.floor(0.05 * sr), Math.min(m.length - start, Math.floor(Math.min(8, lengthSec) * sr)));
   const out = await keepCut(src, start, n, 0.005, 0.03, id, name);
-  return { id, durationSec: out.duration, buffer: out };
+  return { id, durationSec: out.duration, buffer: out, startSec: start / sr };
 }
 
 /** A phrase on the record's own grid, so the chop loops without a hiccup. The start goes back to the beat at or

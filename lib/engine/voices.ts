@@ -85,7 +85,7 @@ export function voiceSignature(track: Track, ctx?: { kitId?: string; bpm?: numbe
     // A sampled voice plays a buffer, so tuning and decay are per hit and never rebuild it;
     // a synthesized one bakes them into its envelopes.
     sampled ? { wave: p.wave, octave: p.octave } : p,
-    c ? [c.clipId, c.sampleId, c.semitones, c.reverse, c.startSec, c.oneShot, c.warp, c.bpm, c.lengthBeats, c.warp !== false && c.bpm ? ctx?.bpm : 0] : null,
+    c ? [c.clipId, c.sampleId, c.semitones, c.reverse, c.startSec, c.oneShot, c.warp, c.bpm, c.lengthBeats, c.warp !== false && c.bpm ? ctx?.bpm : 0, !!c.voice] : null,
     !!track.duck,
     (fx.crush ?? 0) > 0,   // the crusher is built only when used, so switching it on or off is a new voice
     fx.filter?.type ?? null,
@@ -223,7 +223,9 @@ export function makeVoice(track: Track, buses: Buses, clip?: AudioBuffer, kit?: 
     const gain0 = Math.pow(10, (track.clip?.gainDb ?? 0) / 20);
     return done((n, t) => {
       if (!hits) return;
-      hits.hit(t, gain0 * Math.max(0.05, vel(n)), Math.pow(2, ((n[0] - 60) + (track.clip?.semitones ?? 0)) / 12), track.clip?.startSec ?? 0);
+      // A sung voice plays its pre-render at rate 1, whatever the note says: varispeed would chipmunk it.
+      const rate = track.clip?.voice ? 1 : Math.pow(2, ((n[0] - 60) + (track.clip?.semitones ?? 0)) / 12);
+      hits.hit(t, gain0 * Math.max(0.05, vel(n)), rate, track.clip?.startSec ?? 0);
     });
   }
   return done(synthVoice(role, p, head, disp));

@@ -11,6 +11,7 @@ import { assetRequested, assetDecoded, assetReady, assetFailed, type Tier } from
 import { idbGet, idbEvict, idbPersist } from "./idb";
 import { studioContextIfAny, studioRate, STUDIO_RATE } from "../audio/studio";
 import { sampleIdOf } from "../samples/manifest";
+import { parseFitKey } from "../song/fit";
 
 export type AssetEvent = { type: "clip-arrived" | "clip-replaced"; key: string };
 type Want = Exclude<Tier, "-">;
@@ -127,7 +128,26 @@ export function get(key: string, opts?: { tier?: Want; why?: string; signal?: Ab
   const promise = new Promise<AudioBuffer>((res, rej) => { resolve = res; reject = rej; });
   const job: Job = { key, tier, why, signal: tier === "T4" ? opts?.signal : undefined, resolve, reject, run: () => fetchAndDecode(key, job.signal) };
   const entry: { promise: Promise<AudioBuffer>; job: Job | null } = { promise, job };
+  // A voice on a grid is rendered from its own clip (lib/audio/stretch.ts), outside the queue: it waits on that
+  // clip's load, and a render holding a queue slot while its source queues behind it would stall the store.
+  const fit = parseFitKey(key);
+  if (fit) {
+    entry.job = null;
+    inFlight.set(key, entry);
+    get(fit.base, { tier, why: `${why} (voice)` })
+      .then(async (src) => { const { stretchBuffer } = await import("../audio/stretch"); const out = await stretchBuffer(src, fit); assetDecoded(key, 0); assetReady(key, "render"); return out; })
+      .then(resolve, reject);
+    settle(key, entry, promise);
+    return promise;
+  }
   inFlight.set(key, entry);
+  settle(key, entry, promise);
+  queue.push(job); pump();
+  return promise;
+}
+
+// A load that ends: kept and announced, or written to the ledger as failed and never cached.
+function settle(key: string, entry: { promise: Promise<AudioBuffer>; job: Job | null }, promise: Promise<AudioBuffer>) {
   promise.then((buf) => {
     if (inFlight.get(key) === entry) inFlight.delete(key);
     const replaced = decoded.has(key);
@@ -138,8 +158,6 @@ export function get(key: string, opts?: { tier?: Want; why?: string; signal?: Ab
     assetFailed(key, e instanceof Error ? e.message : "decode failed");
   });
   promise.finally(() => { entry.job = null; }).catch(() => {});
-  queue.push(job); pump();
-  return promise;
 }
 
 /** Several at once, in parallel: whatever loads is in the map, whatever fails is left out. */

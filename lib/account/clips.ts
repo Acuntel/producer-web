@@ -4,7 +4,7 @@
 // registered here by the same key the song carries, so the record can always be made whole again.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Song } from "@/lib/song/types";
-import { clipKeysFor } from "@/lib/engine/keys";
+import { sourceKeysFor } from "@/lib/engine/keys";
 import { staysOnDevice } from "@/lib/sources/splice";
 
 export type ClipRow = { id: string; clip_key: string; name: string; storage_path: string; mime: string | null; duration_sec: number | null; bpm: number | null; key: string | null; bytes: number | null };
@@ -15,7 +15,7 @@ const COLS = "id, clip_key, name, storage_path, mime, duration_sec, bpm, key, by
  *  never leaves their device (lib/sources/splice.ts), so the vault never takes one either. */
 export const needsVault = (key: string) => !key.startsWith("sample:") && !staysOnDevice(key);
 /** The audio a record cannot be played without. */
-export const vaultKeysOf = (song: Song) => clipKeysFor(song).filter(needsVault);
+export const vaultKeysOf = (song: Song) => sourceKeysFor(song).filter(needsVault);
 
 const rowOf = (key: string, name: string, path: string, m: ClipMetaIn) => ({
   clip_key: key, name: name.slice(0, 200), storage_path: path,

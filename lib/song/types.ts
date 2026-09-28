@@ -59,6 +59,7 @@ export type AudioClip = {
   reverse?: boolean;
   oneShot?: boolean;   // trigger from `notes` instead of looping
   durationSec?: number;
+  voice?: boolean;     // a sung voice: played from a formant-kept pre-render at the song's tempo and key (lib/song/fit.ts), never varispeed or grains
 };
 
 // Groove Pool: a 16-slot timing and accent map over one bar of 16ths (Ableton, MPC, 909).

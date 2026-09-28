@@ -12,9 +12,11 @@ import { makeVoice, voiceSignature, automatedOn, type Voice } from "./voices";
 import { makeBoard, type Board, type Analysis } from "./board";
 import { TrackMeter } from "./meters";
 import { clipBuffer } from "./clips";
+import { keyOfClip } from "./keys";
+import { playedClip } from "../song/fit";
 import type { Kit } from "./kits";
 import { hitsAddress } from "./steady";
-import { sampleKey } from "../samples/manifest";
+import { makeLoop, type Loop } from "./loops";
 import { assetHeard } from "./ledger";
 import { ownedAt } from "./automation";
 import { layRiser, layPump, layGap, layResync, EDGE, type DeskCtx } from "./deskParts";
@@ -26,7 +28,7 @@ export type Clips = Map<string, AudioBuffer>;
 export type Health = { events: number; late: number; minMarginMs: number };
 
 type Transport = ReturnType<typeof Tone.getTransport>;
-type Entry = { voice: Voice; sig: string; meter: TrackMeter | null; grain?: Tone.GrainPlayer; sound: string | null; heard: boolean };
+type Entry = { voice: Voice; sig: string; meter: TrackMeter | null; grain?: Loop; sound: string | null; heard: boolean };
 /** What one apply changed: the parts laid anew and the voices built anew, and the tracks held back because
  *  their sound is not decoded yet (they keep what they had, and are laid again when it arrives). */
 export type Applied = { partsChanged: string[]; voicesRebuilt: string[]; held: string[] };
@@ -100,7 +102,7 @@ export class Rig {
     for (const [id, e] of [...this.entries]) if (!wanted.has(id)) { this.retire(e, at); this.entries.delete(id); this.board.analysis.tracks.delete(id); }
     const held = new Set<string>();
     for (const tr of song.tracks) {
-      const buf = clipBuffer(clips, tr.clip);
+      const buf = clipBuffer(clips, tr.clip, song.bpm);
       const have = this.entries.get(tr.id);
       // The ready gate: a sound that is not decoded is not laid. What the track had keeps playing.
       if (tr.clip && !buf) { held.add(tr.id); applied.held.push(tr.id); continue; }
@@ -139,7 +141,7 @@ export class Rig {
       }
       const spans = schedule.clipSpans.filter((c) => c.trackId === tr.id);
       if (spans.length && e.grain && tr.clip) {
-        const c = tr.clip; const gp = e.grain; const rate = gp.playbackRate; const dur = gp.buffer.duration;
+        const c = playedClip(tr.clip, song.bpm); const gp = e.grain; const rate = gp.playbackRate; const dur = gp.buffer.duration;
         const evs = spanEvents(spans, loopStartBeat);
         const key = `span:${tr.id}`; const before = applied.partsChanged.length;
         lay(key, `${e.sig}|${song.bpm}|${loopStartBeat}|${spans.map((s) => `${s.startBeat}/${s.beats}`).join(",")}`, () =>
@@ -209,7 +211,7 @@ export class Rig {
    *  them in: the heavy part of a change happens before its boundary, off the scheduler's callback. */
   *stage(song: Song, clips: Clips = new Map(), kit?: Kit, kitId = ""): Generator<string, void> {
     for (const tr of song.tracks) {
-      const buf = clipBuffer(clips, tr.clip);
+      const buf = clipBuffer(clips, tr.clip, song.bpm);
       if (tr.clip && !buf) continue;
       const sig = this.sigOf(tr, song, buf, kitId);
       if (this.entries.get(tr.id)?.sig === sig || this.staged.get(tr.id)?.sig === sig) continue;
@@ -224,7 +226,7 @@ export class Rig {
   catchUp(song: Song, beat: number, at: number) {
     for (const tr of song.tracks) {
       const e = this.entries.get(tr.id); if (!e?.grain || !tr.clip || !this.schedule.audible.has(tr.id)) continue;
-      this.catchUpOne(e, tr.clip, this.schedule.clipSpans.filter((c) => c.trackId === tr.id), beat, at, song.bpm, false);
+      this.catchUpOne(e, playedClip(tr.clip, song.bpm), this.schedule.clipSpans.filter((c) => c.trackId === tr.id), beat, at, song.bpm, false);
     }
   }
 
@@ -244,29 +246,23 @@ export class Rig {
    *  offline render can build its voices one at a time and give the thread back between them. */
   prepareVoice(tr: Track, song: Song, clips: Clips = new Map(), kit?: Kit, kitId = "") {
     if (this.entries.has(tr.id)) return;
-    const buf = clipBuffer(clips, tr.clip);
+    const buf = clipBuffer(clips, tr.clip, song.bpm);
     this.entries.set(tr.id, this.build(tr, song, buf, kit, this.sigOf(tr, song, buf, kitId), kitId));
   }
 
   private sigOf(tr: Track, song: Song, buf: AudioBuffer | undefined, kitId: string) { return `${voiceSignature(tr, { kitId, bpm: song.bpm, automated: automatedOn(song, tr.id) })}|${buf ? "b" : "-"}`; }
 
   private build(tr: Track, song: Song, buf: AudioBuffer | undefined, kit: Kit | undefined, sig: string, kitId = ""): Entry {
-    const voice = makeVoice(tr, this.board.buses, buf, kit, automatedOn(song, tr.id));
+    // A voice plays its pre-render (lib/song/fit.ts): already at this tempo and in this key, at rate 1.
+    const played = tr.clip?.voice ? { ...tr, clip: playedClip(tr.clip, song.bpm) } : tr;
+    const voice = makeVoice(played, this.board.buses, buf, kit, automatedOn(song, tr.id));
     const meter = this.metered ? new TrackMeter() : null;
     if (meter) { voice.out.connect(meter.input); this.board.analysis.tracks.set(tr.id, meter); }
-    // Warped audio loops: a GrainPlayer stretched to the song tempo, living with its voice.
-    let grain: Tone.GrainPlayer | undefined;
-    const c = tr.clip;
-    if (c && buf && tr.role === "audio" && !c.oneShot) {
-      const rate = c.warp !== false && c.bpm ? song.bpm / c.bpm : 1;
-      grain = new Tone.GrainPlayer({ url: buf, loop: true, playbackRate: rate, detune: (c.semitones ?? 0) * 100, grainSize: 0.12, overlap: 0.05, loopStart: c.startSec ?? 0 });
-      grain.volume.value = c.gainDb ?? 0;
-      // The loop is lengthBeats of the clip's own beats in its buffer (60 / song.bpm * rate = 60 / clip bpm), never past its end.
-      if (c.lengthBeats) grain.loopEnd = Math.min(buf.duration, (c.startSec ?? 0) + c.lengthBeats * (60 / song.bpm) * rate);
-      grain.connect(voice.gate);
-    }
+    // Audio loops (lib/engine/loops.ts): a warped GrainPlayer, or a sung loop's pre-render at rate 1.
+    const c = played.clip;
+    const grain = tr.role === "audio" ? makeLoop(c, buf, !!tr.clip?.voice, song.bpm, voice.gate) : undefined;
     // The sound this voice plays, by its ledger key: its own clip, else the kit for a drum.
-    const sound = c && buf ? (c.sampleId ? sampleKey(c.sampleId) : c.clipId ?? null) : (["kick", "clap", "snare", "hat", "openhat", "perc"].includes(tr.role) && kit && kitId ? `kit:${kitId}` : null);
+    const sound = c && buf ? keyOfClip(tr.clip, song.bpm) : (["kick", "clap", "snare", "hat", "openhat", "perc"].includes(tr.role) && kit && kitId ? `kit:${kitId}` : null);
     return { voice, sig, meter, grain, sound, heard: false };
   }
 
