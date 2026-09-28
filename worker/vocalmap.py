@@ -8,7 +8,7 @@ which syllable it anchors on, and how many beats of pickup lead into that syllab
 from __future__ import annotations
 import json, time
 import numpy as np
-import grid as gridmod, lyrics, melody, phrases as ph, sections as sec
+import grid as gridmod, lyrics, melody, phrases as ph, sections as sec, wordtime
 
 VERSION = 1
 W_REPEAT, W_MELODY, W_PROMINENCE = 0.45, 0.30, 0.25
@@ -68,6 +68,7 @@ def build(vocal_path: str, mix_path: str, facts: dict, words: dict | None = None
     midi = melody.f0_track(y, spans); stamp("melody")
     words = words or lyrics.words(vocal_path); stamp("words")
     per = lyrics.assign(words.get("words") or [], spans)
+    lag = wordtime.refine(per, spans, ons, strength); stamp("wordTimes")
     texts = [lyrics.norm(" ".join(w["w"] for w in ws)) for ws in per]
     contours = [melody.contour(midi, a, b) for a, b in spans]
     by_words, by_melody = repeats_of(texts, contours, [b - a for a, b in spans])
@@ -91,31 +92,34 @@ def build(vocal_path: str, mix_path: str, facts: dict, words: dict | None = None
             "pickupBeats": round((stress - p.start) / g.beat_sec, 3), "stressOnset": round(stress, 3),
             "rmsDb": p.rms_db, "peakDb": p.peak_db,
         })
-    promote_choruses(out, sections)
+    sections = promote_choruses(out, sections)
     hook = max(out, key=lambda x: (x["hookScore"], -x["start"]))["id"] if out else None
     stamp("done")
     return {
         "version": VERSION,
         "source": {"name": facts.get("name"), "bpm": facts.get("bpm"), "key": facts.get("key"), "durationSec": facts.get("durationSec"),
                    "grid": g.source, "beatSec": round(g.beat_sec, 4), "downbeats": [round(float(x), 3) for x in g.downbeats]},
-        "words": {"model": words.get("model"), "language": words.get("language"), "count": len(words.get("words") or []), "error": words.get("error")},
+        "words": {"model": words.get("model"), "language": words.get("language"), "count": len(words.get("words") or []), "lagSec": lag, "error": words.get("error")},
         "melody": {"model": melody.MODEL},
         "sections": sections, "hook": hook, "phrases": out, "timing": timing,
     }
 
 
-def promote_choruses(out: list[dict], sections: list[dict]) -> None:
-    """A verse that carries the record's most repeated line is a chorus: the words say so when the energy cannot."""
+def promote_choruses(out: list[dict], sections: list[dict]) -> list[dict]:
+    """A verse that carries the record's most repeated line is a chorus: the words say so when the energy cannot.
+    Returns the sections with same-label neighbours merged, and relabels every phrase."""
     sung = [p for p in out if p["repeatsWords"] >= 3]
-    if not sung: return
-    top = max(p["repeatsWords"] for p in sung)
-    for p in sung:
-        if p["repeatsWords"] < top: continue
-        s = sec.section_at(sections, p["stressOnset"])
-        if s and s["label"] == "verse": s["label"] = "chorus"
+    if sung:
+        top = max(p["repeatsWords"] for p in sung)
+        for p in sung:
+            if p["repeatsWords"] < top: continue
+            s = sec.section_at(sections, p["stressOnset"])
+            if s and s["label"] == "verse": s["label"] = "chorus"
+    sections = sec.merge_runs(sections)
     for p in out:
         s = sec.section_at(sections, p["stressOnset"])
         if s: p["section"] = s["label"]
+    return sections
 
 
 if __name__ == "__main__":

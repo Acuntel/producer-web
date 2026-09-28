@@ -6,7 +6,8 @@
 
 export type SectionLabel = "intro" | "verse" | "chorus" | "build" | "drop" | "break" | "outro";
 
-export type VocalWord = { w: string; start: number; end: number; p: number };
+/** start is on the voice's own onset; asr is Whisper's own (late) time, kept for reference. */
+export type VocalWord = { w: string; start: number; end: number; p: number; asr?: number };
 export type VocalNote = { start: number; end: number; midi: number };
 
 export type VocalPhrase = {
@@ -45,7 +46,7 @@ export type VocalSection = { label: SectionLabel; startBar: number; endBar: numb
 export type VocalMap = {
   version: 1;
   source: { name: string | null; bpm: number | null; key: string | null; durationSec: number | null; grid: "beat_this" | "tempo"; beatSec: number; downbeats: number[] };
-  words: { model: string | null; language: string | null; count: number; error?: string | null };
+  words: { model: string | null; language: string | null; count: number; lagSec?: number; error?: string | null };
   melody: { model: "rmvpe" | "pyin" };
   sections: VocalSection[];
   /** The id of the phrase with the top hook score, or null when the vocal held no phrase. */

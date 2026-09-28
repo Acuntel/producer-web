@@ -128,3 +128,15 @@ def test_the_anchor_is_the_syllable_on_the_one():
     ons = np.array([3.5, 3.75, 4.02, 4.5]); strength = np.array([0.6, 0.5, 0.8, 1.0])
     assert vocalmap.anchor(ons, strength, 3.45, 5.0, g) == pytest.approx(4.02)
     assert vocalmap.anchor(np.zeros(0), np.zeros(0), 3.45, 5.0, g) == 3.45
+
+
+def test_word_starts_move_from_whispers_late_times_onto_the_voices_onsets():
+    import wordtime
+    ons = np.array([10.0, 10.9, 11.5, 11.52, 12.4, 13.0]); st = np.array([1.0, 0.9, 0.2, 0.9, 1.0, 0.8])
+    ws = [{"w": "break", "start": 10.4, "end": 10.8, "p": 0.9}, {"w": "it", "start": 11.25, "end": 11.6, "p": 0.9},
+          {"w": "down", "start": 11.9, "end": 12.3, "p": 0.9}, {"w": "now", "start": 12.75, "end": 13.4, "p": 0.9}]
+    lag = wordtime.refine([ws], [(9.95, 13.5)], ons, st)
+    assert 0.2 < lag < 0.45
+    assert [w["start"] for w in ws] == [10.0, 10.9, 11.52, 12.4], "the first word takes the phrase's first strong onset, the rest their own"
+    assert [w["asr"] for w in ws] == [10.4, 11.25, 11.9, 12.75], "Whisper's own time stays on the word"
+    assert all(a["end"] == b["start"] for a, b in zip(ws, ws[1:]))
