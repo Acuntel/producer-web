@@ -72,6 +72,22 @@ out.pairs = { minDistance: min, worst, sameHook, audibleP50: times[Math.floor(ti
 log(`pairs: min distance ${min} of 10 (${worst}), shared hooks ${sameHook}; audible p50 ${out.pairs.audibleP50} ms, max ${out.pairs.audibleMax} ms, under 3 s ${out.pairs.under3s} of ${out.names.length}`);
 save();
 
+// 1b. The greeting answered with a bare name ("Who are we chasing tonight?" "Avicii"): a draft, when the store knows it;
+// a word it does not know goes on to the Voice lane and makes no record.
+await p.js(`window.__newRecord().then(() => true)`); await p.js(`window.__silent(-90, 15000)`);
+let nb = (await drafts()).length;
+const bareHeard = p.js(`window.__above(-50, 10000)`);
+await say("Avicii");
+const bareMs = await bareHeard;
+const bare = await p.waitFor(`(window.__drafts ?? []).slice(${nb}).find((d) => d.kind === "draft")?.name ?? ""`, 15000, "a draft from a bare name").catch(() => "");
+await p.js(`window.__newRecord().then(() => true)`); await sleep(1500);
+nb = (await drafts()).length;
+await say("hmm");
+await sleep(3000);
+const hmm = (await drafts()).slice(nb).some((d) => d.kind === "draft");
+out.bareName = { name: bare, audibleMs: bareMs, hmmMadeADraft: hmm };
+log(`a bare name on an empty record: ${bare ? `drafted from ${bare}, audible ${bareMs} ms` : "no draft"}; "hmm" made a draft: ${hmm}`); save();
+
 // 2. The same name on the same record after a reload: the compiled record hashes the same.
 const NAME = NAMES[0];
 let n0 = (await drafts()).length;

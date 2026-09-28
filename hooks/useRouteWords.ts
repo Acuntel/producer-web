@@ -7,7 +7,7 @@ import { route, type RefineStep } from "@/lib/brain/route";
 import { studioJobs } from "@/lib/jobs/queue";
 
 type Studio = ReturnType<typeof useStudio>;
-type Draft = { run: (name: string | null, o?: { surprise?: boolean; heardAt?: number }) => unknown; next: (steer: null) => unknown } | undefined;
+type Draft = { run: (name: string | null, o?: { surprise?: boolean; heardAt?: number }) => unknown; next: (steer: null) => unknown; tryName: (t: string, heardAt?: number) => Promise<boolean> } | undefined;
 type Deps = { studio: () => Studio; speak: (t: string) => Promise<void>; draft: () => Draft; doVocal: (v: { what?: string | null; from?: string | null; where?: string | null }) => Promise<void> };
 const REFINE_LINE: Record<RefineStep, string> = { drums: "I am working on the drums now.", bass: "I am reworking the bass now.", harmony: "I am reworking the chords now.", hook: "I am writing a new hook now.", craft: "I am working on the arrangement now.", mix: "I am mixing it now.", finish: "I am building it out to a full arrangement now.", fixSection: "I am reworking that section now." };
 

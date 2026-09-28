@@ -25,7 +25,7 @@ type Deps = {
   grab?: (what: string, at?: number | null) => Promise<string | null>;   // a part of the heard record, into this one (hooks/useStems)
   vocal?: (what?: string | null, where?: string | null, from?: string | null) => Promise<string | null>;   // a voice off a record, landed before the drop
   ritual?: { control: (c: VoiceControl) => Promise<string | null>; heard: (words: string) => void };   // the order of work (hooks/useRitual)
-  draft?: { run: (name: string | null, o?: { surprise?: boolean; heardAt?: number }) => unknown; next: (steer: null) => unknown };   // hooks/useDraft
+  draft?: { run: (name: string | null, o?: { surprise?: boolean; heardAt?: number }) => unknown; next: (steer: null) => unknown; tryName: (t: string, heardAt?: number) => Promise<boolean> };   // hooks/useDraft
   questions?: { answer: (words: string) => boolean };   // hooks/useQuestions
 };
 const RITUAL_TITLE = (c: VoiceControl) => c.source ? `Setting the grid from ${c.source.name}` : c.chop ? "Cutting a chop on the grid" : c.alone ? "The chop alone, on a loop" : c.beat ? "Bringing the beat to the chop" : c.next ? "The next candidate" : c.down ? "Everything down but the seed" : null;
@@ -256,7 +256,7 @@ export function useConversation(d: Deps) {
     const heardAt = performance.now(), nowPlaying = s.getPosition();
     const turn = ++turnRef.current, stops = stopsRef.current;
     if (dRef.current.screen === "stage") {
-      if (dRef.current.questions?.answer(t) || routeWords(t, heardAt) || (await s.tryLocal(t))) { setTiming({ stt: sttMs, firstWord: 0, voiceMs: 0 }); return; }
+      if (dRef.current.questions?.answer(t) || routeWords(t, heardAt) || (await s.tryLocal(t)) || (await dRef.current.draft?.tryName(t, heardAt))) { setTiming({ stt: sttMs, firstWord: 0, voiceMs: 0 }); return; }
     }
     s.append("user", t);
     setThinking(true);

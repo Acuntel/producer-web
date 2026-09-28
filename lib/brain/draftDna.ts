@@ -17,11 +17,12 @@ type ArtistDb = { tempo_p50?: number | null; top_keys?: unknown; top_progression
 
 const within = <T>(p: PromiseLike<T>, ms: number, fallback: T): Promise<T> => Promise.race([Promise.resolve(p).catch(() => fallback), new Promise<T>((r) => setTimeout(() => r(fallback), ms))]);
 
+// A title said on its own must be the whole title ("love" is not every record with love in it); with an artist, part of it will do.
 async function heardRow(artist: string | null, title: string | null): Promise<Heard | null> {
-  const sb = supabaseAdmin(); if (!sb || (!artist && !title)) return null;
+  const sb = supabaseAdmin(); if (!sb || (!artist && !title) || (artist && norm(artist).length < 3)) return null;
   let q = sb.from("dna_heard").select("title,artist,tempo,key_name,kick_grid,snare_grid,hat_grid,bass_rhythm,progression,structure,energy_contour,family,descriptors");
   if (artist) q = q.ilike("artist_norm", `%${norm(artist)}%`);
-  if (title) q = q.ilike("title_norm", `%${norm(title)}%`);
+  if (title) q = artist ? q.ilike("title_norm", `%${norm(title)}%`) : q.eq("title_norm", norm(title));
   const r = await q.order("heard_count", { ascending: false }).limit(1);
   const row = (r.data?.[0] ?? null) as Heard | null;
   return row?.tempo ? row : null;

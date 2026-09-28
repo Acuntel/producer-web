@@ -140,6 +140,19 @@ export function useDraft(d: Deps) {
     });
   }, [d.job, landedAs, say]);
 
+  /** "Who are we chasing tonight?" answered with a bare name on an empty record: a draft, when the store knows it.
+   *  Anything the store does not know goes on to the Voice lane, so "yeah" or "hmm" never becomes a record. */
+  const tryName = useCallback(async (text: string, heardAt?: number): Promise<boolean> => {
+    const s = dRef.current.studio.getSong();
+    const t = text.trim().replace(/[.!]+$/, "");
+    if (s.tracks.length || !t || t.split(/\s+/).length > 6 || /\?$/.test(t) || /^(?:what|how|why|who|which|when|where|is|are|do|does|can|could|should|would|yes|yeah|yep|no|nah|nope|hmm+|um+|uh+|ok|okay|hi|hey|hello|thanks|thank you|nice|cool)\b/i.test(t)) return false;
+    const dna = await resolve(t);
+    if (!dna || dRef.current.studio.getSong().tracks.length) return false;
+    dRef.current.studio.append("user", text);
+    run(t, { heardAt });
+    return true;
+  }, [resolve, run]);
+
   const current = useCallback((): DraftNow => nowRef.current, []);
-  return { run, next, current };
+  return { run, next, current, tryName };
 }
