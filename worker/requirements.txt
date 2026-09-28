@@ -15,6 +15,9 @@ einops==0.8.1
 yt-dlp
 transformers==4.46.3
 faster-whisper==1.1.0
+# The grid for the vocal map: beat_this (CPJKU, code and weights MIT), pinned to the commit it was checked with.
+beat-this @ https://github.com/CPJKU/beat_this/archive/b95c8ab0c58c2d9fcfd40508ae8dffbc05ac4f5c.zip
+soxr
 ctranslate2>=4.4
 huggingface_hub
 

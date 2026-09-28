@@ -13,6 +13,9 @@ RUN python -c "import roformer; roformer.fetch_weights()"
 ENV HF_HOME=/models/hf
 RUN python -c "from transformers import ClapModel, ClapProcessor; ClapModel.from_pretrained('laion/clap-htsat-unfused'); ClapProcessor.from_pretrained('laion/clap-htsat-unfused')"
 RUN python -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')"
+# The vocal map: whisper-large-v3-turbo (MIT) for every sung word with a time, beat_this final0 (MIT) for the downbeats.
+RUN python -c "from faster_whisper import WhisperModel; WhisperModel('large-v3-turbo', device='cpu', compute_type='int8')"
+RUN python -c "from beat_this.inference import load_checkpoint; load_checkpoint('final0')"
 COPY . .
 EXPOSE 8080
 CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8080}"]

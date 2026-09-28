@@ -29,6 +29,20 @@ function percentile(values: Float32Array, p: number): number {
   return a[Math.min(a.length - 1, Math.max(0, Math.round((a.length - 1) * p)))];
 }
 
+/** The window of at most maxSec inside hops [a, b] that holds the most energy, in seconds. */
+export function loudestWindow(env: Float32Array, a: number, b: number, hopSec: number, maxSec: number): [number, number] {
+  const n = b - a + 1, w = Math.max(1, Math.round(maxSec / hopSec));
+  if (n <= w) return [a * hopSec, (b + 1) * hopSec];
+  let sum = 0;
+  for (let i = a; i < a + w; i++) sum += 10 ** (env[i] / 10);
+  let best = sum, at = a;
+  for (let i = a + w; i <= b; i++) {
+    sum += 10 ** (env[i] / 10) - 10 ** (env[i - w] / 10);
+    if (sum > best) { best = sum; at = i - w + 1; }
+  }
+  return [at * hopSec, (at + w) * hopSec];
+}
+
 export type PhraseOptions = { hopSec?: number; minSec?: number; maxSec?: number; joinSec?: number; overFloorDb?: number };
 
 /** Every phrase in a vocal stem: where it starts, where it ends, how loud it is, how much of a hook it looks like. */
@@ -64,8 +78,9 @@ export function findPhrases(samples: Float32Array, sampleRate: number, opts: Phr
     for (let i = a; i <= b && i < env.length; i++) { if (env[i] > peak) peak = env[i]; sum += env[i]; n++; }
     const rms = n ? sum / n : -120;
     // A phrase longer than the cap is kept, cut to its loudest window: hooks are short, verses are not.
-    const use = Math.min(len, maxSec);
-    out.push({ startSec, endSec: startSec + use, peakDb: peak, rmsDb: rms, score: 0 });
+    // (It used to keep the first maxSec seconds whatever they held.)
+    const [from, to] = loudestWindow(env, a, b, hopSec, maxSec);
+    out.push({ startSec: Math.max(startSec, from), endSec: Math.min(endSec, to), peakDb: peak, rmsDb: rms, score: 0 });
   }
   // The pick a producer would make: loud, and long enough to be a line rather than a breath.
   const top = out.length ? Math.max(...out.map((p) => p.rmsDb)) : 0;
