@@ -1,8 +1,9 @@
 // The ritual, end to end, on the mock brain: landing -> "new project" by voice -> the greeting ->
-// "Elvis Presley" starts research (the REAL store) while the producer keeps asking -> a task
-// lands a groove through the Hands -> "play it" runs an announced audition -> a press cuts it
-// off -> "play it" again runs to the end and asks "In or out?" -> "make the bass darker" lands
-// ops with a report. Proves every seam the live brain drives, with no model key.
+// "Elvis Presley" plays a whole draft compiled from the artist's records in the REAL store (the
+// first draft, docs/MASTERPROMPT_PRODUCER.md section 3) -> a task reaches the Hands and lands its
+// ops -> "play it" runs an announced audition -> a press cuts it off -> "play it" again runs to the
+// end and asks "In or out?" -> "make the bass darker" lands ops with a report. Proves every seam the
+// live brain drives, with no model key.
 // Session 2 is the order of work we watched a producer follow (docs/MASTERPROMPT_SMOOTH.md section 1), by voice:
 // name a record and get its tempo from the store, chop a phrase off its vocal, loop it alone, bring the beat in at
 // that tempo, hear the verdict prompt inside thirty seconds, "next one" plays a different candidate, "pull it down"
@@ -36,7 +37,7 @@ async function main() {
   const lastLine = (role) => js(`(() => { const els = document.querySelectorAll('[data-role="${role}"] p'); return els.length ? els[els.length - 1].textContent.trim() : ''; })()`);
   const cards = () => js(`JSON.stringify([...document.querySelectorAll('[data-role="work-card"]')].map((c) => ({ kind: c.dataset.kind, text: c.innerText.replace(/\\n/g, ' | ').slice(0, 120) })))`);
   const status = () => js(`document.querySelector('[data-role="status"]')?.innerText.replace(/\\n/g, ' ') ?? ''`);
-  const URL_ = `${BASE}/?typed=1&landing=1&mock=1&guest=1&economy=1`;
+  const URL_ = `${BASE}/?e2e=1&typed=1&landing=1&mock=1&guest=1&economy=1`;
 
   await call("Page.navigate", { url: URL_ }); await sleep(1500);
   await js(`localStorage.clear(); localStorage.setItem('producer.guest.v1','1'); true`);
@@ -47,17 +48,21 @@ async function main() {
   const greeting = await waitFor(`(() => { const t = [...document.querySelectorAll('[data-role="producer-line"] p')].map((e) => e.textContent).join(' | '); return /Who are we chasing/.test(t) ? t : ''; })()`, 30000, "the greeting on the stage");
   console.log(`[ritual] 2. stage by voice, greeting: ${greeting.slice(-80)}`);
 
+  // A name the store knows, said as the answer to the greeting, is a whole draft from that artist's DNA, with no
+  // model call (lib/song/draft.ts); it used to open a research card and wait for the Hands to build.
   await type("Elvis Presley");
-  await waitFor(`[...document.querySelectorAll('[data-role="work-card"]')].some((c) => c.dataset.kind === 'research')`, 15000, "the research card");
-  const researchDone = await waitFor(`(() => { const c = [...document.querySelectorAll('[data-role="work-card"]')].find((c) => c.dataset.kind === 'research'); const t = c?.innerText ?? ''; return /found|nothing found|failed/.test(t) ? t.replace(/\\n/g, ' | ') : ''; })()`, 30000, "research to finish");
-  console.log(`[ritual] 3. research: ${researchDone.slice(0, 110)}`);
-  assert.ok(/artist found/.test(researchDone), `Elvis should be found in the store: ${researchDone}`);
+  const drafted = JSON.parse(await waitFor(`(() => { const s = window.__song ? window.__song() : null; return s && s.draft && s.tracks.length >= 3 ? JSON.stringify({ name: s.draft.name, tier: s.draft.tier, tracks: s.tracks.map((t) => t.role).join(",") }) : ""; })()`, 15000, "the draft from the store"));
+  console.log(`[ritual] 3. drafted from ${drafted.tier} "${drafted.name}": ${drafted.tracks}`);
+  assert.equal(drafted.tier, "artist", `Elvis should be drafted from his records in the store: ${JSON.stringify(drafted)}`);
   console.log(`[ritual]    voice said: ${await lastLine("producer-line")}`);
 
+  // A change the router leaves to the Voice lane becomes a task, the Hands answer it, and their ops land on the record.
+  const bassOf = `(() => { const s = window.__song(); const b = s.tracks.find((t) => t.role === 'bass'); return b ? JSON.stringify({ t: b.transpose ?? 0, c: b.synth?.cutoff ?? null }) : ''; })()`;
+  const bass0 = JSON.parse(await js(bassOf) || "null");
+  assert.ok(bass0, "the draft should have a bass for the Hands to work on");
   await type("build me a groove");
-  await waitFor(`(() => { try { return (window.__song ? window.__song() : JSON.parse(localStorage.getItem('producer.song.v4'))).tracks.length >= 3; } catch { return false; } })()`, 30000, "the hands to land a groove");
-  const tracks = await js(`(window.__song ? window.__song() : JSON.parse(localStorage.getItem('producer.song.v4'))).tracks.map((t) => t.role).join(',')`);
-  console.log(`[ritual] 4. groove landed: ${tracks}; report: ${(await lastLine("producer-line")).slice(0, 90)}`);
+  await waitFor(`(() => { const b = ${bassOf}; return b && JSON.parse(b).t === ${bass0.t - 2}; })()`, 30000, "the hands' ops on the record");
+  console.log(`[ritual] 4. the hands landed: bass transpose ${bass0.t} -> ${bass0.t - 2}; report: ${(await lastLine("producer-line")).slice(0, 90)}`);
 
   await type("let me hear it");
   await waitFor(`[...document.querySelectorAll('[data-role="work-card"]')].some((c) => c.dataset.kind === 'audition' && !/stopped|played/.test(c.innerText))`, 15000, "the audition card");
@@ -82,10 +87,11 @@ async function main() {
   await waitFor(`(() => { const els = [...document.querySelectorAll('[data-role="producer-line"] p')]; return els.some((e) => /Darker now/.test(e.textContent)); })()`, 30000, "the hands' report");
   // The report streams before the reply's ops are applied: give the ops a moment to land on the record.
   const bassNow = `(() => { const s = (window.__song ? window.__song() : JSON.parse(localStorage.getItem('producer.song.v4'))); const b = s.tracks.find((t) => t.role === 'bass'); return b ? (b.transpose ?? 0) + ' / ' + (b.synth?.cutoff ?? 'default') : 'no bass'; })()`;
-  await waitFor(`${bassNow} === "-2 / 240"`, 10000, "the darker bass ops").catch(() => null);
+  const darker = `${bass0.t - 4} / 240`;
+  await waitFor(`${bassNow} === "${darker}"`, 10000, "the darker bass ops").catch(() => null);
   const bass = await js(bassNow);
   console.log(`[ritual] 8. darker bass: transpose / cutoff = ${bass}; cards: ${(await cards()).slice(0, 200)}`);
-  assert.equal(bass, "-2 / 240", "the mock hands' ops should have applied");
+  assert.equal(bass, darker, "the mock hands' ops should have applied");
   // 9. Grab: the Voice hands a cut to the studio, no Hands; with nothing pulled in yet the producer says so.
   await type("grab the synth at 1:32");
   const grabLine = await waitFor(`(() => { const els = [...document.querySelectorAll('[data-role="producer-line"] p')]; const l = els.map((e) => e.textContent).find((t) => /Grabbed the synth|no heard record to grab/.test(t)); return l ?? ''; })()`, 20000, "the grab answer");
@@ -221,9 +227,12 @@ async function orderOfWork({ call, js, waitFor, type, status }) {
   assert.ok(nextMove.window.saidAt - nextMove.window.landedAt < 30000, "said inside the thirty seconds");
 
   // 10. Three passes and nothing said: the next candidate is offered a swap, and the idea is marked dead in the ledger.
+  // One question in the room per 30 s (lib/ritual/questions.ts): the swap waits 30 s after the verdict prompt before it.
   await say("next one");
   const r10 = await waitFor(`(() => { const r = window.__ritual(); return r.played.length === 3 ? JSON.stringify(r) : ''; })()`, 30000, "a third candidate").then(JSON.parse);
-  const swap = await waitFor(`(() => { const p = window.__ritual().prompts.find((x) => x.kind === 'swap' && x.landedAt === ${r10.watch.landedAt}); return p ? JSON.stringify(p) : ''; })()`, 50000, "the swap offer").then(JSON.parse);
+  const swap = await waitFor(`(() => { const p = window.__ritual().prompts.find((x) => x.kind === 'swap' && x.landedAt === ${r10.watch.landedAt}); return p ? JSON.stringify(p) : ''; })()`, 80000, "the swap offer").then(JSON.parse);
+  const asked = (await ritual()).prompts.filter((x) => x.kind === "prompt" && x.landedAt === r10.watch.landedAt).map((x) => x.at);
+  if (asked.length) assert.ok(swap.at - Math.max(...asked) >= 30000, `the swap came ${swap.at - Math.max(...asked)} ms after the verdict prompt, inside the 30 s between questions`);
   const r10b = await ritual();
   const dead = (await ledger()).find((e) => e.id === r10.watch.moveId);
   console.log(`[ritual] O10. silence over ${r10.playing}: swap offered ${((swap.at - swap.landedAt) / 1000).toFixed(1)} s after it landed, ${r10b.loops - r10.watch.loopsAt} loop wraps; ledger ${JSON.stringify({ window: dead?.window, dead: dead?.dead, verdict: dead?.verdict })}`);
