@@ -3,7 +3,7 @@
 // control object and the usage. Target: first sentence inside a second.
 import { brainClient } from "@/lib/brain/client";
 import { VOICE_SYSTEM, parseVoice, voiceUser, type VoiceState } from "@/lib/brain/voice";
-import { mockVoice, mockRequested } from "@/lib/brain/mock";
+import { mockVoice, mockRequested, mockJson, MOCK_HEADERS } from "@/lib/brain/mock";
 import { withRetry, transient, pause } from "@/lib/brain/retry";
 import { guardSpend, recordUsage } from "@/lib/brain/usage";
 
@@ -28,9 +28,9 @@ export async function POST(req: Request) {
   if (mockRequested(req)) {
     // Harness only (PRODUCER_MOCK=1 on the server AND ?mock=1): deterministic answers, same wire shape, no key needed.
     const m = mockVoice(body.state, body.utterance);
-    if (!wantsStream) return Response.json({ ...m, model: "mock", ms: 1, keySource: "mock" });
+    if (!wantsStream) return mockJson({ ...m, model: "mock", ms: 1, keySource: "mock" });
     const lines = [JSON.stringify({ type: "say", text: m.say }), JSON.stringify({ type: "final", ...m, model: "mock", ms: 1, firstSentenceMs: 1, keySource: "mock" })];
-    return new Response(lines.join("\n") + "\n", { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" } });
+    return new Response(lines.join("\n") + "\n", { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", ...MOCK_HEADERS } });
   }
   const { client, source } = await brainClient(req);
   if (!client) return Response.json({ say: "The studio brain is not connected yet. Add your Anthropic API key in Settings.", control: {}, detail: "no key" });

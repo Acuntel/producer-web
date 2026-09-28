@@ -20,7 +20,10 @@
     "glitch": "node tests/glitch.probe.mjs http://localhost:3111",
     "vocal": "node tests/vocal.probe.mjs http://localhost:3111",
     "learn": "node --import ./tests/ts-resolve.mjs tests/learn.probe.mjs",
-    "audit:audio": "node tools/audit-audio.mjs ."
+    "audit:audio": "node tools/audit-audio.mjs .",
+    "load": "node tests/load.probe.mjs all http://localhost:3111",
+    "desk": "node tests/load.probe.mjs desk http://localhost:3111",
+    "stub": "node tests/stub-proxy.mjs 3112 http://127.0.0.1:3111"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",

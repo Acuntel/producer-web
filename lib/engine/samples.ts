@@ -1,8 +1,9 @@
 // The sample layer: the CC0 library shipped in public/samples, fetched on demand,
 // decoded once, cached, and assembled into drum kits or fired as audio clips.
 // Every sound the library lacks falls back to the synthesized kit, per sound.
-import { parseManifest, pickKit, sampleById, KIT_SOUNDS, MANIFEST_URL, type Manifest, type KitSoundName } from "../samples/manifest";
+import { parseManifest, pickKit, sampleById, sampleKey, KIT_SOUNDS, MANIFEST_URL, type Manifest, type KitSoundName } from "../samples/manifest";
 import { synthKit, type Kit, type KitStyle } from "./kits";
+import { assetRequested, assetDecoded, assetReady, assetFailed } from "./ledger";
 
 let manifestPromise: Promise<Manifest> | null = null;
 const decoded = new Map<string, Promise<AudioBuffer | null>>();
@@ -20,23 +21,28 @@ export function loadManifest(url = MANIFEST_URL): Promise<Manifest> {
 // Tests and tools can hand the loader a manifest instead of fetching one.
 export function setManifest(m: Manifest | null) { manifestPromise = m ? Promise.resolve(m) : null; decoded.clear(); }
 
-async function decodeUrl(url: string): Promise<AudioBuffer> {
+async function decodeUrl(url: string, key: string): Promise<AudioBuffer> {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`${url}: ${r.status}`);
   const bytes = await r.arrayBuffer();
   const ctx = new OfflineAudioContext(1, 1, 44100);
-  return ctx.decodeAudioData(bytes);
+  const size = bytes.byteLength;
+  const buf = await ctx.decodeAudioData(bytes);
+  assetDecoded(key, size); assetReady(key, "http");
+  return buf;
 }
 
 // Decode one library sample (cached forever for the session). Null when it cannot be had.
 export function decodeSample(id: string, manifest?: Manifest): Promise<AudioBuffer | null> {
   let p = decoded.get(id);
   if (!p) {
+    const key = sampleKey(id);
+    assetRequested(key, "sample");
     p = (manifest ? Promise.resolve(manifest) : loadManifest()).then((m) => {
       const e = sampleById(m, id);
-      if (!e) return null;
-      return decodeUrl(`${m.base}/${e.file}`);
-    }).catch(() => null);
+      if (!e) { assetFailed(key, "not in the manifest"); return null; }
+      return decodeUrl(`${m.base}/${e.file}`, key);
+    }).catch((e) => { assetFailed(key, e instanceof Error ? e.message : "decode failed"); return null; });
     decoded.set(id, p);
   }
   return p;

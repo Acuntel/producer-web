@@ -17,7 +17,7 @@ import { dnaLaneFor, laneNamed } from "@/lib/brain/laneNames";
 import { brainClient } from "@/lib/brain/client";
 import { skillsFor, skillsBlock } from "@/lib/brain/skills";
 import { flowNotes } from "@/lib/brain/flow";
-import { mockHands, mockRequested } from "@/lib/brain/mock";
+import { mockHands, mockRequested, mockJson } from "@/lib/brain/mock";
 import { withRetry, transient, pause } from "@/lib/brain/retry";
 import { guardSpend, recordUsage } from "@/lib/brain/usage";
 
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
   }
   if (mockRequested(req)) {
     const m = mockHands(input.song);
-    return Response.json({ say: m.say, ops: m.ops, song: m.song, action: null, listen: m.listen, expect: null, alternative: null, usage: null, model: "mock", keySource: "mock" });
+    return mockJson({ say: m.say, ops: m.ops, song: m.song, action: null, listen: m.listen, expect: null, alternative: null, usage: null, model: "mock", keySource: "mock" });
   }
   const { client, source } = await brainClient(req);
   if (!client) {

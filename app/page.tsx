@@ -27,6 +27,8 @@ import { StatusLine } from "@/components/StatusLine";
 import { AccountSheet } from "@/components/AccountSheet";
 import { AnalyzeSheet } from "@/components/AnalyzeSheet";
 import { Icon } from "@/components/Icon";
+import { TraceOverlay } from "@/components/TraceOverlay";
+import { countAppCommit, traceOn } from "@/lib/engine/ledger";
 import type { Song } from "@/lib/song/types";
 import type { BrainAction } from "@/lib/brain/parse";
 
@@ -40,6 +42,10 @@ export default function App() {
   useEffect(() => { if (harnessMode()) { setTyped(true); if (/[?&]library=1/.test(window.location.search)) setView("library"); else if (!/[?&]landing=1/.test(window.location.search)) setView("stage"); } }, []);
   // No paid voice configured: the free voice starts downloading now, so it is ready by the first reply.
   useEffect(() => { fetch("/api/health").then((r) => r.json()).then((h: { voice?: boolean }) => { if (h && h.voice === false) void import("@/lib/voice/kokoro").then((m) => m.loadKokoro()); }).catch(() => {}); }, []);
+  // The ledger counts every commit of the page, so "nothing re-renders in a loop" is a number.
+  useEffect(() => { countAppCommit(); });
+  const [trace, setTrace] = useState(false);
+  useEffect(() => { setTrace(traceOn()); }, []);
   const [showAccount, setShowAccount] = useState(false);
   const [showAnalyze, setShowAnalyze] = useState(false);
   const snapshotRef = useRef<(s: Song, m: SnapshotMeta) => void>(() => {});
@@ -213,6 +219,7 @@ export default function App() {
       {showAccount && <AccountSheet account={account} mode="sheet" onClose={() => setShowAccount(false)} />}
       {showAnalyze && <AnalyzeSheet stems={stems} signedIn={!!account.user} onSignIn={() => { setShowAnalyze(false); setShowAccount(true); }} onClose={() => setShowAnalyze(false)} />}
       {gate && <AccountSheet account={account} mode="gate" onClose={() => {}} />}
+      {trace && <TraceOverlay />}
       {studio.toast && <div role="status" className="panel fixed bottom-36 left-1/2 z-50 -translate-x-1/2 animate-slide-up rounded-full px-5 py-2.5 text-sm font-medium">{studio.toast}</div>}
     </main>
   );

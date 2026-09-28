@@ -73,3 +73,16 @@ export function mockHands(song: Song): { say: string; ops: unknown[] | null; son
 }
 
 export const mockRequested = (req: Request) => process.env.PRODUCER_MOCK === "1" && new URL(req.url).searchParams.get("mock") === "1";
+
+// Every mocked answer says so on the wire, so a probe can prove a run spent nothing: a paid route
+// that answers without this header in a mock run is a paid call.
+export const MOCK_HEADERS = { "x-producer-mock": "1" } as const;
+export const mockJson = (body: unknown) => Response.json(body, { headers: MOCK_HEADERS });
+
+// The critic, the attention classifier and a rollout step, answered without a model.
+export const mockCritic = () => ({ headline: "The mock critic heard the record. Nothing to change.", notes: [] as unknown[] });
+export const mockAttend = () => ({ intent: "command" as const, model: "mock" });
+export function mockStep(song: Song, fullSong: boolean) {
+  const m = mockHands(song);
+  return { say: m.say, ops: fullSong ? null : m.ops, song: fullSong ? m.song ?? song : m.song, listen: m.listen, model: "mock", usage: null, stop: "end_turn", textLength: 0 };
+}

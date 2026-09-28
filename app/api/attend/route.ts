@@ -1,6 +1,7 @@
 // Attention classifier: was this sentence meant for the producer? One tiny, fast
 // inference. Fails open (command) so a hiccup never eats a real request.
 import { brainClient } from "@/lib/brain/client";
+import { mockRequested, mockJson, mockAttend } from "@/lib/brain/mock";
 
 export const maxDuration = 15;
 const MODEL = process.env.PRODUCER_ATTEND_MODEL || "claude-haiku-4-5-20251001";
@@ -16,6 +17,8 @@ export async function POST(req: Request) {
   const x = (await req.json().catch(() => ({}))) as { text?: string; paused?: boolean; lastProducer?: string; lastAsk?: string; section?: string };
   const text = (x.text ?? "").toString().slice(0, 400).trim();
   if (!text) return Response.json({ intent: "ignore" });
+  // Harness only (PRODUCER_MOCK=1 on the server AND ?mock=1): fails open to a command, like a hiccup does.
+  if (mockRequested(req)) return mockJson(mockAttend());
   const { client } = await brainClient(req);
   if (!client) return Response.json({ intent: "command" });
   try {

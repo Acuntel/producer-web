@@ -12,6 +12,7 @@ import { compactSong, mixerLine } from "@/lib/brain/context";
 import { dnaForBrain } from "@/lib/brain/dna";
 import { laneRecipe } from "@/lib/brain/lanes";
 import { dnaLaneFor, laneHomeBpm } from "@/lib/brain/laneNames";
+import { mockRequested, mockJson, mockStep } from "@/lib/brain/mock";
 
 export const maxDuration = 90;
 const FAST = process.env.PRODUCER_FAST_MODEL || "claude-sonnet-5";
@@ -27,6 +28,8 @@ type StepInput = {
 
 export async function POST(req: Request) {
   const x = (await req.json()) as StepInput;
+  // Harness only (PRODUCER_MOCK=1 on the server AND ?mock=1): the mock Hands answer the step, no spend.
+  if (mockRequested(req)) return mockJson(mockStep(x.song as never, !!x.step?.fullSong));
   const { client, source } = await brainClient(req);
   if (!client) return Response.json({ say: "Brain not connected.", ops: null, song: null });
   const capped = await guardSpend(req, source);

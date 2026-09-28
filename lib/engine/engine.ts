@@ -2,12 +2,13 @@
 // plays, loop regions, jump to a section, the visible playhead, and the rig's health.
 import * as Tone from "tone";
 import type { Song } from "../song/types";
-import { Rig, type Clips, type Health } from "./rig";
+import { Rig, type Clips, type Health, type Applied } from "./rig";
 import { locate, loopBounds, type SectionSpan, type Schedule } from "./schedule";
 import { loadClipsFor, clipKeysFor } from "./clips";
 import { getKit, kitStyleFor, type Kit } from "./kits";
 import { Latest, wrapToBar } from "./steady";
 import { ensureStudioContext } from "./context";
+import { ledgerSources, recordLanding, assetDue } from "./ledger";
 
 // master = the bars' smoothed level; peak = the loudest sample in the last frame, per channel, in dBFS.
 export type Levels = { master: [number, number]; peak: [number, number]; spectrum: Float32Array | null; tracks: Record<string, number> };
@@ -23,7 +24,7 @@ const STOP_FADE_SEC = 0.04;   // stop fades the desk down this long before the r
 /** Decode the clips a record names and render its drum kit, before anyone presses anything. Both land in
  *  the caches the engine reads, so the first press finds them ready. Safe to call as often as you like. */
 export async function warmFor(song: Song): Promise<void> {
-  await Promise.all([getKit(song.lane, song.kit, song.bpm), loadClipsFor(clipKeysFor(song))]);
+  await Promise.all([getKit(song.lane, song.kit, song.bpm), loadClipsFor(clipKeysFor(song), "warm")]);
 }
 
 export class Engine {
@@ -44,7 +45,10 @@ export class Engine {
   onSection: ((name: string, index: number, total: number) => void) | null = null;
 
   // The playback context before any transport or node exists (context.ts: why not the interactive one).
-  constructor() { ensureStudioContext(); }
+  constructor() {
+    ensureStudioContext();
+    ledgerSources({ health: () => this.health(), context: () => Tone.getContext().rawContext });
+  }
 
   private get transport() { return Tone.getTransport(); }
 
@@ -58,7 +62,7 @@ export class Engine {
     // Whatever a load built before the session opened comes down first: two rigs on one
     // transport is the whole record playing twice, a beat apart.
     this.teardown();
-    this.lay(newest ?? song);
+    this.lay(newest ?? song, "start", performance.now());
     this.transport.start();
     performance.mark("producer:transport");
     this.playing = true;
@@ -78,11 +82,12 @@ export class Engine {
 
   /** A change, applied while it plays. Before the session opens this only remembers the record.
    *  Latest wins: if a newer record arrives while this one is loading, this one is never laid. */
-  async update(song: Song) {
+  async update(song: Song, opts?: { jobId?: string }) {
+    const calledAt = performance.now();
     const ticket = this.latest.take(song);
     await this.prepare(song, ticket);
     if (!this.latest.current(ticket) || !this.rig) return;
-    this.lay(song);
+    this.lay(song, opts?.jobId, calledAt);
   }
 
   goto(sectionIdOrName: string): boolean {
@@ -136,7 +141,7 @@ export class Engine {
    *  record and can never come out louder than it), with a 5 ms attack so it does not click in. The
    *  producer's "listen to this". Before a session exists there is no desk, and nothing else is playing. */
   async previewClip(clipId: string, gainDb = -3): Promise<boolean> {
-    const bufs = await loadClipsFor([clipId]); const buf = bufs.get(clipId); if (!buf) return false;
+    const bufs = await loadClipsFor([clipId], "preview"); const buf = bufs.get(clipId); if (!buf) return false;
     const p = new Tone.Player(buf); p.fadeIn = 0.005; p.fadeOut = 0.005; p.volume.value = gainDb;
     const into = this.rig?.board.buses.master; if (into) p.connect(into); else p.toDestination();
     p.start(); p.onstop = () => p.dispose();
@@ -161,7 +166,7 @@ export class Engine {
   private async prepare(song: Song, ticket: number) {
     const ids = clipKeysFor(song);
     const missing = ids.filter((id) => !this.clips.has(id));
-    if (missing.length) { const loaded = await loadClipsFor(missing); for (const [k, v] of loaded) this.clips.set(k, v); }
+    if (missing.length) { const loaded = await loadClipsFor(missing, "prepare"); for (const [k, v] of loaded) this.clips.set(k, v); }
     const kitId = `${song.kit ?? "synth"}|${kitStyleFor(song.lane, song.bpm)}`;
     const kit = kitId !== this.kitId || !this.kit ? await getKit(song.lane, song.kit, song.bpm) : this.kit;
     if (!this.latest.current(ticket)) return;
@@ -172,11 +177,15 @@ export class Engine {
   }
 
   // One pass of the record onto the rig, keeping the groove position (clamped to the new length).
-  private lay(song: Song) {
+  private lay(song: Song, jobId?: string, calledAt = performance.now()) {
     const t0 = performance.now();
     if (!this.rig) { this.rig = new Rig(this.transport); liveRigs.add(this.rig); if (this.talking) this.rig.board.talk(true, true); }
     const pos = this.transport.ticks;
-    this.rig.apply(song, this.clips, this.kit ?? undefined, this.kitId);
+    // Due now: every sound this record plays. One that is not ready is silence where it belongs.
+    const keys = clipKeysFor(song); const notReady = keys.filter((k) => !this.clips.has(k));
+    for (const k of keys) assetDue(k, this.clips.has(k));
+    if (this.kitId) assetDue(`kit:${this.kitId}`, !!this.kit);
+    const applied = this.rig.apply(song, this.clips, this.kit ?? undefined, this.kitId);
     this.rebuilds++; this.lastRebuildMs = Math.round(performance.now() - t0);
     const ppq = this.transport.PPQ;
     const loop = loopBounds(song, this.sections, this.totalBeats);
@@ -188,6 +197,16 @@ export class Engine {
     const at = wrapToBar(pos, start, end, 4 * ppq);
     if (at !== pos) this.transport.ticks = at;
     if (!this.watch) this.watch = window.setInterval(() => this.tellSection(), 200);
+    this.landed(jobId, calledAt, applied, notReady);
+  }
+
+  // Where this change is first heard: the transport's position at the moment new parts start firing
+  // (now() while playing, the playhead when stopped). Today that is wherever the playhead happens to be.
+  private landed(jobId: string | undefined, calledAt: number, applied: Applied, notReady: string[]) {
+    const tr = this.transport; const ppq = tr.PPQ;
+    const time = tr.state === "started" ? tr.now() : null;
+    const beat = (time !== null ? tr.getTicksAtTime(time) : tr.ticks) / ppq;
+    recordLanding({ jobId, boundary: "now", calledAt, landedAt: performance.now(), landsAtBar: Math.floor(beat / 4) + 1, landsAtTime: time, beatInBar: Math.round((beat % 4) * 1000) / 1000, partsChanged: applied.partsChanged, voicesRebuilt: applied.voicesRebuilt, notReady });
   }
 
   private tellSection() {

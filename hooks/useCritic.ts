@@ -7,6 +7,7 @@ import type { Song } from "@/lib/song";
 import type { MusicFacts } from "@/lib/ears";
 import { loadNotes, mergeNotes, setNoteStatus, openNotes, type CriticNote } from "@/lib/critic";
 import { tasteSummary, logMove, setVerdict } from "@/lib/taste";
+import { economyQuery } from "@/lib/brain/stream";
 
 type Deps = { song: Song; facts: MusicFacts | null; reference: { name: string; facts: MusicFacts } | null; paused: boolean; send: (t: string) => Promise<void>; started: boolean };
 
@@ -32,7 +33,7 @@ export function useCritic(d: Deps) {
     inflight.current = true; setThinking(true);
     try {
       const ears = await import("@/lib/ears");
-      const r = await fetch("/api/critic", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+      const r = await fetch("/api/critic" + economyQuery(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
         song: x.song, facts: ears.factsForBrain(x.facts), reference: x.reference ? { name: x.reference.name, facts: ears.factsForBrain(x.reference.facts) } : null,
         deltas: x.reference ? ears.compare(x.facts, x.reference.facts).deltas : null,
         dismissed: loadNotes().filter((n) => n.status === "dismissed").slice(-12).map((n) => n.what), taste: tasteSummary(x.song.title),

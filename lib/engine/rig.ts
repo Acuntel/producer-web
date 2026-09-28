@@ -13,6 +13,8 @@ import { makeBoard, type Board, type Analysis } from "./board";
 import { clipBuffer } from "./clips";
 import type { Kit } from "./kits";
 import { hitsAddress } from "./steady";
+import { sampleKey } from "../samples/manifest";
+import { assetHeard } from "./ledger";
 
 export type Clips = Map<string, AudioBuffer>;
 // The rig's own health: how many note events fired, how many fired late (their time already past when the
@@ -20,7 +22,14 @@ export type Clips = Map<string, AudioBuffer>;
 export type Health = { events: number; late: number; minMarginMs: number };
 
 type Transport = ReturnType<typeof Tone.getTransport>;
-type Entry = { voice: Voice; sig: string; meter: Tone.Meter; grain?: Tone.GrainPlayer };
+type Entry = { voice: Voice; sig: string; meter: Tone.Meter; grain?: Tone.GrainPlayer; sound: string | null; heard: boolean };
+/** What one apply changed: the parts laid anew and the voices built anew. The ledger's landing row. */
+export type Applied = { partsChanged: string[]; voicesRebuilt: string[] };
+/** Work that has to wait for the audio clock (a voice leaving after its fade). Live: a wall timer.
+ *  The offline replica (replica.ts) replaces it with its own clock so it runs at the same audio time. */
+export type Defer = (delaySec: number, fn: () => void) => void;
+
+const wallDefer: Defer = (delaySec, fn) => { if (typeof window === "undefined") fn(); else window.setTimeout(fn, Math.ceil(delaySec * 1000)); };
 
 const FADE_SEC = 0.015;   // a swapped instrument crosses over in fifteen milliseconds
 
@@ -37,6 +46,7 @@ export class Rig {
   private entries = new Map<string, Entry>();
   private parts = new Map<string, { part: Tone.Part; hash: string }>();
   private laid = false;
+  defer: Defer = wallDefer;
 
   constructor(private transport: Transport, destination?: Tone.ToneAudioNode, private live = true) {
     this.board = makeBoard(destination, live);
@@ -46,7 +56,8 @@ export class Rig {
   get voiceById(): Map<string, Voice> { const m = new Map<string, Voice>(); for (const [id, e] of this.entries) m.set(id, e.voice); return m; }
 
   /** Put this song on the rig: diff the voices, relay the schedule, ramp the desk. Never rebuilds what still fits. */
-  apply(song: Song, clips: Clips = new Map(), kit?: Kit, kitId = "") {
+  apply(song: Song, clips: Clips = new Map(), kit?: Kit, kitId = ""): Applied {
+    const applied: Applied = { partsChanged: [], voicesRebuilt: [] };
     const schedule = scheduleEvents(song);
     this.schedule = schedule;
     const ppq = this.transport.PPQ;
@@ -61,6 +72,7 @@ export class Rig {
       const have = this.parts.get(key);
       if (have && have.hash === hash) return;
       if (have) { try { have.part.stop(); have.part.dispose(); } catch { /* already gone */ } }
+      applied.partsChanged.push(key);
       const part = make(); part.start(0);
       this.parts.set(key, { part, hash });
     };
@@ -76,7 +88,8 @@ export class Rig {
       const have = this.entries.get(tr.id);
       if (have && have.sig === sig) { have.voice.tune(tr); continue; }
       if (have) this.retire(have);
-      this.entries.set(tr.id, this.build(tr, song, buf, kit, sig));
+      this.entries.set(tr.id, this.build(tr, song, buf, kit, sig, kitId));
+      applied.voicesRebuilt.push(tr.id);
     }
 
     // The schedule: notes, warped clip loops, trance gates, automation, the riser, the pump.
@@ -92,6 +105,7 @@ export class Rig {
             const margin = (time - this.transport.context.currentTime) * 1000;
             this.health.events++; if (margin < this.health.minMarginMs) this.health.minMarginMs = margin; if (margin < 0) this.health.late++;
             const t = time <= lastTime ? lastTime + 0.001 : time; lastTime = t; e.voice.trigger(ev.note, t, this.transport.bpm.getValueAtTime(time));
+            if (!e.heard) this.heard(e, t);
           }, evs.map((x) => [tick(x.beat), x] as [string, Ev]));
         });
       }
@@ -99,7 +113,7 @@ export class Rig {
       if (spans.length && e.grain && tr.clip) {
         const c = tr.clip; const gp = e.grain;
         lay(`span:${tr.id}`, `${e.sig}|${song.bpm}|${spans.map((s) => `${s.startBeat}/${s.beats}`).join(",")}`, () =>
-          new Tone.Part((time, s: { beats: number }) => { try { gp.start(time, c.startSec ?? 0, s.beats * beatSec); } catch { /* not loaded */ } }, spans.map((s) => [tick(s.startBeat), s] as [string, { beats: number }])));
+          new Tone.Part((time, s: { beats: number }) => { try { gp.start(time, c.startSec ?? 0, s.beats * beatSec); if (!e.heard) this.heard(e, time); } catch { /* not loaded */ } }, spans.map((s) => [tick(s.startBeat), s] as [string, { beats: number }])));
       }
       // Trance gate: chop the track at N sixteenths.
       if (tr.fx?.gate && tr.fx.gate > 0) {
@@ -166,6 +180,15 @@ export class Rig {
     if (this.laid && this.transport.bpm.value !== song.bpm) this.transport.bpm.rampTo(song.bpm, 0.05);
     else this.transport.bpm.value = song.bpm;
     this.laid = true;
+    return applied;
+  }
+
+  // The first hit of a voice that plays a loaded sound, at the moment it is heard. Live rigs only:
+  // an offline listen is not the room.
+  private heard(e: Entry, t: number) {
+    e.heard = true;
+    if (!this.live || !e.sound || typeof performance === "undefined") return;
+    assetHeard(e.sound, performance.now() + (t - this.transport.context.currentTime) * 1000);
   }
 
   /** One track's voice, built ahead of `apply` (which then finds it in place and only tunes it), so an
@@ -173,12 +196,12 @@ export class Rig {
   prepareVoice(tr: Track, song: Song, clips: Clips = new Map(), kit?: Kit, kitId = "") {
     if (this.entries.has(tr.id)) return;
     const buf = clipBuffer(clips, tr.clip);
-    this.entries.set(tr.id, this.build(tr, song, buf, kit, this.sigOf(tr, song, buf, kitId)));
+    this.entries.set(tr.id, this.build(tr, song, buf, kit, this.sigOf(tr, song, buf, kitId), kitId));
   }
 
   private sigOf(tr: Track, song: Song, buf: AudioBuffer | undefined, kitId: string) { return `${voiceSignature(tr, { kitId, bpm: song.bpm })}|${buf ? "b" : "-"}`; }
 
-  private build(tr: Track, song: Song, buf: AudioBuffer | undefined, kit: Kit | undefined, sig: string): Entry {
+  private build(tr: Track, song: Song, buf: AudioBuffer | undefined, kit: Kit | undefined, sig: string, kitId = ""): Entry {
     const voice = makeVoice(tr, this.board.buses, buf, kit, this.live);
     const meter = new Tone.Meter({ smoothing: 0.75 });
     if (this.live) { voice.out.connect(meter); this.board.analysis.tracks.set(tr.id, meter); }
@@ -193,7 +216,9 @@ export class Rig {
       if (c.lengthBeats) grain.loopEnd = Math.min(buf.duration, (c.startSec ?? 0) + c.lengthBeats * (60 / song.bpm) * rate);
       grain.connect(voice.gate);
     }
-    return { voice, sig, meter, grain };
+    // The sound this voice plays, by its ledger key: its own clip, else the kit for a drum.
+    const sound = c && buf ? (c.sampleId ? sampleKey(c.sampleId) : c.clipId ?? null) : (["kick", "clap", "snare", "hat", "openhat", "perc"].includes(tr.role) && kit && kitId ? `kit:${kitId}` : null);
+    return { voice, sig, meter, grain, sound, heard: false };
   }
 
   /** An instrument that is leaving: fade it out under the record, then let it go. */
@@ -201,8 +226,7 @@ export class Rig {
     try { e.voice.setVolume(-60); } catch { /* already gone */ }
     try { e.grain?.stop(); } catch { /* never started */ }
     const bury = () => { try { e.grain?.dispose(); } catch {} try { e.voice.dispose(); } catch {} try { e.meter.dispose(); } catch {} };
-    if (typeof window === "undefined") bury();   // an offline render has no wall clock to wait on
-    else window.setTimeout(bury, Math.ceil(FADE_SEC * 1000) + 60);
+    this.defer((Math.ceil(FADE_SEC * 1000) + 60) / 1000, bury);
   }
 
   dispose() {

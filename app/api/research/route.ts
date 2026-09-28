@@ -9,6 +9,7 @@ import { findRecord, artistRows, soundLines } from "@/lib/brain/prints";
 import flowJson from "@/data/flow.json";
 import { laneNamed, laneInfo } from "@/lib/brain/laneNames";
 import { familiesIn } from "@/lib/brain/families";
+import { mockRequested, MOCK_HEADERS } from "@/lib/brain/mock";
 
 export const maxDuration = 30;
 const MODEL = process.env.PRODUCER_VOICE_MODEL || "claude-haiku-4-5";
@@ -107,7 +108,11 @@ export async function POST(req: Request) {
   if (!lines.length && Object.keys(extraPins).length) {
     for (const b of binsFor({ ...extraPins, ...(decade ? { decade } : {}) }, 2)) { kind = "genre"; lines.push(binLine(b)); }
   }
-  if (lines.length) return Response.json({ found: true, kind, source: "store", lines, ms: Date.now() - t0 });
+  // Harness only (PRODUCER_MOCK=1 on the server AND ?mock=1): the store answers as usual (it costs nothing), and a
+  // miss ends here, before the shared cache is written or a search is paid for.
+  const mock = mockRequested(req);
+  if (lines.length) return Response.json({ found: true, kind, source: "store", lines, ms: Date.now() - t0 }, mock ? { headers: MOCK_HEADERS } : undefined);
+  if (mock) return Response.json({ found: false, lines: [], source: "mock", ms: Date.now() - t0 }, { headers: MOCK_HEADERS });
 
   // 2. The cache, then one search.
   const sb = supabaseAdmin(); const key = norm(query);

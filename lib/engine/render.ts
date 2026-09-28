@@ -17,7 +17,7 @@ type Transport = ReturnType<typeof Tone.getTransport>;
 
 async function clipsFor(song: Song): Promise<Clips> {
   const ids = clipKeysFor(song);
-  return ids.length ? loadClipsFor(ids) : new Map();
+  return ids.length ? loadClipsFor(ids, "listen") : new Map();
 }
 
 // Built and clocked in steps of a few milliseconds (offline.ts), so a listen never holds the thread

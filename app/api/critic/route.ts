@@ -10,6 +10,7 @@ import { dnaForBrain } from "@/lib/brain/dna";
 import { laneRecipe } from "@/lib/brain/lanes";
 import { dnaLaneFor } from "@/lib/brain/laneNames";
 import { mixerLine } from "@/lib/brain/context";
+import { mockRequested, mockJson, mockCritic } from "@/lib/brain/mock";
 
 export const maxDuration = 60;
 const MODEL = process.env.PRODUCER_CRITIC_MODEL || "claude-sonnet-5";   // the critic writes notes; the fast tier is plenty
@@ -18,6 +19,8 @@ const ROLE = `You are the studio's CRITIC: a second producer listening in the ba
 
 export async function POST(req: Request) {
   const x = (await req.json()) as { song: { lane?: string; title?: string; sections?: unknown[]; tracks?: unknown[] }; facts?: unknown; reference?: { name: string; facts: unknown } | null; deltas?: unknown; recent?: string[]; dismissed?: string[]; taste?: string };
+  // Harness only (PRODUCER_MOCK=1 on the server AND ?mock=1): no model, no spend.
+  if (mockRequested(req)) return mockJson(mockCritic());
   const { client, source } = await brainClient(req);
   if (!client) return Response.json({ headline: "", notes: [] });
   const capped = await guardSpend(req, source);

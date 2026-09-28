@@ -3,6 +3,7 @@
 // 909-style metal hats (six detuned squares), layered claps. Cheap to play,
 // cheap to render, bright where records are bright.
 import { laneHomeBpm } from "../brain/laneNames";
+import { assetRequested, assetDecoded, assetReady } from "./ledger";
 
 export type KitStyle = "tech-house" | "hard-house";
 export type KitSound = "kick" | "clap" | "snare" | "hat" | "openhat" | "perc";
@@ -28,7 +29,8 @@ export function getKit(lane: string, kit?: string, bpm?: number): Promise<Kit> {
   const key = `${kit}|${style}`;
   let p = sampled.get(key);
   if (!p) {
-    p = import("./samples").then((m) => m.sampleKit(kit, style)).then((r) => r.kit).catch(() => { sampled.delete(key); return synthKit(style); });
+    assetRequested(`kit:${key}`, "kit");
+    p = import("./samples").then((m) => m.sampleKit(kit, style)).then((r) => { assetReady(`kit:${key}`, "http"); return r.kit; }).catch(() => { sampled.delete(key); return synthKit(style); });
     sampled.set(key, p);
   }
   return p;
@@ -37,7 +39,12 @@ export function getKit(lane: string, kit?: string, bpm?: number): Promise<Kit> {
 export function synthKit(style: KitStyle): Promise<Kit> {
   const key = style === "hard-house" ? "hard-house" : "tech-house";
   let p = cache.get(key);
-  if (!p) { p = renderKit(key); cache.set(key, p); }
+  if (!p) {
+    const id = `kit:synth|${key}`;
+    assetRequested(id, "kit");
+    p = renderKit(key).then((k) => { assetDecoded(id); assetReady(id, "render"); return k; });
+    cache.set(key, p);
+  }
   return p;
 }
 

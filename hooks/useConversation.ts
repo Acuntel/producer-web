@@ -100,7 +100,7 @@ export function useConversation(d: Deps) {
     inflightRef.current.set(id, `research: ${q}`);
     try {
       const song = dRef.current.studio.getSong();
-      const r = await fetch("/api/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q, song: { bpm: song.bpm, lane: song.lane } }) }).then((x) => x.json());
+      const r = await fetch("/api/research" + economyQuery(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q, song: { bpm: song.bpm, lane: song.lane } }) }).then((x) => x.json());
       if (r.usage) dRef.current.studio.spend(r.model, r.usage);
       const lines: string[] = r.found ? r.lines : [`${q}: nothing in the store or on the web yet; work from the lane.`];
       researchRef.current = [...researchRef.current, ...lines].slice(-10); setResearch(researchRef.current);

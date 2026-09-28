@@ -3,12 +3,14 @@
 // Library samples (public/samples) share the same map under "sample:<id>" keys.
 import type { Song, AudioClip } from "../song/types";
 import { sampleKey, sampleIdOf } from "../samples/manifest";
+import { assetRequested, assetDecoded, assetReady, assetFailed, countIdbOpen } from "./ledger";
 const DB = "producer.clips";
 const STORE = "clips";
 
 export type StoredClip = { id: string; name: string; type: string; bytes: ArrayBuffer; createdAt: number; durationSec?: number; bpm?: number; key?: string };
 
 function open(): Promise<IDBDatabase> {
+  countIdbOpen();
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB, 1);
     req.onupgradeneeded = () => { req.result.createObjectStore(STORE, { keyPath: "id" }); };
@@ -77,21 +79,26 @@ export async function decodeBytes(bytes: ArrayBuffer): Promise<AudioBuffer> {
 
 async function decodeStored(id: string): Promise<AudioBuffer | null> {
   const c = await getClip(id);
-  return c ? decodeBytes(c.bytes) : null;
+  if (!c) return null;
+  const buf = await decodeBytes(c.bytes);
+  assetDecoded(id, c.bytes.byteLength); assetReady(id, "idb");
+  return buf;
 }
 
-// Uploads come from IndexedDB; "sample:<id>" keys come from the library manifest.
-export async function loadClipsFor(ids: string[]): Promise<Map<string, AudioBuffer>> {
+// Uploads come from IndexedDB; "sample:<id>" keys come from the library manifest. `why` names the
+// caller in the ledger (the press, a warm-up, a listen), so a load nobody needed is visible.
+export async function loadClipsFor(ids: string[], why = "load"): Promise<Map<string, AudioBuffer>> {
   const out = new Map<string, AudioBuffer>();
   for (const id of ids) {
+    assetRequested(id, why);
     const have = recall(id);
-    if (have) { out.set(id, have); continue; }
+    if (have) { assetReady(id, "memory"); out.set(id, have); continue; }
     try {
       const sid = sampleIdOf(id);
       const buf = sid ? await (await import("./samples")).decodeSample(sid) : await decodeStored(id);
-      if (!buf) continue;
+      if (!buf) { assetFailed(id, "not stored on this device"); continue; }
       remember(id, buf); out.set(id, buf);
-    } catch { /* skip broken clip */ }
+    } catch (e) { assetFailed(id, e instanceof Error ? e.message : "decode failed"); }
   }
   return out;
 }
@@ -114,4 +121,5 @@ export function clipBuffer(clips: Map<string, AudioBuffer>, clip: AudioClip | un
   return fromSample ?? (clip.clipId ? clips.get(clip.clipId) : undefined);
 }
 
-export function cacheDecoded(id: string, buf: AudioBuffer) { remember(id, buf); }
+/** A buffer its caller just decoded (a restore, an upload, a slice): one decode in the ledger, and ready. */
+export function cacheDecoded(id: string, buf: AudioBuffer) { assetRequested(id, "handed in"); assetDecoded(id); assetReady(id, "memory"); remember(id, buf); }

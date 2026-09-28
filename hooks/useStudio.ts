@@ -246,6 +246,8 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
     w.__engine = () => engineRef.current;
     w.__facts = () => factsRef.current;
     (w as { __engineModule?: () => unknown }).__engineModule = () => import("@/lib/engine");
+    // The desk probe (tests/desk.probe.mjs): the seed through the offline replica of the room, and its numbers.
+    (w as { __deskModule?: () => unknown }).__deskModule = () => import("@/lib/engine/deskProbe");
     // Where a listen spends its time, so a stutter is traced and not guessed at.
     void import("@/lib/engine").then((m) => { (window as unknown as { __ears?: () => unknown }).__ears = () => m.hearTiming; });
   }, [getLevels]);
