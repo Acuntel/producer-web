@@ -2,7 +2,7 @@
 import type { MusicFacts } from "../ears";
 import type { Expectation } from "./parse";
 
-const TOL: Record<string, number> = { centroidHz: 0.04, lufs: 0.4, pump: 0.03, transientsPerBeat: 0.15, harshness: 0.02, mud: 0.02, width: 0.03, energy: 0.03, sub: 0.02, low: 0.02, lowMid: 0.015, mid: 0.015, highMid: 0.015, air: 0.01 };
+const TOL: Record<string, number> = { vocalAnchorMs: 5, vocalMasked: 0.05, vocalInScale: 0.05, vocalMaskGapDb: 1, centroidHz: 0.04, lufs: 0.4, pump: 0.03, transientsPerBeat: 0.15, harshness: 0.02, mud: 0.02, width: 0.03, energy: 0.03, sub: 0.02, low: 0.02, lowMid: 0.015, mid: 0.015, highMid: 0.015, air: 0.01 };
 
 export function metricValue(f: MusicFacts, e: Expectation): number | null {
   const sec = e.section ? f.structure.sections.find((s) => s.label === e.section || (s as { id?: string }).id === e.section) : null;
@@ -17,6 +17,11 @@ export function metricValue(f: MusicFacts, e: Expectation): number | null {
     case "width": return f.spectrum.width;
     case "energy": return src?.energy ?? null;
     case "sub": case "low": case "lowMid": case "mid": case "highMid": case "air": return (src?.bands ?? f.spectrum.bands)[e.metric];
+    // The placed voice (lib/ears/vocalCheck.ts): its anchor error, how buried it is, how much of it is in key.
+    case "vocalAnchorMs": return f.vocal ? Math.abs(f.vocal.anchorErrMs) : null;
+    case "vocalMasked": return f.vocal?.masked ?? null;
+    case "vocalMaskGapDb": return f.vocal?.maskGapDb ?? null;
+    case "vocalInScale": return f.vocal?.inScale ?? null;
     default: return null;
   }
 }

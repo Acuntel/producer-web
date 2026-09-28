@@ -30,12 +30,12 @@ export type OneShotOut = { role: string; path: string; clipId?: string; duration
 export type Hearing = { report?: string; drumGrids?: Record<string, string>; bass?: { root?: string; notes?: string[]; eighthRhythm?: string }; chords?: string[]; lyrics?: { lines: { at: number; text: string }[] }; clap?: { descriptors?: [string, number][]; genres?: [string, number][] }; blocks?: { at: number; level: number; carries: string; entering: string[]; leaving: string[] }[]; perStem?: Record<string, { share: number; centroidHz: number; crestDb: number; onsetsPerBeat: number }>; error?: string };
 export type Identity = { key: string; title: string; artist: string | null; isrc?: string | null; album?: string | null; label?: string | null; year?: string | null; genre?: string | null; cover?: string | null; url?: string | null; offsetSec: number; timeSkew: number; pitchPct: number; confident: boolean; atSec?: number };
 export type TrackEntry = { key: string; title: string; artist: string | null; isrc?: string | null; album?: string | null; label?: string | null; year?: string | null; cover?: string | null; url?: string | null; start: number; end: number; hits: number; pitchPct: number; offsetSec: number; confident: boolean; query: string };
-export type StemsResult = { facts?: StemsFacts; stems?: StemOut[]; oneshots?: OneShotOut[]; name?: string; stage?: string; hearing?: Hearing; cached?: boolean; preview?: { stems: (StemOut & { startSec?: number; bars?: number })[]; oneshots: OneShotOut[] }; identity?: Identity | null; timing?: Record<string, number>; kind?: "stems" | "hear" | "tracklist"; tracklist?: TrackEntry[]; durationSec?: number; sourceUrl?: string | null; cooldownSec?: number; coveredSec?: number; partial?: boolean };
+export type StemsResult = { facts?: StemsFacts; vocalMap?: unknown; stems?: StemOut[]; oneshots?: OneShotOut[]; name?: string; stage?: string; hearing?: Hearing; cached?: boolean; preview?: { stems: (StemOut & { startSec?: number; bars?: number })[]; oneshots: OneShotOut[] }; identity?: Identity | null; timing?: Record<string, number>; kind?: "stems" | "hear" | "tracklist"; tracklist?: TrackEntry[]; durationSec?: number; sourceUrl?: string | null; cooldownSec?: number; coveredSec?: number; partial?: boolean };
 export const identityLine = (i: Identity | null | undefined) => i?.title ? `${i.artist ? `${i.artist} - ` : ""}${i.title}${i.year || i.label ? ` (${[i.label, i.year].filter(Boolean).join(", ")})` : ""}${Math.abs(i.pitchPct) >= 0.5 ? `, played at ${i.pitchPct > 0 ? "+" : ""}${i.pitchPct.toFixed(1)}%` : ""}` : "";
 export type FindCandidate = { source: string; title: string; url: string; artist: string | null; duration_sec: number | null; year: number | null; license: string | null; kind: string; score: number };
 export type StemsJob = { id: string; kind?: "stems" | "hear" | "tracklist"; status: "queued" | "running" | "done" | "error"; progress: number; result: StemsResult | null; error: string | null; source: { url?: string; storage_path?: string; name?: string; query?: string } };
 
-type Deps = { user: User | null; projectId: string | null; flash: (t: string) => void; edit: (ops: unknown[], label: string) => Promise<boolean>; send: (t: string, o?: { hidden?: boolean }) => Promise<unknown>; registerClip: (c: ClipMeta) => void; getSong: () => Song; setReference?: (buf: AudioBuffer, name: string) => Promise<void>; setReferenceFacts?: (f: MusicFacts, name: string) => void; recordSound?: (bpm: number, beats: number) => Promise<{ samples: Float32Array; sampleRate: number; notes: unknown[] } | null>; previewClip?: (clipId: string) => Promise<boolean>; noteClip?: (key: string, name: string, path: string, meta: { durationSec?: number; bpm?: number; key?: string; mime?: string }) => Promise<void> };
+type Deps = { user: User | null; projectId: string | null; flash: (t: string) => void; edit: (ops: unknown[], label: string) => Promise<boolean>; send: (t: string, o?: { hidden?: boolean }) => Promise<unknown>; registerClip: (c: ClipMeta) => void; getSong: () => Song; setReference?: (buf: AudioBuffer, name: string) => Promise<void>; setReferenceFacts?: (f: MusicFacts, name: string) => void; recordSound?: (bpm: number, beats: number) => Promise<{ samples: Float32Array; sampleRate: number; notes: unknown[] } | null>; previewClip?: (clipId: string) => Promise<boolean>; placeVoice?: (v: import("@/lib/song/place").VoiceSource, src: AudioBuffer) => Promise<unknown>; noteClip?: (key: string, name: string, path: string, meta: { durationSec?: number; bpm?: number; key?: string; mime?: string }) => Promise<void> };
 
 const NOTE = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 export const hzToNote = (hz: number) => { const m = Math.round(69 + 12 * Math.log2(hz / 440)); return `${NOTE[((m % 12) + 12) % 12]}${Math.floor(m / 12) - 1}`; };
@@ -271,84 +271,27 @@ export function useStems(d: Deps) {
     return ok ? `${name}${tuned}` : null;
   }, [job, useOneShot]);
 
-  /** Isolate a voice from the record the studio pulled in and land it so its last word hits the drop.
-   *  The vocals are already separated; what this does is find the phrases inside them, pick the one
-   *  asked for, tune it into the key, and place it in the section before the drop with room made for it. */
-  const dropVocal = useCallback(async (said?: string | null, where?: string | null, jobIn?: StemsJob): Promise<string | null> => {
-    // The finished job, whether it came from state or straight from the poll that just landed it.
+  /** Isolate a voice from the record the studio pulled in and put it where it belongs: the vocal map (or the phrases
+   *  in the separated vocal) becomes a voice, and the placement loop (hooks/useVoicePlace.ts) ranks the slots, checks
+   *  each one offline, lands the best on its bar and asks. The worker's vocal pass files what the record teaches under
+   *  the record's own family, so nothing is posted from here under this song's lane. */
+  const dropVocal = useCallback(async (said?: string | null, _where?: string | null, jobIn?: StemsJob): Promise<string | null> => {
     const jb: StemsJob | null = jobIn ?? job;
     const res = jb?.result;
     if (!jb || jb.status !== "done" || !res?.stems?.length) return null;
     const stem = res.stems.find((s) => s.stem === "vocals");
     if (!stem) return "That record came back with no vocal to isolate.";
     const name = res.name ?? "the record";
+    const key = `stem_${jb.id}_${stem.stem}`;
     const { loadClipsFor } = await import("@/lib/engine");
-    const src = (await loadClipsFor([`stem_${jb.id}_${stem.stem}`])).get(`stem_${jb.id}_${stem.stem}`);
+    const src = (await loadClipsFor([key], "voice", "T1")).get(key);
     if (!src) return "I could not open the vocal from that record.";
-
-    // Every phrase in the isolated voice, then the one they pointed at.
-    const { findPhrases, pickPhrase, tuneFor, leadIn } = await import("@/lib/song/vocal");
-    const mono = src.getChannelData(0);
-    const phrases = findPhrases(mono, src.sampleRate);
-    if (!phrases.length) return `I isolated the voice on ${name} but could not find a phrase in it worth taking.`;
-    const pick = pickPhrase(phrases, { said, words: res.hearing?.lyrics?.lines });
-    if (!pick) return `I isolated the voice on ${name} but could not find a phrase in it worth taking.`;
-
-    const song = dRef.current.getSong();
-    // The track keeps its readable id; the clip is named by what it is (the same phrase is the same clip).
-    const { cutId } = await import("@/lib/engine/cuts");
-    const id = `vox_${jb.id.slice(0, 6)}_${Math.round(pick.startSec)}`;
-    const clipId = cutId(`stem_${jb.id}_${stem.stem}`, pick.startSec, pick.endSec - pick.startSec, "vox");
-    const label = `${name} vocal at ${mmss(pick.startSec)}`;
-    const { cutPhraseClip } = await import("@/lib/engine/slice");
-    const cut = await cutPhraseClip(src, pick.startSec, pick.endSec - pick.startSec, clipId, label);
-    dRef.current.registerClip({ id: clipId, name: label, durationSec: cut.durationSec });
-
-    // In the key, if that is a move small enough to leave the voice sounding like a voice.
-    const { detectRootPitch } = await import("@/lib/engine/pitch");
-    const heard = detectRootPitch(cut.buffer.getChannelData(0), cut.buffer.sampleRate);
-    const semitones = tuneFor(heard.midi, song.key);
-
-    // The section before the drop is where a vocal lead in lives, and the drop is the downbeat it aims at.
-    const order = song.arrangement.map((sid) => song.sections.find((s) => s.id === sid)).filter((s): s is Song["sections"][number] => !!s);
-    const target = where && !/before|drop/i.test(where) ? order.find((s) => s.name.toLowerCase().includes(where.toLowerCase())) : null;
-    const dropAt = order.findIndex((s) => /drop|chorus|hook/i.test(s.name));
-    const into = target ?? (dropAt > 0 ? order[dropAt - 1] : order[Math.max(0, order.length - 2)]);
-    if (!into) return "This record has no section to put a vocal in yet.";
-    const secBeats = into.bars * 4;
-    const phraseBeats = cut.durationSec * (song.bpm / 60);
-    // How long before the drop records of this kind actually leave the last word hanging. Measured from
-    // the records the studio has heard; until enough of them exist, the word lands on the downbeat.
-    const { dnaLaneFor } = await import("@/lib/brain/laneNames");
-    const family = dnaLaneFor(song.lane);
-    const measured = await fetch(`/api/dna/vocal?family=${encodeURIComponent(family)}&bpm=${Math.round(song.bpm)}`).then((r) => r.json()).catch(() => null);
-    const enough = measured && typeof measured.leadInBeats === "number" && measured.records >= 8;
-    const beforeBeats = enough ? Math.max(0, Math.min(8, measured.leadInBeats)) : 0;
-    const { startBeat, cut: tooLong } = leadIn(secBeats, phraseBeats, beforeBeats);
-    // What this record teaches the store, posted whether or not it was used here.
-    void fetch("/api/dna/vocal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: jb.id, family, phrases: phrases.map((p) => ({ start: p.startSec, end: p.endSec, score: p.score })) }) }).catch(() => {});
-
-    const ops: unknown[] = [
-    // Room first, then the voice: the gap is measured against what is already playing, and a phrase
-    // that arrives before it would duck itself.
-    { op: "transition", from: into.id, bars: 4, gap: true, lift: 0 },
-    {
-      op: "addTrack",
-      track: {
-        id, name: label.slice(0, 24), role: "audio", volume: -3, duck: false, loopBeats: secBeats,
-        notes: [[60, startBeat, Math.min(phraseBeats, secBeats), 112]],
-        clip: { clipId, name: label, oneShot: true, warp: false, semitones: semitones ?? 0, gainDb: 0, durationSec: cut.durationSec },
-        fx: { filter: { type: "highpass", cutoff: 140 }, delay: { time: "8n", feedback: 0.22, wet: 0.16 }, reverb: 0.2 },
-      },
-    }, { op: "active", section: into.id, add: [id] }];
-
-    const ok = await dRef.current.edit(ops, `isolated the vocal from ${name} into ${into.name}`);
-    if (!ok) return "The vocal did not land. Say it again and I will try a different phrase.";
-    const tuneLine = semitones === null
-      ? (heard.midi === null ? "It is unpitched enough that I left it alone" : `It sits too far from ${song.key} to move without wrecking it, so it plays as it was sung`)
-      : semitones === 0 ? `It was already in ${song.key}` : `Tuned ${semitones > 0 ? "up" : "down"} ${Math.abs(semitones)} to sit in ${song.key}`;
-    dRef.current.flash(`Vocal from ${name} is in ${into.name}`);
-    return `VOCAL ISOLATED from "${name}": the phrase at ${mmss(pick.startSec)}, ${cut.durationSec.toFixed(1)} seconds of it, cut out of the separated vocal stem (${phrases.length} phrases were in there; this one scored ${pick.score} for loudness and length). ${tuneLine}. It is placed in ${into.name} starting at beat ${startBeat.toFixed(1)} of ${secBeats}, so its last word lands ${enough ? `${beforeBeats.toFixed(1)} beats before` : "on"} the downbeat of ${dropAt > 0 ? order[dropAt].name : "the next section"}${enough ? ` (that gap is the median of ${measured.records} ${family} records the studio has heard, not a guess)` : ""}${tooLong ? ", though the phrase is longer than the section so it starts at the top of it" : ""}, and that section now leans out over its final bars to leave room. Tell the user in one breath what you did and what to listen for. Do not change anything else.`;
+    const { voiceOfRecord } = await import("@/lib/voice/sourceOf");
+    const v = await voiceOfRecord(res, key, src, said);
+    if (!v.phrases.length) return `I isolated the voice on ${name} but could not find a phrase in it worth taking.`;
+    if (!dRef.current.placeVoice) return "The placement is not ready yet.";
+    await dRef.current.placeVoice(v, src);
+    return null;
   }, [job]);
 
   dropVocalRef.current = dropVocal;

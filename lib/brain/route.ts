@@ -6,11 +6,13 @@ import type { Song } from "../song/types";
 import { laneAsk, rolloutIntent, localIntent } from "./local";
 import { laneInfo } from "./laneNames";
 import { seedOf } from "../song/ritual";
+import { voiceOfferOpen } from "../voice/offer";
 
 export type RefineStep = "drums" | "bass" | "harmony" | "hook" | "craft" | "mix" | "finish" | "fixSection";
 export type Route =
   | { kind: "draft"; name: string | null; surprise?: boolean }
   | { kind: "next"; reason: string | null }
+  | { kind: "nextVoice" }
   | { kind: "voice"; from: string | null; what: string | null; where: string | null }
   | { kind: "take"; what: "record" | "said" }
   | { kind: "refine"; step: RefineStep; section?: string }
@@ -65,6 +67,8 @@ export function route(text: string, song: Song): Route {
   }
   const p = PUT_IN.exec(t);
   if (p && !ROLES.test(p[1]) && !/^(?:a|an|some|more|that|this|it|the (?:vocal|voice))\b/.test(p[1])) return { kind: "voice", from: nameOf(p[1]), what: null, where: p[2]?.trim() ?? null };
+  // Right after a voice landed, "next one" tries the voice's next slot (lib/voice/offer.ts).
+  if (NEXT.test(t) && voiceOfferOpen()) return { kind: "nextVoice" };
   // On a drafted record with no chop seed, "next one" is the next take of the draft (a chop seed keeps the ritual's next).
   if (NEXT.test(t) && song.draft && !seedOf(song)) return { kind: "next", reason: null };
   if (SURPRISE.test(t)) return { kind: "draft", name: null, surprise: true };

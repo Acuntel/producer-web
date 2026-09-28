@@ -55,7 +55,9 @@ function trackEvents(song: Song, sec: Section, tr: Track, cursor: number, feel: 
         if (local < b0 || local >= b1 || local >= secBeats) continue;
         // fill "cut": kick/bass/sub out for the final 2 beats, everything out for the last half beat, and a
         // note that starts before its cut ends there instead of ringing on into the gap.
-        const cutAt = cut ? secBeats - (["kick", "bass", "sub"].includes(tr.role) ? 2 : 0.5) : Infinity;
+        // A placed voice is the exception: its pickup may begin inside the gap (the desk silences the gap itself) so the
+        // word it anchors lands on the one after it; dropping the note would drop the whole line.
+        const cutAt = cut && !tr.clip?.voice ? secBeats - (["kick", "bass", "sub"].includes(tr.role) ? 2 : 0.5) : Infinity;
         if (local >= cutAt) continue;
         const len = Math.min(n[2], cutAt - local);
         const chance = n[4] ?? tr.chance ?? 1;

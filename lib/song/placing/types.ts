@@ -24,6 +24,10 @@ export type PlacePhrase = {
   chroma: number[] | null;
   /** Its notes as MIDI, for the in-scale term and the register check. */
   midis: number[];
+  /** Semitones that fit the phrase to its record's scale (the map's keyRelToSource): a line sung in another key. */
+  keyRel: number | null;
+  /** Its peak in dBFS on the separated vocal (with rmsDb, how loud the cut plays once it is normalized). */
+  peakDb: number;
   section: SectionLabel | null;
   /** Source order among the phrases (verse lines keep it). */
   order: number;
@@ -67,4 +71,4 @@ export type Slot = {
 };
 
 /** A section as it sits in the arrangement: where it starts in song beats and how long it is. */
-export type Placed = { id: string; name: string; index: number; startBeat: number; beats: number; bars: number; energy: number; fill: string; role: SectionRole; active: string[] };
+export type Placed = { id: string; name: string; index: number; startBeat: number; beats: number; bars: number; energy: number; fill: string; role: SectionRole; active: string[]; variants?: Record<string, unknown> };

@@ -27,6 +27,7 @@ type Deps = {
   ritual?: { control: (c: VoiceControl) => Promise<string | null>; heard: (words: string) => void };   // the order of work (hooks/useRitual)
   draft?: { run: (name: string | null, o?: { surprise?: boolean; heardAt?: number }) => unknown; next: (steer: null) => unknown; tryName: (t: string, heardAt?: number) => Promise<boolean> };   // hooks/useDraft
   questions?: { answer: (words: string) => boolean };   // hooks/useQuestions
+  voices?: { next: () => Promise<boolean>; take?: (what: "record" | "said") => Promise<void> };   // hooks/useVoicePlace, hooks/useTake
 };
 const RITUAL_TITLE = (c: VoiceControl) => c.source ? `Setting the grid from ${c.source.name}` : c.chop ? "Cutting a chop on the grid" : c.alone ? "The chop alone, on a loop" : c.beat ? "Bringing the beat to the chop" : c.next ? "The next candidate" : c.down ? "Everything down but the seed" : null;
 export type Timing = { stt: number; firstWord: number; voiceMs: number };
@@ -217,7 +218,7 @@ export function useConversation(d: Deps) {
     } catch { doneWork(id, "did not land"); }
   }, [addWork, doneWork]);
 
-  const { routeWords, doTake } = useRouteWords({ studio: () => dRef.current.studio, speak: (t) => dRef.current.voice.speak(t), draft: () => dRef.current.draft, doVocal });
+  const { routeWords, doTake } = useRouteWords({ studio: () => dRef.current.studio, speak: (t) => dRef.current.voice.speak(t), draft: () => dRef.current.draft, doVocal, voices: () => dRef.current.voices });
 
   // The order of work: the studio does it with no Hands and speaks the result itself; the card shows it happening.
   const doRitual = useCallback(async (c: VoiceControl, title: string) => {

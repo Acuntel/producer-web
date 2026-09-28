@@ -22,7 +22,7 @@ export type LandingRow = {
   /** For each part laid anew, how many beats after the boundary its first hit fired (never negative). */
   firstHits?: Record<string, number>;
 };
-export type PlacementRow = { at: number; phrase: string; slot: string; scores: Record<string, number>; checks: Record<string, number | boolean>; verdict: string | null };
+export type PlacementRow = { at: number; phrase: string; slot: string; scores: Record<string, number>; checks: Record<string, number | boolean>; verdict: string | null; moveId?: string; lane?: string; landed?: boolean; first?: boolean };
 
 type Health = { late: number; events: number; graphsAlive: number };
 type Stats = { underrunEvents?: number; underrunDuration?: number; totalDuration?: number };
@@ -38,6 +38,9 @@ const dueBeforeReady: { key: string; at: number }[] = [];
 const perSec = { idbOpens: {} as Record<number, number>, appCommits: {} as Record<number, number> };
 const totals = { idbOpens: 0, appCommits: 0 };
 let health: (() => Health | null) | null = null;
+let learning: (() => unknown) | null = null;
+/** What the placement learner knows (lib/learn/placement.ts): keep rate per lane, transfers, counts, the model. */
+export function setLearningSource(fn: (() => unknown) | null) { learning = fn; }
 let audioCtx: (() => unknown) | null = null;
 let landingSeq = 0;
 
@@ -85,9 +88,13 @@ export function recordLanding(r: Omit<LandingRow, "jobId"> & { jobId?: string })
   landings.push(full); if (landings.length > MAX_ROWS) landings.shift();
   return full;
 }
-export function recordPlacement(p: Omit<PlacementRow, "at">) {
-  placements.push({ ...p, at: now() }); if (placements.length > MAX_ROWS) placements.shift();
+export function recordPlacement(p: Omit<PlacementRow, "at">): PlacementRow {
+  const row = { ...p, at: now() };
+  placements.push(row); if (placements.length > MAX_ROWS) placements.shift();
+  return row;
 }
+/** Brady's verdict on a landed placement ("in", "next", "quiet"), onto its row. */
+export function setPlacementVerdict(moveId: string, verdict: string) { for (const r of placements) if (r.moveId === moveId && r.landed) r.verdict = verdict; }
 
 export function countIdbOpen() { totals.idbOpens++; const s = sec(now()); perSec.idbOpens[s] = (perSec.idbOpens[s] ?? 0) + 1; }
 export function countAppCommit() { totals.appCommits++; const s = sec(now()); perSec.appCommits[s] = (perSec.appCommits[s] ?? 0) + 1; }
@@ -121,6 +128,7 @@ export function ledgerSnapshot() {
     counters: { idbOpens: totals.idbOpens, appCommits: totals.appCommits, late: h?.late ?? null, events: h?.events ?? null, graphsAlive: h?.graphsAlive ?? null, playback: stats() },
     perSec: { idbOpens: { ...perSec.idbOpens }, appCommits: { ...perSec.appCommits } },
     maxDecodesPerKey: rows.reduce((m, r) => Math.max(m, r.decodes), 0),
+    learning: (() => { try { return learning?.() ?? null; } catch { return null; } })(),
   };
 }
 export type LedgerSnapshot = ReturnType<typeof ledgerSnapshot>;

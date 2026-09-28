@@ -46,8 +46,10 @@ function kitFor(dna: DraftDna, rng: () => number): string {
   return thompson(base, rng);
 }
 
-/** Compile the draft. `songId` and `take` make the seed; `base` is the record it lands on (its id, title and own audio stay). */
-export function compileDraft(dna: DraftDna, o: { songId: string; take?: number; steer?: Steer; base?: Song }): Song {
+// `songId` and `take` make the seed; `base` is the record it lands on (its id, title and own audio stay).
+/** Compile the draft. `lock` moves the beat to a voice (law 8): the draft in the vocal's key at its tempo (or double or
+ *  half, lib/song/fit.ts), so the voice itself moves at most 12% and 3 semitones. */
+export function compileDraft(dna: DraftDna, o: { songId: string; take?: number; steer?: Steer; base?: Song; lock?: { bpm: number; key: string | null } }): Song {
   const take = o.take ?? 0;
   const seed = draftSeed(o.songId, dna.key, take);
   const r = (k: string) => rngFor(seed, k);
@@ -56,7 +58,7 @@ export function compileDraft(dna: DraftDna, o: { songId: string; take?: number; 
   // The key: the source's own candidates first, then the lane's. A darker steer leans minor.
   const keyCands: Cand<string>[] = [...dna.keys.map(([v, w]) => ({ v, w: w * 2 })), ...recipe.keys.map((v) => ({ v, w: 0.5 }))];
   if (steer?.dark) for (const c of keyCands) if (/minor/.test(c.v) === steer.dark > 0) c.w *= 2;
-  const key = keyInfo(thompson(keyCands, r("key")));
+  const key = keyInfo(o.lock?.key ?? thompson(keyCands, r("key")));
   // The progression in the key's mode: the source's, then the lane's, then the common ones for that mode.
   const mode = key.minor ? "minor" : "major";
   const progs: Cand<string>[] = [
@@ -80,9 +82,9 @@ export function compileDraft(dna: DraftDna, o: { songId: string; take?: number; 
   const form = buildForm(dna, recipe, tracks, r);
   for (const t of own) for (const s of form.sections) if (s.energy === 1 || /drop|chorus/i.test(s.name)) s.active.push(t.id);
 
-  const bpm = Math.max(60, Math.min(200, Math.round(dna.bpm + (steer?.energy ?? 0) * 3)));
+  const bpm = o.lock ? Math.max(60, Math.min(200, Math.round(o.lock.bpm * 100) / 100)) : Math.max(60, Math.min(200, Math.round(dna.bpm + (steer?.energy ?? 0) * 3)));
   const swing = thompson(recipe.swing.map((v) => ({ v, w: 1 })), r("swing"));
-  const draft: DraftInfo = { name: dna.name, key: dna.key, take, seed, tier: dna.tier, lane: dna.lane, ...(steer ? { steer } : {}), dna };
+  const draft: DraftInfo = { name: dna.name, key: dna.key, take, seed, tier: dna.tier, lane: dna.lane, ...(steer ? { steer } : {}), ...(o.lock ? { lock: o.lock } : {}), dna };
   return {
     version: 3, id: o.songId, title: o.base?.title ?? "Untitled", bpm, key: keyName(key.pc, key.minor), lane: dna.lane, kit: kitFor(dna, r("kit")),
     humanize: { swing, velVar: Math.round(between(0.05, 0.1, r("velVar")) * 100) / 100, clapLateMs: Math.round(between(3, 10, r("clapLate"))), seed: seed % 100000 },

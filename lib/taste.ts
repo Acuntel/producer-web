@@ -20,6 +20,11 @@ export type Pair = { at: number; title: string; label: string; chosen: "a" | "b"
 type Sink = { move?: (e: LedgerEntry) => void; pair?: (p: Pair) => void };
 let sink: Sink = {};
 export function setTasteSink(s: Sink) { sink = s; }
+// Who hears a move's judgement as it is written (the placement learner, lib/learn/placement.ts).
+type Judged = (id: string, verdict: "liked" | "rejected" | "none" | "dead") => void;
+const judgedListeners = new Set<Judged>();
+export function onJudged(fn: Judged): () => void { judgedListeners.add(fn); return () => { judgedListeners.delete(fn); }; }
+const tellJudged = (id: string, v: "liked" | "rejected" | "none" | "dead") => { for (const f of judgedListeners) { try { f(id, v); } catch { /* a listener never breaks the ledger */ } } };
 
 /** Merge rows from the account into the local ledger: union by id; a verdict on record wins over none. */
 export function mergeLedger(rows: LedgerEntry[]): number {
@@ -82,6 +87,7 @@ export function attachWindow(id: string, w: VerdictWindow): LedgerEntry | null {
   all[i] = { ...all[i], window: w, verdict };
   save(all);
   sink.move?.(all[i]);
+  tellJudged(id, w.verdict);
   return all[i];
 }
 
@@ -93,6 +99,7 @@ export function markDead(id: string, passes: number, at = Date.now()): LedgerEnt
   all[i] = { ...all[i], dead: { passes, at } };
   save(all);
   sink.move?.(all[i]);
+  tellJudged(id, "dead");
   return all[i];
 }
 

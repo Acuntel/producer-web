@@ -8,6 +8,7 @@ import { analyzeSpectrum, type BandShares } from "./spectrum";
 import { analyzeStructure, type SectionFacts, type SectionLabel } from "./structure";
 import { describe } from "./describe";
 import { extractGroove, type GrooveTemplate } from "./groove";
+import type { VocalFacts } from "./vocalFacts";
 
 export type { BandShares, SectionFacts, SectionLabel, GrooveTemplate };
 
@@ -21,6 +22,8 @@ export type MusicFacts = {
   spectrum: { bands: BandShares; centroidHz: number; mud: number; harshness: number; width: number };
   structure: { sections: SectionFacts[]; energy: number[]; dropAt: number | null; barsTotal: number };
   read: string;
+  /** The voice placed in this record, as its own check measured it (vocalCheck.ts), while it is still in the song. */
+  vocal?: VocalFacts;
 };
 
 export type HearOptions = { bpmHint?: number; keyHint?: string; label?: string; maxSeconds?: number };

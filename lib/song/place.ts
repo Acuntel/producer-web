@@ -6,7 +6,7 @@
 import type { Song, Track, Note } from "./types";
 import { fitOnto, fitCost, type Fit } from "./fit";
 import { hashStr } from "./prng";
-import { layout, leadsUnder, isLead } from "./placing/geometry";
+import { layout, isLead, isMid } from "./placing/geometry";
 import { slotsFor } from "./placing/slots";
 import { termsFor, ruleScore, harmonic, ruleCounts, type RoleCounts } from "./placing/score";
 import { chromaUnder } from "./placing/geometry";
@@ -58,7 +58,9 @@ export function planPlacements(v: VoiceSource, song: Song, o: PlaceOptions = {})
     const first = d.instances[0];
     const from = secs[first.hostIndex].startBeat + first.noteBeat;
     // The shift the harmony asks for, within three semitones, preferring the key's own.
-    const shift = v.kind === "take" ? 0 : harmonic(d.phrase.chroma, chromaUnder(song, secs, from, from + first.lengthBeats), base.semitones).shift;
+    // A line the singer took in another key than the record (keyRelToSource) is moved by that too.
+    const prefer = (((base.semitones + (d.phrase.keyRel ?? 0)) % 12) + 18) % 12 - 6;
+    const shift = v.kind === "take" ? 0 : harmonic(d.phrase.chroma, chromaUnder(song, secs, from, from + first.lengthBeats), Math.max(-3, Math.min(3, prefer))).shift;
     const fit = { rate: base.rate, semitones: shift, playsAt: base.playsAt };
     if (fitCost(fit) > 1) continue;
     const terms = termsFor(d.kind, d.phrase, d.target, d.instances, { song, secs, fit, roleCounts: counts, phrases: v.phrases });
@@ -92,7 +94,7 @@ export function placementWindow(slot: Slot, song: Song): { fromBeat: number; toB
  *  the stored clip of each instance's cut. */
 export function placementOps(slot: Slot, v: VoiceSource, song: Song, cuts: string[], idBase: string): { ops: unknown[]; tracks: string[] } {
   const secs = layout(song);
-  const ops: unknown[] = []; const tracks: string[] = [];
+  const ops: unknown[] = []; const tracks: string[] = []; const spans: [number, number][] = [];
   const clipBpm = song.bpm / slot.fit.rate;
   slot.instances.forEach((x, i) => {
     const host = secs[x.hostIndex];
@@ -102,38 +104,73 @@ export function placementOps(slot: Slot, v: VoiceSource, song: Song, cuts: strin
     const notes: Note[] = hits.map((h) => [60, Math.round((x.noteBeat + h + (x.double ? 0.03 : 0)) * 10000) / 10000, Math.round(Math.min(lenBeats, x.hits ? 1 : lenBeats) * 10000) / 10000, 112]);
     const label = `${v.name} ${slot.kind === "drop-chop" ? "chop" : "vocal"}${x.double ? " double" : ""}`;
     const track: Track = {
-      id, name: label.slice(0, 24), role: "audio", volume: x.double ? -9 : slot.kind === "drop-chop" ? -6 : -3, duck: false, loopBeats: host.beats, notes,
-      clip: { clipId: cuts[i] ?? cuts[0], name: label, oneShot: true, voice: true, bpm: Math.round(clipBpm * 10000) / 10000, warp: true, semitones: slot.fit.semitones, gainDb: 0, durationSec: x.cut[1] - x.cut[0] },
+      // A voice sits where it was placed: no groove moves it (the song's swing and a drummer's template would push
+      // every word off its anchor), and no chance roll drops it.
+      id, name: label.slice(0, 24), role: "audio", volume: x.double ? -9 : -3, duck: false, loopBeats: host.beats, notes, groove: null, chance: 1,
+      clip: { clipId: cuts[i] ?? cuts[0], name: label, oneShot: true, voice: true, bpm: Math.round(clipBpm * 10000) / 10000, warp: true, semitones: slot.fit.semitones, gainDb: levelOf(slot.phrase), durationSec: x.cut[1] - x.cut[0] },
       fx: { filter: { type: "highpass", cutoff: 140 }, delay: { time: "8n", feedback: 0.22, wet: 0.16 }, reverb: 0.2, ...(x.double ? { pan: i % 2 ? -0.35 : 0.35 } : {}) },
     };
     ops.push({ op: "addTrack", track }, { op: "active", section: host.id, add: [id] });
     tracks.push(id);
-    ops.push(...leadOutOfTheWay(song, secs, host.startBeat + x.noteBeat, host.startBeat + x.noteBeat + lenBeats, slot.phrase.midis));
+    spans.push([host.startBeat + x.noteBeat, host.startBeat + x.noteBeat + (x.hits ? x.hits[x.hits.length - 1] : 0) + lenBeats]);
   });
+  // The lead's notes come out once per section, for every span the voice sings in it (the sung notes moved by the fit).
+  ops.push(...leadOutOfTheWay(song, secs, spans, slot.phrase.midis.map((m) => m + slot.fit.semitones)));
+  ops.push(...midsUnder(song, secs, spans));
   return { ops, tracks };
 }
 
-/** The lead never plays in the voice's register while it sings: in each section the phrase sounds in, the lead's
+/** The lead never plays in the voice's register while it sings: in each section the voice sounds in, the lead's
  *  notes under it (within five semitones of the sung range, or all of them when the phrase has no notes) drop out
  *  for that section only, which leaves the lead answering in the gaps. */
-function leadOutOfTheWay(song: Song, secs: Placed[], from: number, to: number, midis: number[]): unknown[] {
+function leadOutOfTheWay(song: Song, secs: Placed[], spans: [number, number][], midis: number[]): unknown[] {
   const lo = midis.length ? Math.min(...midis) - 5 : -Infinity, hi = midis.length ? Math.max(...midis) + 5 : Infinity;
   const ops: unknown[] = [];
+  const done = new Set<string>();
   for (const sec of secs) {
-    if (sec.startBeat >= to || sec.startBeat + sec.beats <= from || sec.role === "build") continue;
-    for (const l of leadsUnder(song, [sec], from, to)) {
-      const t = song.tracks.find((x) => x.id === l.track); if (!t || !isLead(t)) continue;
+    const mine = spans.filter(([f, t]) => sec.startBeat < t && sec.startBeat + sec.beats > f);
+    if (!mine.length) continue;
+    for (const t of song.tracks) {
+      if (!isLead(t) || !sec.active.includes(t.id) || done.has(`${sec.id}|${t.id}`)) continue;
       const plan = song.sections.find((s) => s.id === sec.id)?.variants?.[t.id];
       if (plan !== undefined && typeof plan !== "string") continue;
       const now = typeof plan === "string" ? t.patterns?.[plan] ?? t.notes : t.notes;
       const L = Math.max(0.25, t.loopBeats);
-      const a = (from - sec.startBeat) % L, b = a + (to - from);
       const inReg = (m: number) => { const p = m + (t.transpose ?? 0) + 12 * (t.synth?.octave ?? 0); return p >= lo && p <= hi; };
-      const keep = now.filter((n) => !(inReg(n[0]) && n[1] < b && n[1] + n[2] > a) && !(inReg(n[0]) && n[1] + L < b && n[1] + L + n[2] > a));
+      // A note is out when any pass of the loop puts it under a sung span.
+      const hit = (n: Note) => { for (let rep = 0; rep * L < sec.beats; rep++) { const a = sec.startBeat + rep * L + n[1], b = a + n[2]; if (n[1] < L && a < sec.startBeat + sec.beats && mine.some(([f, e]) => b > f && a < e)) return true; } return false; };
+      const keep = now.filter((n) => !(inReg(n[0]) && hit(n)));
+      done.add(`${sec.id}|${t.id}`);
       if (keep.length !== now.length) ops.push({ op: "sectionNotes", section: sec.id, track: t.id, notes: keep });
     }
   }
   return ops;
+}
+
+/** The mids (1 to 5 kHz, where a voice is understood) duck under it: the pads, chords and stabs in each section the
+ *  voice sings in dip 6 dB where it starts and come back up by the time it ends, a ramp and never a step. A section
+ *  that already moves a part's level (a build's fade into the gap) keeps its own move. */
+function midsUnder(song: Song, secs: Placed[], spans: [number, number][]): unknown[] {
+  const ops: unknown[] = [];
+  for (const sec of secs) {
+    if (sec.role === "build") continue;
+    const mine = spans.filter(([f, t]) => sec.startBeat < t && sec.startBeat + sec.beats > f);
+    if (!mine.length) continue;
+    const a = Math.max(0, Math.min(...mine.map(([f]) => f)) - sec.startBeat), b = Math.min(sec.beats, Math.max(...mine.map(([, t]) => t)) - sec.startBeat);
+    const own = song.sections.find((q) => q.id === sec.id)?.automation ?? [];
+    for (const t of song.tracks) {
+      if (!sec.active.includes(t.id) || !isMid(t) || isLead(t) || own.some((x) => x.track === t.id && x.param === "volume")) continue;
+      ops.push({ op: "automate", section: sec.id, automation: { track: t.id, param: "volume", from: t.volume - 6, to: t.volume, curve: "linear", startBeat: Math.round(a * 1000) / 1000, endBeat: Math.round(Math.max(a + 0.5, b) * 1000) / 1000 } });
+    }
+  }
+  return ops;
+}
+
+/** A cut is normalized to its peak, so a breathy line plays quieter than a belted one: this brings its average level
+ *  to about -14 dBFS (6 dB down or 4 dB up at most, so its peak stays under the ceiling), so a voice sits on top of the beat whatever the singer did. */
+export function levelOf(p: { rmsDb: number; peakDb: number }): number {
+  if (!Number.isFinite(p.rmsDb) || !Number.isFinite(p.peakDb)) return 0;
+  return Math.round(Math.max(-6, Math.min(4, -14 - (p.rmsDb - p.peakDb - 1))) * 10) / 10;
 }
 
 export type { Placed };

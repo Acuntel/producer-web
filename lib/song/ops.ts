@@ -88,6 +88,8 @@ function applyOne(s: Song, o: Op): boolean {
         loopBeats: t.loopBeats && t.loopBeats > 0 ? t.loopBeats : 4,
         notes: Array.isArray(t.notes) ? t.notes.filter(isNote).map(cleanNote) : [],
         patterns: t.patterns, synth: t.synth, fx: t.fx, clip: cleanClip(t.clip), transpose: t.transpose,
+        // A track that says how it grooves keeps it (a placed voice is straight: groove null).
+        ...(t.groove !== undefined ? { groove: t.groove } : {}), ...(typeof t.velDev === "number" ? { velDev: t.velDev } : {}), ...(typeof t.chance === "number" && t.chance < 1 ? { chance: t.chance } : {}),
       };
       const existing = s.tracks.findIndex((x) => x.id === nt.id);
       if (existing >= 0) s.tracks[existing] = nt;

@@ -21,7 +21,7 @@ export function layout(song: Song): Placed[] {
   const ids = song.arrangement.filter((id) => byId.has(id));
   ids.forEach((id, i) => {
     const s = byId.get(id)!;
-    out.push({ id, name: s.name, index: i, startBeat: beat, beats: s.bars * 4, bars: s.bars, energy: s.energy ?? 0.6, fill: s.fill ?? "none", role: roleOfSection(s, i, ids.length), active: s.active });
+    out.push({ id, name: s.name, index: i, startBeat: beat, beats: s.bars * 4, bars: s.bars, energy: s.energy ?? 0.6, fill: s.fill ?? "none", role: roleOfSection(s, i, ids.length), active: s.active, variants: s.variants });
     beat += s.bars * 4;
   });
   return out;
@@ -34,13 +34,21 @@ export const isHarmony = (t: Track) => HARMONY.has(t.role);
 /** Parts that sound in 1 to 5 kHz, where a voice is understood: leads, chords, stabs, pads, hats. */
 export const isMid = (t: Track) => isLead(t) || t.role === "chords" || t.role === "stab" || t.role === "pad";
 
+/** The notes a track plays in a section: its named variant there when it has one (a plan of several falls back to
+ *  the track's own pattern), else its own. */
+export function notesOf(t: Track, sec: Pick<Placed, "variants">): Track["notes"] {
+  const plan = sec.variants?.[t.id];
+  return typeof plan === "string" && t.patterns?.[plan] ? t.patterns[plan] : t.notes;
+}
+
 /** Notes of a track sounding between two beats of one section occurrence, as [midi, absStart, absEnd]. */
 export function notesIn(t: Track, sec: Placed, from: number, to: number): [number, number, number][] {
-  if (!sec.active.includes(t.id) || !t.notes.length || t.role === "audio") return [];
+  const notes = notesOf(t, sec);
+  if (!sec.active.includes(t.id) || !notes.length || t.role === "audio") return [];
   const out: [number, number, number][] = [];
   const L = Math.max(0.25, t.loopBeats);
   for (let rep = 0; rep * L < sec.beats; rep++) {
-    for (const n of t.notes) {
+    for (const n of notes) {
       const a = sec.startBeat + rep * L + n[1];
       if (n[1] >= L || a >= sec.startBeat + sec.beats) continue;
       const b = a + n[2];

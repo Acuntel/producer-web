@@ -181,7 +181,7 @@ export function useStudio(say: (t: string, o?: { at?: number }) => void, recordH
     setHearing(true);
     try {
       const { hearSong } = await import("@/lib/engine");
-      const f = await hearSong(s, { maxSeconds: 240 });
+      const f = (await import("@/lib/ears/vocalFacts")).attachVocal(await hearSong(s, { maxSeconds: 240 }), s);
       if (seq !== hearSeq.current) return f;
       factsRef.current = f; setFacts(f);
       if (referenceRef.current) { const { compare } = await import("@/lib/ears"); setDeltaText(compare(f, referenceRef.current.facts).text); }
@@ -600,6 +600,8 @@ export function useStudio(say: (t: string, o?: { at?: number }) => void, recordH
   const whenArmed = useCallback(() => Promise.race([armedRef.current, new Promise((r) => window.setTimeout(r, 4000))]), []);
   const onLaid = useCallback((f: (() => void) | null) => { laidRef.current = f; }, []);
   const onMoveLanded = useCallback((f: ((id: string) => void) | null) => { movedRef.current = f; }, []);
+  /** A move made outside the brain (a voice placed, a take) opens the same thirty-second verdict window. */
+  const openVerdict = useCallback((id: string) => { lastMoveRef.current = id; setLastMoveId(id); lastMoveAtRef.current = Date.now(); movedRef.current?.(id); }, []);
   const onOffer = useCallback((f: ((line: string, yes: () => void) => void) | null) => { offerRef.current = f; }, []);
   /** A whole new version of the record, landed on a boundary (a draft on the next bar from its top, next one on the next phrase). */
   const land = useCallback((s: Song, o: SetOpts) => setSong(s, o), [setSong]);
@@ -612,5 +614,5 @@ export function useStudio(say: (t: string, o?: { at?: number }) => void, recordH
 
   return { song, messages, busy, started, starting, paused, nowSection, library, clips, facts, hearing, reference, deltaText, listenHint, toast, lastMoveId, rendering, ab, score, canUndo, canRedo, rollout, notSaved,
     boot, send, sendVoice, ignored, ignoredCount, thatWasForMe, loadChat, newSession, setReferenceBuffer, setReferenceFacts, moves, previewClip, brainDown, jump, verdict, undo, redo, pickAb, cancelRollout, loadSaved, saveNow, download, addReference, addClip, flash, loadSong, getSong, edit, registerClip, getLevels, getSchedule, getHealth, setVolume, toggleTrack,
-    play, pause, append, tryLocal, spend, cost, getPosition, duck, liveEngine, onLaid, onMoveLanded, onOffer, land, runAction, whenArmed, setMetering, factsNow: () => factsRef.current, referenceNow: () => referenceRef.current };
+    play, pause, append, tryLocal, spend, cost, getPosition, duck, liveEngine, onLaid, onMoveLanded, openVerdict, onOffer, land, runAction, whenArmed, setMetering, factsNow: () => factsRef.current, referenceNow: () => referenceRef.current };
 }

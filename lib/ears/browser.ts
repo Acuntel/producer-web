@@ -33,6 +33,7 @@ export function factsForBrain(f: MusicFacts): object {
     dropAt: f.structure.dropAt === null ? null : mmss(f.structure.dropAt),
     bars: f.structure.barsTotal,
     sections: f.structure.sections.slice(0, 8).map((s) => ({ at: mmss(s.start), label: s.label, lufs: s.lufs, kick: s.hasKick, chords: s.chords.slice(0, 4) })),
+    ...(f.vocal ? { vocal: { from: f.vocal.source, slot: f.vocal.slot, lands: f.vocal.lands, anchorErrMs: f.vocal.anchorErrMs, buriedShare: f.vocal.masked, clearOverBeatDb: f.vocal.maskGapDb, inKey: f.vocal.inScale, onTheChords: f.vocal.chordFit, leadCollisions: f.vocal.leadCollisions, crossesBoundary: f.vocal.crossesBoundary, checked: f.vocal.pass } } : {}),
     read: f.read,
   };
 }

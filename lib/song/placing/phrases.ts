@@ -48,7 +48,7 @@ export function voiceFromMap(map: VocalMap, o: { name: string; clipKey: string; 
     return {
       id: p.id, start: p.start, end: p.end, cut, stress, lastWord, text: p.text, onsets: onsets.filter(inCut),
       role: roleOf({ id: p.id, hookScore: p.hookScore, repeats: p.repeats, words: p.words.length, len: p.end - p.start }, map.hook),
-      hookScore: p.hookScore, repeats: p.repeats, rmsDb: p.rmsDb, chroma: chromaOf(p.notes), midis: p.notes.map((n) => Math.round(n.midi)),
+      hookScore: p.hookScore, repeats: p.repeats, rmsDb: p.rmsDb, peakDb: p.peakDb, keyRel: p.keyRelToSource, chroma: chromaOf(p.notes), midis: p.notes.map((n) => Math.round(n.midi)),
       section: p.section, order: i,
     };
   });
@@ -68,7 +68,7 @@ export function voiceFromPhrases(found: Phrase[], o: { name: string; clipKey: st
       id: i, start: p.startSec, end: p.endSec, cut: [Math.max(0, p.startSec - 0.02), p.endSec + Math.min(TAIL, Math.max(0, (found[i + 1]?.startSec ?? Infinity) - p.endSec - 0.02))],
       stress: p.startSec + 0.02, lastWord: null, text: "", onsets: [p.startSec + 0.02],
       role: p.startSec === hookAt ? "hook" : len <= 1.8 ? "tag" : "verse",
-      hookScore: p.score, repeats: 1, rmsDb: p.rmsDb, chroma, midis, section: null, order: i,
+      hookScore: p.score, repeats: 1, rmsDb: p.rmsDb, peakDb: p.peakDb, keyRel: null, chroma, midis, section: null, order: i,
     };
   });
   const hook = phrases.find((p) => p.role === "hook")?.id ?? null;

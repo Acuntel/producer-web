@@ -2,7 +2,7 @@
 // It never changes the song. Notes go to the user and to the brain as options;
 // the user decides. Dismissed notes stay dismissed.
 export type CriticNote = {
-  id: string; area: "mix" | "arrangement" | "groove" | "harmony" | "sound" | "reference";
+  id: string; area: "mix" | "arrangement" | "groove" | "harmony" | "sound" | "reference" | "vocal";
   severity: 1 | 2 | 3; what: string; why: string; fix: string; section?: string; ops?: unknown[];
   status: "open" | "applied" | "dismissed"; at: number;
 };
@@ -42,11 +42,24 @@ export function parseCritic(obj: unknown): CriticReply {
   const raw = Array.isArray(o.notes) ? o.notes : [];
   const notes: CriticNote[] = raw.filter((n): n is Record<string, unknown> => !!n && typeof n === "object" && typeof (n as Record<string, unknown>).what === "string").slice(0, 6).map((n, i) => ({
     id: `c${Date.now().toString(36).slice(-4)}${i}`,
-    area: (["mix", "arrangement", "groove", "harmony", "sound", "reference"].includes(String(n.area)) ? n.area : "mix") as CriticNote["area"],
+    area: (["mix", "arrangement", "groove", "harmony", "sound", "reference", "vocal"].includes(String(n.area)) ? n.area : "mix") as CriticNote["area"],
     severity: (n.severity === 3 ? 3 : n.severity === 2 ? 2 : 1) as CriticNote["severity"],
     what: String(n.what).slice(0, 160), why: String(n.why ?? "").slice(0, 200), fix: String(n.fix ?? "").slice(0, 200),
     section: typeof n.section === "string" ? n.section : undefined, ops: Array.isArray(n.ops) && n.ops.length ? n.ops : undefined,
     status: "open", at: Date.now(),
   }));
   return { headline: typeof o.headline === "string" ? o.headline.slice(0, 200) : "", notes };
+}
+
+/** What the ears said about the placed voice, as critic notes: measured, never a guess (lib/ears/vocalCheck.ts). */
+export function vocalNotes(v: { source: string; anchorErrMs: number; anchorErrBeats: number; masked: number; maskGapDb: number; inScale: number; leadCollisions: number; crossesBoundary: boolean } | undefined): CriticNote[] {
+  if (!v) return [];
+  const out: CriticNote[] = [];
+  const note = (severity: 1 | 2 | 3, what: string, why: string, fix: string): CriticNote => ({ id: `v${Date.now().toString(36).slice(-4)}${out.length}`, area: "vocal", severity, what, why, fix, status: "open", at: Date.now() });
+  if (Math.abs(v.anchorErrBeats) > 1 / 16) out.push(note(3, `The ${v.source} vocal misses its downbeat`, `Its stressed word lands ${Math.round(v.anchorErrMs)} ms off the one.`, "Try the next slot, or nudge the vocal onto the bar."));
+  if (v.masked > 0.5) out.push(note(2, `The ${v.source} vocal is buried`, `The beat is louder than the voice between 1 and 5 kHz in ${Math.round(v.masked * 100)}% of the sung frames.`, "Thin the pads and chords under the voice, or lift the vocal 2 dB."));
+  if (v.inScale < 0.5) out.push(note(2, `The ${v.source} vocal fights the key`, `Only ${Math.round(v.inScale * 100)}% of what it sings is in the song's key.`, "Move it a few semitones, or move the beat to its key."));
+  if (v.leadCollisions > 0) out.push(note(2, `The lead plays over the ${v.source} vocal`, `${v.leadCollisions} lead notes sit in the voice's register while it sings.`, "Take the lead out of the way while the voice sings."));
+  if (v.crossesBoundary) out.push(note(1, `The ${v.source} vocal runs across a section line`, "The phrase keeps singing more than a bar into the next section.", "Use a shorter line or the next slot."));
+  return out;
 }

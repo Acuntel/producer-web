@@ -9,6 +9,7 @@ import { useCritic } from "@/hooks/useCritic";
 import { useAccount } from "@/hooks/useAccount";
 import { useProjects, type SnapshotMeta } from "@/hooks/useProjects";
 import { useStems } from "@/hooks/useStems";
+import { useVoicePlace } from "@/hooks/useVoicePlace";
 import { useVault } from "@/hooks/useVault";
 import { vaultKeysOf } from "@/lib/account/clips";
 import { useVoiceOut } from "@/hooks/useVoiceOut";
@@ -71,7 +72,8 @@ export default function App() {
   const projects = useProjects({ user: account.user, loadSong: studio.loadSong, loadChat: studio.loadChat, getSong: studio.getSong, localLibrary: studio.library, flash: studio.flash });
   snapshotRef.current = projects.snapshot;
   const vault = useVault({ user: account.user, projectId: projects.current?.id ?? null, flash: studio.flash });
-  const stems = useStems({ user: account.user, projectId: projects.current?.id ?? null, flash: studio.flash, edit: studio.edit, send: studio.send, registerClip: studio.registerClip, getSong: studio.getSong, setReference: studio.setReferenceBuffer, setReferenceFacts: studio.setReferenceFacts, recordSound: (bpm, beats) => hum.record(bpm, beats), previewClip: studio.previewClip, noteClip: vault.note });
+  const voicePlace = useVoicePlace({ studio, speak: voiceOut.speak });
+  const stems = useStems({ user: account.user, projectId: projects.current?.id ?? null, flash: studio.flash, edit: studio.edit, send: studio.send, registerClip: studio.registerClip, getSong: studio.getSong, setReference: studio.setReferenceBuffer, setReferenceFacts: studio.setReferenceFacts, recordSound: (bpm, beats) => hum.record(bpm, beats), previewClip: studio.previewClip, placeVoice: voicePlace.place, noteClip: vault.note });
   // A record names its audio; this browser may never have seen it. Whenever that list changes,
   // whatever is missing is fetched back from the account before anyone notices silence.
   // It runs when the list or the account changes, never because the page re-rendered: the hooks'
@@ -105,7 +107,7 @@ export default function App() {
   useEffect(() => { if (view === "stage") void fetch("/api/draft").catch(() => {}); }, [view]);
   const holdingRef = useRef(false);
   const questions = useQuestions({ studio, speak: voiceOut.speak, talking: voiceOut.speaking || holdingRef.current, draftNow: draft.current, next: (st, why) => draft.next(st, why), vocal: (from) => void stems.vocalFrom(null, null, from) });
-  const convo = useConversation({ studio, voice: voiceOut, screen: view === "stage" ? "stage" : view, projects: titles, onLanding: (c) => landingRef.current(c), grab: stems.grab, vocal: stems.vocalFrom, ritual, draft, questions });
+  const convo = useConversation({ studio, voice: voiceOut, screen: view === "stage" ? "stage" : view, projects: titles, onLanding: (c) => landingRef.current(c), grab: stems.grab, vocal: stems.vocalFrom, ritual, draft, questions, voices: { next: voicePlace.next } });
   const speak = useSpeak({ onFinal: (t, ms) => void convo.hear(t, ms), onPress: () => convo.interrupt() });
   holdingRef.current = speak.holding;
   useStopWords(convo.auditioning, () => convo.interrupt(true));

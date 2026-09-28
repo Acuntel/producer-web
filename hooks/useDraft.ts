@@ -112,7 +112,7 @@ export function useDraft(d: Deps) {
       const s = dRef.current.studio; const base = s.getSong(); const dr = base.draft;
       if (!dr) return { failed: true, detail: "no draft" };
       const merged: Steer | undefined = steer || dr.steer ? { ...(dr.steer ?? {}), ...(steer ?? {}) } : undefined;
-      const song = compileDraft(dr.dna, { songId: base.id ?? "rec", take: dr.take + 1, steer: merged, base });
+      const song = compileDraft(dr.dna, { songId: base.id ?? "rec", take: dr.take + 1, steer: merged, base, lock: dr.lock });
       const landing = await s.land(song, { boundary: "phrase", label: "next one", jobId: `next:${j.id}` });
       say(`${why ? `${why} ` : ""}Here is the next one, on the same DNA. It lands on the next phrase.`);
       log({ kind: "next", take: dr.take + 1, landsAtBar: landing?.landsAtBar ?? null, landsAtTime: landing?.landsAtTime ?? null, sig: draftSignature(song), job: j.id, steer: merged ?? null });
@@ -132,7 +132,7 @@ export function useDraft(d: Deps) {
     keepDna(up.ask.name, dna);
     studioJobs.enqueue({ text: `Moving the draft onto ${dna.name}`, origin: "draft", songId: cur.id }, async (j) => {
       const base = s.getSong(); if (!base.draft) return {};
-      const song = compileDraft(dna, { songId: base.id ?? "rec", take: base.draft.take, base });
+      const song = compileDraft(dna, { songId: base.id ?? "rec", take: base.draft.take, base, lock: base.draft.lock });
       const landing = await s.land(song, { boundary: "phrase", label: `draft from ${dna.name}`, jobId: `upgrade:${j.id}` });
       say(`I have heard ${dna.name} now. The draft moves onto its grid on the next phrase.`);
       landedAs(song, landing?.landed, false);

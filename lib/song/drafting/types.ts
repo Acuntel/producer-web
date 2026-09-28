@@ -30,4 +30,4 @@ export type DraftDna = {
 export type Steer = { busy?: number; dark?: number; energy?: number };
 
 /** What a record remembers about its draft: enough to compile it again, or the next one on the same DNA. */
-export type DraftInfo = { name: string; key: string; take: number; seed: number; tier: DraftTier; lane: string; steer?: Steer; dna: DraftDna };
+export type DraftInfo = { name: string; key: string; take: number; seed: number; tier: DraftTier; lane: string; steer?: Steer; dna: DraftDna; lock?: { bpm: number; key: string | null } };
