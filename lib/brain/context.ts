@@ -32,6 +32,8 @@ const roundNote = (n: Note) => n.map((x, i) => (typeof x !== "number" ? x : i ==
 export function compactSong(song: Song): unknown {
   return {
     ...song,
+    // The draft's DNA is numbers the brain already gets in the notes; only what it was drafted from rides along.
+    draft: song.draft ? { name: song.draft.name, take: song.draft.take, tier: song.draft.tier, lane: song.draft.lane } : undefined,
     tracks: song.tracks.map((t) => ({
       ...t,
       notes: t.notes.map(roundNote),

@@ -40,9 +40,12 @@ export function migrateSong(input: unknown): Song | null {
     loop: (s.loop as Song["loop"]) ?? null,
     notes: typeof s.notes === "string" ? s.notes : undefined,
     source: s.source && typeof (s.source as Loose).bpm === "number" ? (s.source as Song["source"]) : undefined,
+    draft: isDraft(s.draft) ? s.draft : undefined,
   };
 }
 
+// A draft's provenance survives a reload only when it can compile again: a name, a take, a seed and its DNA.
+const isDraft = (d: unknown): d is Song["draft"] => { const x = d as Loose | null; return !!x && typeof x === "object" && typeof x.key === "string" && typeof x.take === "number" && typeof x.seed === "number" && !!x.dna && typeof (x.dna as Loose).bpm === "number"; };
 const num = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d);
 
 /** A record's own identity, independent of what it ends up being called. */

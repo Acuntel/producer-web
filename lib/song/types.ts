@@ -149,6 +149,8 @@ export type Humanize = {
   pocketMs?: number;   // global push (+) or drag (-) of non-kick elements
 };
 
+import type { DraftInfo } from "./drafting/types";
+
 // Any lane id: the shipped "tech-house" and "hard-house", the researched lanes in knowledge/lanes/lanes.json, or "custom".
 export type Lane = string;
 
@@ -173,6 +175,7 @@ export type Song = {
   loop?: LoopRegion;
   notes?: string;      // the producer's running notes on this song
   source?: Source;     // the record whose tempo and key the grid was set from
+  draft?: DraftInfo;   // the DNA and seed this record was drafted from (lib/song/draft.ts); "next one" is its next take
 };
 
 export const MELODIC_ROLES: Role[] = ["bass", "sub", "chords", "stab", "pad", "lead", "pluck", "arp"];
