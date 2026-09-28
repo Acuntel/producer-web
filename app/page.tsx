@@ -69,8 +69,13 @@ export default function App() {
   const stems = useStems({ user: account.user, projectId: projects.current?.id ?? null, flash: studio.flash, edit: studio.edit, send: studio.send, registerClip: studio.registerClip, getSong: studio.getSong, setReference: studio.setReferenceBuffer, recordSound: (bpm, beats) => hum.record(bpm, beats), previewClip: studio.previewClip, noteClip: vault.note });
   // A record names its audio; this browser may never have seen it. Whenever that list changes,
   // whatever is missing is fetched back from the account before anyone notices silence.
+  // It runs when the list or the account changes, never because the page re-rendered: the hooks'
+  // objects are new every render, and depending on them was a render loop that opened IndexedDB each time.
   const clipKeys = useMemo(() => vaultKeysOf(studio.song).join("|"), [studio.song]);
-  useEffect(() => { if (clipKeys) void vault.restore(studio.getSong()); }, [clipKeys, account.user, vault, studio]);
+  const uid = account.user?.id ?? null;
+  const restoreRef = useRef(vault.restore); restoreRef.current = vault.restore;
+  const getSongRef = useRef(studio.getSong); getSongRef.current = studio.getSong;
+  useEffect(() => { if (clipKeys) void restoreRef.current(getSongRef.current()); }, [clipKeys, uid]);
   const ritual = useRitual({ studio, stems, speak: voiceOut.speak, speaking: voiceOut.speaking, signedIn: !!account.user });
   actionsRef.current = {
     analyze: async (i) => { setShowAnalyze(true); if (i.url) await stems.start({ url: i.url }); else await stems.findAndAnalyze(i.query ?? "", i.from ?? null); },

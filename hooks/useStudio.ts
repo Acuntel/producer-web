@@ -25,24 +25,19 @@ import type { RolloutKind } from "@/lib/brain/rollouts";
 import { useRollout } from "./useRollout";
 import { useUploads } from "./useUploads";
 import { useLibraryActions } from "./useLibraryActions";
+import { useDeviceSave, SONG_KEY, CHAT_KEY } from "./useDeviceSave";
 import type { Reference } from "@/lib/types/ui";
-import type { SavedSong, ClipMeta } from "@/lib/types/ui";
+import type { ClipMeta } from "@/lib/types/ui";
 
 type Msg = { role: "user" | "assistant"; content: string };
 type Reply = { say: string; ops?: unknown[] | null; song?: unknown; action?: BrainAction | null; listen?: string | null; expect?: Expectation[] | null; alternative?: unknown[] | null; detail?: string; model?: string; usage?: Usage };
 export type AB = { a: Song; b: Song; playing: "a" | "b"; label: string } | null;
 
-const LIB_KEY = "producer.library.v2", SONG_KEY = "producer.song.v4", CHAT_KEY = "producer.chat.v3", REF_KEY = "producer.reference.v1";
+const REF_KEY = "producer.reference.v1";
 // A new session starts empty: no pattern, no template. The producer asks what we are making.
 export const BLANK_SONG: Song = { version: 3, title: "Untitled", bpm: 124, key: "A minor", lane: "tech-house", humanize: { swing: 0.54, velVar: 0.1, clapLateMs: 8, seed: 7 }, tracks: [], sections: [{ id: "sketch", name: "Sketch", bars: 8, active: [], fill: "none" }], arrangement: ["sketch"] };
 export const isGenericTitle = (t: string) => /^(untitled|untitled record|new record|glow|g-town heat|northern lights|after hours|iron lung|holy water|probe)$/i.test(t.trim());
 const isBlank = (s: Song) => s.tracks.length === 0 && isGenericTitle(s.title);
-const loadLibrary = (): SavedSong[] => { try { return JSON.parse(localStorage.getItem(LIB_KEY) ?? "[]"); } catch { return []; } };
-// A record is itself, not its name: two records called Untitled used to overwrite each other here.
-const sameRecord = (a: Song, b: Song) => (a.id && b.id ? a.id === b.id : a.title === b.title);
-/** Writes that can fail. The browser's store is small and it throws when it is full. */
-const keep = (key: string, value: string): boolean => { try { localStorage.setItem(key, value); return true; } catch { return false; } };
-const persistLibrary = (lib: SavedSong[]) => keep(LIB_KEY, JSON.stringify(lib.slice(0, 30)));
 const isE2E = () => typeof window !== "undefined" && /[?&](e2e|voice)=1/.test(window.location.search);
 
 export type SnapshotMeta = { label?: string; newProject?: boolean; facts?: unknown; chat?: { role: "user" | "assistant"; content: string }[]; blank?: boolean };
@@ -60,7 +55,6 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const [starting, setStarting] = useState(false);
   const [paused, setPaused] = useState(false);
   const [nowSection, setNowSection] = useState(-1);
-  const [library, setLibrary] = useState<SavedSong[]>([]);
   const [clips, setClips] = useState<ClipMeta[]>([]);
   const [facts, setFacts] = useState<MusicFacts | null>(null);
   const [hearing, setHearing] = useState(false);
@@ -73,7 +67,6 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
   const [ab, setAb] = useState<AB>(null); const [score, setScore] = useState("");
   const [canUndo, setCanUndo] = useState(false); const [canRedo, setCanRedo] = useState(false);
   const [ignored, setIgnored] = useState<{ text: string; at: number } | null>(null);
-  const [notSaved, setNotSaved] = useState(false);
   const [brainDown, setBrainDownState] = useState<"credits" | "key" | "cap" | null>(null);
   const brainDownRef = useRef<"credits" | "key" | "cap" | null>(null);
   const setBrainDown = (v: "credits" | "key" | "cap" | null) => { brainDownRef.current = v; setBrainDownState(v); };
@@ -108,18 +101,11 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       const m = localStorage.getItem(CHAT_KEY); if (m) setMessages(JSON.parse(m));
       const r = localStorage.getItem(REF_KEY); if (r) { const ref = JSON.parse(r); setReference(ref); referenceRef.current = ref; }
     } catch {}
-    setLibrary(loadLibrary()); setScore(scoreLine());
+    setScore(scoreLine());
     void import("@/lib/engine").then(({ listClips }) => listClips().then((all) => setClips(all.map((c) => ({ id: c.id, name: c.name, bpm: c.bpm, key: c.key, durationSec: c.durationSec }))))).catch(() => {});
   }, []);
-  // Saving on this device, and saying so when it cannot. A full store used to throw into an empty
-  // catch, which is how a session's work disappears without anyone being told.
-  useEffect(() => {
-    const body = JSON.stringify(song);
-    if (keep(SONG_KEY, body) && keep(CHAT_KEY, JSON.stringify(messages.slice(-40)))) { setNotSaved(false); return; }
-    try { localStorage.removeItem(CHAT_KEY); } catch {}
-    persistLibrary(loadLibrary().slice(0, 6));
-    setNotSaved(!keep(SONG_KEY, body));
-  }, [song, messages]);
+  // Saving on this device at idle, on commits only, and saying so when it cannot (useDeviceSave).
+  const { library, notSaved, autoSave } = useDeviceSave(song, messages);
   // No playhead in React: the board reads the transport itself, sixty times a second, without
   // re-rendering the page. A state update every ninety milliseconds was re-rendering everything
   // on screen eleven times a second and starving the scheduler that has to hit the beat.
@@ -150,11 +136,6 @@ export function useStudio(say: (t: string) => void, recordHum: (bpm: number, bea
       engineRef.current.onSection = (_n, idx) => setNowSection(idx);
     }
     return engineRef.current;
-  }, []);
-  const autoSave = useCallback((s: Song) => {
-    const lib = [{ song: s, savedAt: Date.now() }, ...loadLibrary().filter((x) => !sameRecord(x.song, s))];
-    if (!persistLibrary(lib)) setNotSaved(true);
-    setLibrary(lib.slice(0, 30));
   }, []);
 
   // The ears on our own render. Only changed sections re-render (cache); sequenced so stale results never win.

@@ -9,14 +9,28 @@ const STORE = "clips";
 
 export type StoredClip = { id: string; name: string; type: string; bytes: ArrayBuffer; createdAt: number; durationSec?: number; bpm?: number; key?: string };
 
+// One connection for the whole session. Opening the database on every read was thousands of opens a
+// minute from a render loop; a connection the browser closes (another tab upgrading, storage cleared)
+// is dropped here and the next read opens a fresh one. A failed open is never kept.
+let conn: Promise<IDBDatabase> | null = null;
 function open(): Promise<IDBDatabase> {
+  if (conn) return conn;
   countIdbOpen();
-  return new Promise((resolve, reject) => {
+  const p = new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(DB, 1);
     req.onupgradeneeded = () => { req.result.createObjectStore(STORE, { keyPath: "id" }); };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      const drop = () => { if (conn === p) conn = null; };
+      db.onversionchange = () => { drop(); db.close(); };
+      db.onclose = drop;
+      resolve(db);
+    };
     req.onerror = () => reject(req.error);
   });
+  conn = p;
+  p.catch(() => { if (conn === p) conn = null; });
+  return p;
 }
 
 function tx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
@@ -33,11 +47,20 @@ type ClipSink = (c: StoredClip) => void;
 let sink: ClipSink | null = null;
 export function setClipSink(fn: ClipSink | null) { sink = fn; }
 
+// Ids known to be stored on this device: a yes is remembered, so asking again costs no read.
+const stored = new Set<string>();
 export const putClip = (c: StoredClip, opts?: { mirror?: boolean }) =>
-  tx("readwrite", (s) => s.put(c)).then(() => { if (opts?.mirror !== false) try { sink?.(c); } catch { /* the vault is never a gate on playing */ } return c.id; });
-export const getClip = (id: string) => tx<StoredClip | undefined>("readonly", (s) => s.get(id));
-export const listClips = () => tx<StoredClip[]>("readonly", (s) => s.getAll()).then((all) => all.map((c) => ({ ...c, bytes: new ArrayBuffer(0) })));
-export const deleteClip = (id: string) => tx("readwrite", (s) => s.delete(id)).then(() => undefined);
+  tx("readwrite", (s) => s.put(c)).then(() => { stored.add(c.id); if (opts?.mirror !== false) try { sink?.(c); } catch { /* the vault is never a gate on playing */ } return c.id; });
+export const getClip = (id: string) => tx<StoredClip | undefined>("readonly", (s) => s.get(id)).then((c) => { if (c) stored.add(id); return c; });
+/** Whether this device holds the clip, without reading its bytes. */
+export async function hasClip(id: string): Promise<boolean> {
+  if (stored.has(id)) return true;
+  const n = await tx<number>("readonly", (s) => s.count(id));
+  if (n > 0) stored.add(id);
+  return n > 0;
+}
+export const listClips = () => tx<StoredClip[]>("readonly", (s) => s.getAll()).then((all) => all.map((c) => { stored.add(c.id); return { ...c, bytes: new ArrayBuffer(0) }; }));
+export const deleteClip = (id: string) => tx("readwrite", (s) => s.delete(id)).then(() => { stored.delete(id); });
 
 export function newClipId() {
   return `clip_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;

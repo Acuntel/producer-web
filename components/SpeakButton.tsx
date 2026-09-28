@@ -4,12 +4,13 @@
 // speaking, a press cuts it off and starts listening at once.
 import { useEffect, useRef } from "react";
 import { Icon } from "./Icon";
+import { useLevelFrame, type LevelRef } from "@/hooks/useLevelFrame";
 
 export type SpeakState = "idle" | "holding" | "sending" | "speaking" | "disabled";
 
 export function SpeakButton({
   state, level, onPress, onRelease, label, hint,
-}: { state: SpeakState; level: number; onPress: () => void; onRelease: () => void; label?: string; hint?: string }) {
+}: { state: SpeakState; level?: LevelRef; onPress: () => void; onRelease: () => void; label?: string; hint?: string }) {
   const downAt = useRef<number | null>(null);
   const toggled = useRef(false);
   const holding = state === "holding";
@@ -47,15 +48,22 @@ export function SpeakButton({
     return () => { window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); };
   }, [onPress, onRelease]);
 
-  const scale = holding ? 1 + Math.min(0.22, level * 0.6) : 1;
+  // The level swells the button while you talk, painted once a frame from the mic's ref.
+  const btn = useRef<HTMLButtonElement>(null); const halo = useRef<HTMLSpanElement>(null);
+  useLevelFrame(level, holding, (l) => {
+    const t = `scale(${holding ? 1 + Math.min(0.22, l * 0.6) : 1})`;
+    if (btn.current) btn.current.style.transform = t;
+    if (halo.current) halo.current.style.transform = t;
+  });
   const text = label ?? (holding ? "Listening" : speaking ? "Tap to cut in" : state === "sending" ? "Sending" : "Hold to talk");
 
   return (
     <div className="flex flex-col items-center gap-3 select-none">
       <div className="relative grid place-items-center" style={{ width: 104, height: 104 }}>
         {speaking && <span aria-hidden className="absolute inset-0 rounded-full" style={{ animation: "speak-ring 1.4s ease-out infinite" }} />}
-        {holding && <span aria-hidden className="absolute inset-[-10px] rounded-full bg-accent/25 blur-xl transition-transform duration-75" style={{ transform: `scale(${scale})` }} />}
+        {holding && <span ref={halo} aria-hidden className="absolute inset-[-10px] rounded-full bg-accent/25 blur-xl transition-transform duration-75" />}
         <button
+          ref={btn}
           type="button"
           aria-label={holding ? "Release to send" : speaking ? "Cut in" : "Hold to talk"}
           aria-pressed={holding}
@@ -65,7 +73,7 @@ export function SpeakButton({
           onPointerUp={up}
           onPointerCancel={up}
           onContextMenu={(e) => e.preventDefault()}
-          style={{ transform: `scale(${scale})`, touchAction: "none" }}
+          style={{ touchAction: "none" }}
           className={`relative grid h-[88px] w-[88px] place-items-center rounded-full transition-[transform,box-shadow,background-color] duration-100 ease-out
             disabled:opacity-40
             ${holding ? "bg-accent text-accent-ink shadow-[0_0_0_6px_rgb(255_45_146/0.25),0_0_60px_rgb(255_45_146/0.6)]"

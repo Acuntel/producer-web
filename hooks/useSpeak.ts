@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { scribeAvailable } from "@/lib/voice/scribe";
 import { makeRecognizer, type RecognitionLike } from "@/lib/voice/recognition";
+import type { LevelRef } from "./useLevelFrame";
 
 export type SpeakStatus = "idle" | "holding" | "sending" | "blocked" | "nodevice" | "unsupported";
 type Deps = { onFinal: (text: string, ms: number) => void; onPress?: () => void };
@@ -23,7 +24,7 @@ export function useSpeak(d: Deps) {
   const [status, setStatusState] = useState<SpeakStatus>("idle");
   const statusRef = useRef<SpeakStatus>("idle");
   const setStatus = (s: SpeakStatus) => { statusRef.current = s; setStatusState(s); };
-  const [level, setLevel] = useState(0);
+  const levelRef = useRef(0);   // read once a frame by what shows it (useLevelFrame), never a re-render
   const [interim, setInterim] = useState("");
   const [engine, setEngineState] = useState<"scribe" | "webspeech" | null>(null);
   const engineRef = useRef<"scribe" | "webspeech" | null>(null);
@@ -41,7 +42,6 @@ export function useSpeak(d: Deps) {
   const pressAtRef = useRef(0);
   const releaseAtRef = useRef(0);
   const finalTimer = useRef<number | null>(null);
-  const levelFrame = useRef(0);
 
   const fetchToken = useCallback(async (): Promise<string | null> => {
     try { const r = await fetch("/api/stt/token", { method: "POST" }); if (!r.ok) return null; const j = (await r.json()) as { token?: string }; return j.token ?? null; } catch { return null; }
@@ -60,8 +60,7 @@ export function useSpeak(d: Deps) {
         const data = e.inputBuffer.getChannelData(0);
         let sum = 0; for (let i = 0; i < data.length; i += 8) sum += data[i] * data[i];
         const rms = Math.sqrt(sum / (data.length / 8));
-        const now = performance.now();
-        if (now - levelFrame.current > 50) { levelFrame.current = now; setLevel(Math.min(1, rms * 6)); }
+        levelRef.current = Math.min(1, rms * 6);
         if (!holdingRef.current) return;
         const chunk = b64(downsample(data, ctx.sampleRate, 16000));
         const ws = wsRef.current;
@@ -157,5 +156,5 @@ export function useSpeak(d: Deps) {
   useEffect(() => { void scribeAvailable().then((ok) => { setEngine(ok ? "scribe" : "webspeech"); if (ok) warmToken(); }); }, [warmToken]);
   useEffect(() => () => { closeWs(); streamRef.current?.getTracks().forEach((t) => t.stop()); void ctxRef.current?.close().catch(() => {}); }, [closeWs]);
 
-  return { status, level, interim, engine, press, release, holding: status === "holding" };
+  return { status, level: levelRef as LevelRef, interim, engine, press, release, holding: status === "holding" };
 }

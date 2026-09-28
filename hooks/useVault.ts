@@ -45,16 +45,20 @@ export function useVault(d: Deps) {
     try { await registerClip(sb, uid, dRef.current.projectId, key, name, path, meta); } catch { mirrored.current.delete(key); }
   }, [uid]);
 
+  // A new list only when it differs: a fresh empty array on every check re-rendered the page, which
+  // ran the check again, 183 times a second.
+  const settle = useCallback((next: string[]) => setMissing((prev) => (prev.length === next.length && prev.every((k, i) => k === next[i]) ? prev : next)), []);
+
   /** Everything this record names that this browser does not have, fetched back from the account. */
   const restore = useCallback(async (song: Song): Promise<string[]> => {
     const want = vaultKeysOf(song);
-    if (!want.length) { setMissing([]); return []; }
-    const { getClip, putClip, decodeBytes, cacheDecoded } = await import("@/lib/engine");
+    if (!want.length) { settle([]); return []; }
+    const { hasClip, putClip, decodeBytes, cacheDecoded } = await import("@/lib/engine");
     const absent: string[] = [];
-    for (const k of want) { try { if (!(await getClip(k))) absent.push(k); } catch { absent.push(k); } }
-    if (!absent.length) { setMissing([]); return []; }
+    for (const k of want) { try { if (!(await hasClip(k))) absent.push(k); } catch { absent.push(k); } }
+    if (!absent.length) { settle([]); return []; }
     const sb = supabaseBrowser();
-    if (!sb || !uid) { setMissing(absent); return absent; }
+    if (!sb || !uid) { settle(absent); return absent; }
     if (busy.current) return absent;
     busy.current = true;
     const lost: string[] = [];
@@ -72,9 +76,9 @@ export function useVault(d: Deps) {
       const back = absent.length - lost.length;
       if (back > 0) dRef.current.flash(back === 1 ? "Brought one sound back into this record" : `Brought ${back} sounds back into this record`);
     } finally { busy.current = false; }
-    setMissing(lost);
+    settle(lost);
     return lost;
-  }, [uid]);
+  }, [uid, settle]);
 
   return { restore, note, missing, saving };
 }

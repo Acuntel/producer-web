@@ -557,3 +557,16 @@ The brief and its reading: docs/MASTERPROMPT_V11.md. The store contract: docs/DN
   - Pad swap mid-note, five moments: worst 57.74x the pad's own largest step (22 to 58x), and the new pad sits at -47 to -50 dB against -21.89 before the swap: it pops, then goes silent.
   - Loop wrap after the outro fade: the intro plays -15.63 dB under its first pass.
   - A hat move halfway down the outro fade: +4.84 dB against no move (the fade snaps back).
+
+## 2026-09-27: producer phase 1, the render loops stop
+- The vault effect (`app/page.tsx`) runs when the record's clip list or the account changes, never because the page re-rendered: it depended on the hooks' objects, which are new every render, and `restore` always set a new empty list, so a record with a chop re-rendered and opened IndexedDB in a loop. `useVault.restore` sets its list only when it differs, and asks `hasClip` (a key count, no bytes) instead of reading the whole clip.
+- `lib/engine/clips.ts` keeps one IndexedDB connection for the session (dropped when the browser closes it or another tab upgrades; a failed open is never kept), and remembers which ids it has seen stored.
+- The mic level is a ref (`hooks/useSpeak.ts`) that the glow and the button paint from once a frame while you hold (`hooks/useLevelFrame.ts`), not a state update twenty times a second.
+- The song, the chat and the library are written to this device once a change is committed and the thread is idle, coalesced (`lib/idle.ts`, `hooks/useDeviceSave.ts`), and whatever is waiting is written when the page is hidden. A full store is still said out loud.
+- The Board's paint loop mounts once for as long as the canvas is on screen and reads the record through a ref.
+- The critic is keyed on the record's structure (parts, patterns, sections, arrangement, tempo, key, reference; not a fader or a re-listen) and waits for 20 s with no structural change.
+
+### Measured
+- `node tests/load.probe.mjs idle http://localhost:3111 --label p1-idle-1` (a record with a synthetic vocal stem, a chop, the beat and the starter kit, playing untouched for 60 s; load average 312 to 345 from other sessions, UNDER LOAD): `idle: {"seconds":60,"idbOpensPerSec":0,"idbOpensLedgerPerSec":0,"appCommitsPerSec":0,"reactCommitsPerSec":0,"late":0,"longTasks":3}`, 737 note events fired in the window, one IndexedDB open in the page's whole life. Before (phase 0 run, same scene): 40.5 opens and 41.4 App commits per second.
+- `npm test`: 129 tests, 127 pass; the 2 that fail are wall-clock bounds under load 170 to 250 from other sessions, and every other assertion in them passes: `real tracks` reads tempo 12/12, key 10/12, loudness 12/12, drop 12/12 and fails only `took 142.1 s` against 90; `nearest by sound` fails only its tenth-of-a-second bound. Both passed at load 13 on the phase 0 tree.
+- `tests/idle.test.mjs`: a burst of 50 writes is one write per key (the newest), later; `flush` writes at once and a failed write never blocks the next.

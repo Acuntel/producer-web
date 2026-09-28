@@ -24,8 +24,8 @@ const HOLD_MS = 1400;
 export function Board({ song, playing, facts, moves = [], ...reads }: { song: Song; playing: boolean; facts?: MusicFacts | null; moves?: LaneMove[] } & Reads) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const box = useRef<HTMLDivElement>(null);
-  const live = useRef({ playing, facts, moves, reads });
-  live.current = { playing, facts, moves, reads };
+  const live = useRef({ song, playing, facts, moves, reads });
+  live.current = { song, playing, facts, moves, reads };
 
   // The static half of the model: one pass per record, not per frame.
   const model = useMemo(() => {
@@ -52,6 +52,7 @@ export function Board({ song, playing, facts, moves = [], ...reads }: { song: So
     return { lanes, sections, totalBeats: cursor || 1 };
   }, [song]);
   const modelRef = useRef(model); modelRef.current = model;
+  const shown = song.tracks.length > 0;
 
   useEffect(() => {
     const cv = canvas.current, wrap = box.current;
@@ -78,7 +79,7 @@ export function Board({ song, playing, facts, moves = [], ...reads }: { song: So
       raf = requestAnimationFrame(frame);
       if (slow && now - last < 90) return;   // reduced motion: the numbers still move, the paint does not race
       last = now;
-      const { playing: on, facts: f, moves: mv, reads: r } = live.current;
+      const { song: sg, playing: on, facts: f, moves: mv, reads: r } = live.current;
       const m = modelRef.current;
       const lv = on ? r.getLevels?.() ?? null : null;
       const pos = on ? r.getPosition?.() ?? null : null;
@@ -100,18 +101,18 @@ export function Board({ song, playing, facts, moves = [], ...reads }: { song: So
 
       const fr: Frame = {
         lanes: m.lanes, sections: m.sections, totalBeats: m.totalBeats,
-        bpm: song.bpm, key: song.key,
+        bpm: sg.bpm, key: sg.key,
         beat: pos?.beat ?? null,
         sectionIdx: pos?.index ?? -1,
         events: sched?.perTrack ?? new Map(),
-        audible: sched?.audible ?? new Set(song.tracks.filter((t) => !t.mute).map((t) => t.id)),
+        audible: sched?.audible ?? new Set(sg.tracks.filter((t) => !t.mute).map((t) => t.id)),
         master, peakHold: [hold.master[0], hold.master[1]], rms3s: mean,
         tracks, trackHold: hold.tracks,
         spectrum: lv?.spectrum ?? null,
         lufs: f?.loudness.integrated ?? null,
         measuredBpm: f?.tempo.bpm ?? null,
         energyCurve: f?.structure.energy ?? null,
-        dropAtBeat: f?.structure.dropAt != null ? (f.structure.dropAt * song.bpm) / 60 : null,
+        dropAtBeat: f?.structure.dropAt != null ? (f.structure.dropAt * sg.bpm) / 60 : null,
         late: r.getHealth?.()?.late ?? 0,
         cacheMb: 0,
         moves: mv,
@@ -121,9 +122,11 @@ export function Board({ song, playing, facts, moves = [], ...reads }: { song: So
     };
     raf = requestAnimationFrame(frame);
     return () => { cancelAnimationFrame(raf); ro.disconnect(); };
-  }, [song.bpm, song.key, song.tracks]);
+  // Mounted once for as long as the canvas is on screen: a move changes what the frame reads (the refs),
+  // never the loop. Tearing it down on every move dropped the meter holds and a frame each time.
+  }, [shown]);
 
-  if (song.tracks.length === 0) return null;
+  if (!shown) return null;
   const summary = `${song.tracks.length} tracks, ${song.sections.length} sections, ${song.bpm} BPM, ${song.key}. ${model.lanes.map((l) => l.name).join(", ")}.`;
   return (
     // The canvas is taken out of the flow: sized from its box, it can never push the page wider than the screen.
