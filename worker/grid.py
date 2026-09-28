@@ -54,6 +54,27 @@ def from_tempo(bpm: float, offset: float, duration: float, low: np.ndarray | Non
     return Grid(beats, beats[phase::4], beat, "tempo", {"phase": phase})
 
 
+def regularize(d: np.ndarray) -> np.ndarray:
+    """Downbeats with the tracker's slips taken out: in a stretch with no kick it can mark a bar line twice (a gap
+    under 0.6 of a bar) or skip one (a gap over 1.5 bars). The extra one is dropped (the one further from where the
+    bar before predicts it) and a skipped one is filled in evenly, so bar numbers stay true after a breakdown."""
+    if len(d) < 3: return d
+    bar = float(np.median(np.diff(d)))
+    kept = [float(d[0])]
+    for t in d[1:]:
+        t = float(t)
+        if t - kept[-1] < 0.6 * bar:
+            want = kept[-2] + bar if len(kept) >= 2 else kept[-1]
+            if abs(t - want) < abs(kept[-1] - want): kept[-1] = t
+            continue
+        gap = t - kept[-1]
+        if gap > 1.5 * bar:
+            n = int(round(gap / bar))
+            kept += [kept[-1] + gap * k / n for k in range(1, n)]
+        kept.append(t)
+    return np.array(kept)
+
+
 def beat_this_grid(mix_path: str) -> Grid | None:
     global _model
     if os.environ.get("BEAT_THIS", "1") != "1": return None
@@ -66,7 +87,7 @@ def beat_this_grid(mix_path: str) -> Grid | None:
         beats, downs = _model(mix_path)
         beats, downs = np.asarray(beats, dtype=np.float64), np.asarray(downs, dtype=np.float64)
         if len(beats) < 8 or len(downs) < 2: return None
-        return Grid(beats, downs, float(np.median(np.diff(beats))), "beat_this")
+        return Grid(beats, regularize(downs), float(np.median(np.diff(beats))), "beat_this", {"downbeatsRaw": len(downs)})
     except Exception as e:   # not installed, no checkpoint, or a file it cannot read: the tempo path answers
         print("beat_this unavailable:", str(e)[:160], flush=True)
         return None

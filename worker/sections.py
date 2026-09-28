@@ -35,7 +35,8 @@ def label_groups(energy: list[float], low: list[float]) -> list[str]:
         # (or an energy jump of 0.2), at no less than 0.55 energy. It lasts while the energy holds (within 0.1 of
         # where it started, or 0.8 and up), for at most 16 bars unless it stays at full energy.
         if low[i] < 0.6 or energy[i] < 0.55: continue
-        returned = i > 0 and (low[i - 1] < 0.5 * low[i] or energy[i - 1] < energy[i] - 0.2)
+        # Against the lowest of the two groups before: a return that straddles a 4-bar line still counts.
+        returned = i > 0 and (min(low[max(0, i - 2):i]) < 0.5 * low[i] or energy[i - 1] < energy[i] - 0.2)
         if returned: drop[i], start = True, i; continue
         holds = i > 0 and drop[i - 1] and (energy[i] >= 0.8 or (energy[i] >= energy[start] - 0.1 and i - start < MAX_DROP_GROUPS))
         drop[i] = bool(holds)
@@ -53,14 +54,15 @@ def label_groups(energy: list[float], low: list[float]) -> list[str]:
 
 
 def refine_drops(groups: list[tuple], labels: list[str], lo: np.ndarray) -> list[tuple]:
-    """A drop starts on the bar its low end returns, not on the 4-bar line after it: search the three bars before
-    the group and move the boundary (the group before gives up those bars)."""
+    """A drop starts on the bar its low end returns, not on a 4-bar line: search from three bars before the group
+    to its last bar and move the boundary there (the group before gives up or takes those bars)."""
     groups = list(groups)
     for i in range(1, len(groups)):
         if labels[i] != "drop" or labels[i - 1] == "drop": continue
-        a = groups[i][0]; best = a
-        for bar in range(max(groups[i - 1][0] + 1, a - 3), a):
-            if lo[bar] >= 0.6 * lo[a:a + PHRASE_BARS].max() and lo[bar - 1] < 0.5 * lo[bar]: best = bar; break
+        a, b = groups[i][0], groups[i][1]; best = a
+        top = lo[a:b].max()
+        for bar in range(max(groups[i - 1][0] + 1, a - 3), b):
+            if lo[bar] >= 0.6 * top and lo[bar - 1] < 0.5 * lo[bar]: best = bar; break
         if best != a:
             pa, _, pe, pl = groups[i - 1]; _, b, ge, gl = groups[i]
             groups[i - 1] = (pa, best, pe, pl); groups[i] = (best, b, ge, gl)

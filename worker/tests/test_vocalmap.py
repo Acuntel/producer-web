@@ -140,3 +140,16 @@ def test_word_starts_move_from_whispers_late_times_onto_the_voices_onsets():
     assert [w["start"] for w in ws] == [10.0, 10.9, 11.52, 12.4], "the first word takes the phrase's first strong onset, the rest their own"
     assert [w["asr"] for w in ws] == [10.4, 11.25, 11.9, 12.75], "Whisper's own time stays on the word"
     assert all(a["end"] == b["start"] for a, b in zip(ws, ws[1:]))
+
+
+def test_a_downbeat_marked_twice_in_a_breakdown_is_dropped_and_a_skipped_one_filled():
+    true = np.arange(0, 40, 2.0)
+    slipped = np.sort(np.concatenate([np.delete(true, 15), [20.5]]))       # 30.0 skipped, 20.5 marked by mistake
+    got = grid.regularize(slipped)
+    assert len(got) == len(true) and np.max(np.abs(got - true)) < 1e-9
+
+
+def test_a_drop_whose_return_straddles_the_4_bar_line_is_still_a_drop():
+    e = [0.6, 0.6, 0.2, 0.6, 0.65, 0.6]
+    lo = [0.9, 0.9, 0.1, 0.49, 0.87, 0.9]                                  # the kick comes back mid-group
+    assert sections.label_groups(e, lo)[4] == "drop"

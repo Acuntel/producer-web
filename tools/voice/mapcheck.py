@@ -76,7 +76,9 @@ def rescore(names: list[str]) -> None:
     for name in names:
         meta = json.load(open(os.path.join(MIXES, name, "meta.json")))
         path = os.path.join(MAPS, f"{name}.json"); m = json.load(open(path))
-        d = np.array(m["source"]["downbeats"]); beats = np.sort(np.concatenate([d + k * m["source"]["beatSec"] for k in range(4)]))
+        d = grid.regularize(np.array(m["source"]["downbeats"])) if m["source"]["grid"] == "beat_this" else np.array(m["source"]["downbeats"])
+        m["source"]["downbeats"] = [round(float(x), 3) for x in d]
+        beats = np.sort(np.concatenate([d + k * m["source"]["beatSec"] for k in range(4)]))
         g = grid.Grid(beats, d, m["source"]["beatSec"], m["source"]["grid"])
         mix, sr = load_mono(os.path.join(MIXES, name, "mix.wav"), 22050)
         secs = sections.sections_of(mix, sr, g)
