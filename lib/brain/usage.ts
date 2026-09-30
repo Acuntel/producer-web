@@ -35,7 +35,7 @@ export async function recordUsage(req: Request, x: { route: string; model?: stri
     const user = await userFromRequest(req).catch(() => null);
     const u = x.usage;
     await sb.from("usage_events").insert({
-      user_id: user?.id ?? null, key_source: x.source, route: x.route, model: x.model ?? null,
+      user_id: user?.id ?? null, key_source: x.source, route: x.route, model: u.model ?? x.model ?? null,   // the model that really ran, when the adapter says
       input_tokens: u.input_tokens ?? 0, output_tokens: u.output_tokens ?? 0, cache_read: u.cache_read_input_tokens ?? 0, cache_write: u.cache_creation_input_tokens ?? 0,
       searches: u.server_tool_use?.web_search_requests ?? 0, usd: costOf(x.model, u),
     });

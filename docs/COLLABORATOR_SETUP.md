@@ -22,6 +22,20 @@ ANTHROPIC_API_KEY=sk-ant-...        # your key, from console.anthropic.com. This
 
 That's enough to open the app, talk to the producer and have it build records. Use Chrome with headphones. The microphone is asked for on your first press.
 
+**Running the brain on GPT instead.** The `producer` branch can run every lane on OpenAI's GPT-6 models through `lib/brain/openai.ts`, with the same daily caps. Put your own OpenAI key in `.env.local` and switch the provider:
+
+```bash
+OPENAI_API_KEY=sk-proj-...          # your key, from platform.openai.com
+PRODUCER_PROVIDER=openai            # every lane on GPT; leave it out for Claude
+PRODUCER_MODEL=gpt-6-astra          # the flagship: blueprints, rollouts, deep steps (2x Opus 5 per token; gpt-6-sol is cheaper)
+PRODUCER_FAST_MODEL=gpt-6-sol       # ordinary moves
+PRODUCER_CRITIC_MODEL=gpt-6-sol
+PRODUCER_VOICE_MODEL=gpt-6-sol      # the Voice lane and research; gpt-6-luna is faster and cheaper but drops instructions
+PRODUCER_ATTEND_MODEL=gpt-6-luna    # the one-word attention check
+```
+
+Measured on 2026-09-29 against Claude on the same batteries: the brain battery passes 11 of 11 on both; the voice battery is 37 of 40 on Claude Haiku 4.5 and 36 to 38 of 40 on gpt-6-sol (GPT says "from the top" and does not do it); first spoken sentence is 972 ms on Haiku and 1308 ms on sol. A cached ordinary move on sol costs about a cent. In GPT mode a key saved in Settings is ignored, so everyone runs on the key in `.env.local` under the caps. The adapter's tests are `tests/openai.test.mjs`, no network.
+
 **No-spend mode.** To work on the UI or the engine without calling any model, start it with the mock brain. It answers from `lib/brain/mock.ts`:
 
 ```bash
